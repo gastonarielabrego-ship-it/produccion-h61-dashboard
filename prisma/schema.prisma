@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model ProductionRecord {
+  id          String   @id @default(cuid())
+  funcion     String   // P, X
+  funcionDesc String   // Preparacion STD, Preparación XD
+  date        Int      // 20260701 format
+  turno       String   // M, T, N
+  turnoDesc   String   // Mañana, Tarde, Noche
+  tarea       String?
+  operario    String   // P11710
+  nombre      String   // CARUSO ROMINA MAGALI
+  actividad   Int      // 2, 3, 4
+  circuito    String   // CH4, IMP, AER, etc.
+  tiempoMue   Int      @default(0)
+  total       Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  hourlyData  HourlyProduction[]
+
+  @@index([date])
+  @@index([funcion])
+  @@index([turno])
+  @@index([operario])
+  @@index([circuito])
+  @@index([date, turno])
+  @@index([date, circuito])
+}
+
+model HourlyProduction {
+  id               String   @id @default(cuid())
+  productionRecordId String
+  hour             Int      // 0-23
+  quantity         Int      @default(0)
+
+  productionRecord ProductionRecord @relation(fields: [productionRecordId], references: [id], onDelete: Cascade)
+
+  @@index([productionRecordId])
+  @@index([hour])
+}
