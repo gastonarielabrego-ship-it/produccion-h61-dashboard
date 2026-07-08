@@ -32,22 +32,39 @@ export function HeaderActions({ onRefresh }: HeaderActionsProps) {
     async (file: File) => {
       setIsUploading(true);
       try {
-        const formData = new FormData();
-        formData.append("file", file);
+        // Convert file to base64 to avoid Vercel FormData body size issues
+        const base64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result as string;
+            // Remove data URL prefix (e.g. "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,")
+            resolve(result.split(",")[1]);
+          };
+          reader.readAsDataURL(file);
+        });
 
-        // Longer timeout for large files (up to 90s)
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 90000);
 
         const response = await fetch("/api/admin/upload", {
           method: "POST",
-          body: formData,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: base64, name: file.name }),
           signal: controller.signal,
         });
 
         clearTimeout(timeout);
 
-        const data = await response.json();
+        const text = await response.text();
+
+        // Handle non-JSON responses (e.g. Vercel HTML error pages)
+        let data: any;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          showToast("error", "Error del servidor. Intentá de nuevo.");
+          return;
+        }
 
         if (response.ok) {
           showToast("success", data.message);
@@ -57,7 +74,7 @@ export function HeaderActions({ onRefresh }: HeaderActionsProps) {
         }
       } catch (err: any) {
         if (err.name === "AbortError") {
-          showToast("error", "Tiempo agotado. El archivo es muy grande o la conexión es lenta.");
+          showToast("error", "Tiempo agotado. Intentá con un archivo más chico.");
         } else {
           showToast("error", `Error: ${err.message || "conexión fallida"}`);
         }

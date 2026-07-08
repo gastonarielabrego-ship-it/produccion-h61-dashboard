@@ -12,24 +12,25 @@ const ALL_COLS = [
 
 export async function POST(request: Request) {
   try {
-    const formData = await request.formData();
-    const file = formData.get("file");
+    // Receive as JSON with base64-encoded file
+    const body = await request.json();
+    const { data: base64Data, name } = body;
 
-    if (!file || !(file instanceof File)) {
+    if (!base64Data || !name) {
       return NextResponse.json(
         { error: "No se recibió ningún archivo." },
         { status: 400 }
       );
     }
 
-    if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
+    if (!name.endsWith(".xlsx") && !name.endsWith(".xls")) {
       return NextResponse.json(
         { error: "Solo se aceptan archivos .xlsx o .xls" },
         { status: 400 }
       );
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
+    const buffer = Buffer.from(base64Data, "base64");
     const workbook = XLSX.read(buffer, { type: "buffer" });
     const sheet = workbook.Sheets["Datos"];
 
@@ -73,7 +74,7 @@ export async function POST(request: Request) {
       });
       existingCount = existing.rows.length;
 
-      // Delete only the dates that are being re-uploaded (pisar)
+      // Delete only the dates being re-uploaded (pisar)
       if (existing.rows.length > 0) {
         const existDates = existing.rows.map((r) => Number(r.fecha));
         const delPlaceholders = existDates.map(() => "?").join(", ");
@@ -84,7 +85,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // Insert all rows from the file
+    // Insert in batches
     const BATCH_SIZE = 200;
     let inserted = 0;
 
