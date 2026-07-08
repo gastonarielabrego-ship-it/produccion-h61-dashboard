@@ -8,6 +8,9 @@ import { ByCircuitChart } from "@/components/dashboard/by-circuit-chart";
 import { ByShiftChart } from "@/components/dashboard/by-shift-chart";
 import { SummaryBreakdown } from "@/components/dashboard/summary-breakdown";
 import { OperatorsTable } from "@/components/dashboard/operators-table";
+import { TimeWindowTable } from "@/components/dashboard/time-window-table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { BarChart3, Clock } from "lucide-react";
 
 export default function Home() {
   const { filters, filterState, setFilterState, buildQuery } =
@@ -18,6 +21,8 @@ export default function Home() {
   const [circuitData, setCircuitData] = useState<any>(null);
   const [shiftData, setShiftData] = useState<any>(null);
   const [operatorData, setOperatorData] = useState<any>(null);
+  const [timeWindowData, setTimeWindowData] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState("general");
 
   useEffect(() => {
     const q = buildQuery();
@@ -29,17 +34,23 @@ export default function Home() {
       fetch(`/api/production/by-circuit${base}`).then((r) => r.json()),
       fetch(`/api/production/by-shift${base}`).then((r) => r.json()),
       fetch(`/api/production/operators${base}`).then((r) => r.json()),
-    ]).then(([hourly, summary, circuit, shift, operators]) => {
-      setHourlyData(hourly);
-      setSummaryData(summary);
-      setCircuitData(circuit);
-      setShiftData(shift);
-      setOperatorData(operators);
-    });
+      fetch(`/api/production/time-window-operators${base}`).then((r) =>
+        r.json()
+      ),
+    ]).then(
+      ([hourly, summary, circuit, shift, operators, timeWindow]) => {
+        setHourlyData(hourly);
+        setSummaryData(summary);
+        setCircuitData(circuit);
+        setShiftData(shift);
+        setOperatorData(operators);
+        setTimeWindowData(timeWindow);
+      }
+    );
   }, [buildQuery]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
       <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
@@ -75,7 +86,7 @@ export default function Home() {
       </header>
 
       {/* Main content */}
-      <main className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <main className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 flex-1">
         {/* Filters */}
         <FilterBar
           filters={filters}
@@ -83,23 +94,43 @@ export default function Home() {
           setFilterState={setFilterState}
         />
 
-        {/* KPI Cards */}
-        <SummaryCards data={summaryData} />
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList>
+            <TabsTrigger value="general" className="gap-1.5">
+              <BarChart3 className="h-3.5 w-3.5" />
+              General
+            </TabsTrigger>
+            <TabsTrigger value="franjas" className="gap-1.5">
+              <Clock className="h-3.5 w-3.5" />
+              Franjas 10-14 / 18-22
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Main Hourly Chart */}
-        <HourlyChart data={hourlyData} />
+          <TabsContent value="general" className="space-y-6 mt-6">
+            {/* KPI Cards */}
+            <SummaryCards data={summaryData} />
 
-        {/* Two column: By Shift + By Circuit */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          <ByShiftChart data={shiftData} />
-          <ByCircuitChart data={circuitData} />
-        </div>
+            {/* Main Hourly Chart */}
+            <HourlyChart data={hourlyData} />
 
-        {/* Breakdown: Circuits + Dates */}
-        <SummaryBreakdown data={summaryData} />
+            {/* Two column: By Shift + By Circuit */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <ByShiftChart data={shiftData} />
+              <ByCircuitChart data={circuitData} />
+            </div>
 
-        {/* Operators Table */}
-        <OperatorsTable data={operatorData} />
+            {/* Breakdown: Circuits + Dates */}
+            <SummaryBreakdown data={summaryData} />
+
+            {/* Operators Table */}
+            <OperatorsTable data={operatorData} />
+          </TabsContent>
+
+          <TabsContent value="franjas" className="space-y-6 mt-6">
+            <TimeWindowTable data={timeWindowData} />
+          </TabsContent>
+        </Tabs>
       </main>
 
       {/* Footer */}
