@@ -16,6 +16,7 @@ interface HeaderActionsProps {
 
 export function HeaderActions({ onRefresh }: HeaderActionsProps) {
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState("");
   const [isDownloading, setIsDownloading] = useState(false);
   const [toast, setToast] = useState<{
     type: "success" | "error";
@@ -25,26 +26,29 @@ export function HeaderActions({ onRefresh }: HeaderActionsProps) {
 
   const showToast = (type: "success" | "error", message: string) => {
     setToast({ type, message });
-    setTimeout(() => setToast(null), 4000);
+    setTimeout(() => setToast(null), 5000);
   };
 
   const handleUpload = useCallback(
     async (file: File) => {
       setIsUploading(true);
+      setUploadStatus("Leyendo archivo...");
       try {
-        // Convert file to base64 to avoid Vercel FormData body size issues
-        const base64 = await new Promise<string>((resolve) => {
+        // Convert file to base64
+        const base64 = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => {
             const result = reader.result as string;
-            // Remove data URL prefix (e.g. "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,")
             resolve(result.split(",")[1]);
           };
+          reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
           reader.readAsDataURL(file);
         });
 
+        setUploadStatus("Enviando al servidor...");
+
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 90000);
+        const timeout = setTimeout(() => controller.abort(), 120000);
 
         const response = await fetch("/api/admin/upload", {
           method: "POST",
@@ -55,14 +59,15 @@ export function HeaderActions({ onRefresh }: HeaderActionsProps) {
 
         clearTimeout(timeout);
 
+        setUploadStatus("Procesando respuesta...");
+
         const text = await response.text();
 
-        // Handle non-JSON responses (e.g. Vercel HTML error pages)
         let data: any;
         try {
           data = JSON.parse(text);
         } catch {
-          showToast("error", "Error del servidor. Intentá de nuevo.");
+          showToast("error", "Error del servidor (respuesta inválida). Intentá de nuevo.");
           return;
         }
 
@@ -80,6 +85,7 @@ export function HeaderActions({ onRefresh }: HeaderActionsProps) {
         }
       } finally {
         setIsUploading(false);
+        setUploadStatus("");
       }
     },
     [onRefresh]
@@ -90,7 +96,9 @@ export function HeaderActions({ onRefresh }: HeaderActionsProps) {
     try {
       const response = await fetch("/api/admin/download");
       if (!response.ok) {
-        const err = await response.json();
+        const text = await response.text();
+        let err: any;
+        try { err = JSON.parse(text); } catch { err = {}; }
         showToast("error", err.error || "Error al descargar");
         return;
       }
@@ -158,21 +166,29 @@ export function HeaderActions({ onRefresh }: HeaderActionsProps) {
         {isDownloading ? "Generando..." : "Informe"}
       </Button>
 
-      {/* Toast */}
+      {/* Upload progress bar */}
+      {isUploading && uploadStatus && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[100] bg-background border rounded-lg px-4 py-2.5 shadow-lg flex items-center gap-3">
+          <Loader2 className="h-4 w-4 animate-spin text-emerald-600 shrink-0" />
+          <span className="text-sm text-foreground">{uploadStatus}</span>
+        </div>
+      )}
+
+      {/* Toast - positioned lower, centered at bottom */}
       {toast && (
         <div
-          className={`fixed bottom-6 right-6 z-[100] flex items-center gap-2 rounded-lg px-4 py-3 text-sm shadow-lg transition-all animate-in slide-in-from-bottom-2 fade-in duration-300 ${
+          className={`fixed bottom-20 left-1/2 -translate-x-1/2 z-[100] max-w-md w-auto flex items-center gap-2.5 rounded-lg px-5 py-3.5 text-sm shadow-xl transition-all animate-in slide-in-from-bottom-4 fade-in duration-300 ${
             toast.type === "success"
               ? "bg-emerald-600 text-white"
               : "bg-red-600 text-white"
           }`}
         >
           {toast.type === "success" ? (
-            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <CheckCircle2 className="h-5 w-5 shrink-0" />
           ) : (
-            <AlertCircle className="h-4 w-4 shrink-0" />
+            <AlertCircle className="h-5 w-5 shrink-0" />
           )}
-          {toast.message}
+          <span className="text-sm font-medium">{toast.message}</span>
         </div>
       )}
     </>
