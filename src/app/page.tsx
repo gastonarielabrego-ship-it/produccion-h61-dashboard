@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { FilterBar, useProductionFilters } from "@/components/dashboard/filters";
 import { SummaryCards } from "@/components/dashboard/summary-cards";
 import { HourlyChart } from "@/components/dashboard/hourly-chart";
@@ -9,6 +9,7 @@ import { ByShiftChart } from "@/components/dashboard/by-shift-chart";
 import { SummaryBreakdown } from "@/components/dashboard/summary-breakdown";
 import { OperatorsTable } from "@/components/dashboard/operators-table";
 import { TimeWindowTable } from "@/components/dashboard/time-window-table";
+import { AdminPanel } from "@/components/dashboard/admin-panel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart3, Clock } from "lucide-react";
 
@@ -24,7 +25,7 @@ export default function Home() {
   const [timeWindowData, setTimeWindowData] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("general");
 
-  useEffect(() => {
+  const fetchData = useCallback(() => {
     const q = buildQuery();
     const base = q ? `?${q}` : "";
 
@@ -48,6 +49,15 @@ export default function Home() {
       }
     );
   }, [buildQuery]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Build the info text from summary data
+  const infoText = summaryData
+    ? `${summaryData.totalRecords?.toLocaleString("es-AR")} registros · ${summaryData.grandTotal?.toLocaleString("es-AR")} unidades`
+    : "Cargando...";
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -79,8 +89,11 @@ export default function Home() {
               </p>
             </div>
           </div>
-          <div className="text-xs text-muted-foreground">
-            Datos: Jul 2026 · 6,054 registros
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground hidden sm:inline">
+              {infoText}
+            </span>
+            <AdminPanel onRefresh={fetchData} />
           </div>
         </div>
       </header>
@@ -137,7 +150,7 @@ export default function Home() {
       <footer className="border-t mt-auto">
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between text-xs text-muted-foreground">
           <span>Producción H61 · Dashboard de Control</span>
-          <span>Next.js + Prisma + Recharts</span>
+          <span>Next.js + Turso + Recharts</span>
         </div>
       </footer>
     </div>
