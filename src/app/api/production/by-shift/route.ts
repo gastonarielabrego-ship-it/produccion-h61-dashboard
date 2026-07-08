@@ -1,8 +1,7 @@
 import {
   getAllRecords,
   parseFilters,
-  applyFilters,
-} from "@/lib/google-sheets";
+} from "@/lib/turso";
 import { NextResponse } from "next/server";
 
 const SHIFT_LABELS: Record<string, string> = {
@@ -14,8 +13,7 @@ const SHIFT_LABELS: Record<string, string> = {
 export async function GET(request: Request) {
   try {
     const filters = parseFilters(request);
-    const allRecords = await getAllRecords();
-    const records = applyFilters(allRecords, filters);
+    const records = await getAllRecords(filters);
 
     // Group by shift and hour
     const shiftHourly: Record<string, Record<number, number>> = {};

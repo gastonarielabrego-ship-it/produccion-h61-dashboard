@@ -1,15 +1,13 @@
 import {
   getAllRecords,
   parseFilters,
-  applyFilters,
-} from "@/lib/google-sheets";
+} from "@/lib/turso";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
   try {
     const filters = parseFilters(request);
-    const allRecords = await getAllRecords();
-    const records = applyFilters(allRecords, filters);
+    const records = await getAllRecords(filters);
 
     // Total por circuito
     const byCircuit: Record<string, number> = {};

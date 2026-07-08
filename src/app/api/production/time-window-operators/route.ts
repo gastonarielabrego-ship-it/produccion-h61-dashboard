@@ -1,16 +1,14 @@
 import {
   getAllRecords,
   parseFilters,
-  applyFilters,
   type ProductionRecord,
-} from "@/lib/google-sheets";
+} from "@/lib/turso";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
   try {
     const filters = parseFilters(request);
-    const allRecords = await getAllRecords();
-    const records = applyFilters(allRecords, filters);
+    const records = await getAllRecords(filters);
 
     const window1Hours = [10, 11, 12, 13];
     const window2Hours = [18, 19, 20, 21];
