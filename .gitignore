@@ -66,5 +66,10 @@ local-*
 # Upload (source data - large files)
 /upload/
 
-# Prisma (no longer used)
-/prisma/
+# Download (generated deliverables)
+/download/
+
+# Worklog
+/worklog.md
+
+# Prisma removed — no longer needed
