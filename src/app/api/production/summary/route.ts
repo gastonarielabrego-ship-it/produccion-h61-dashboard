@@ -57,9 +57,51 @@ export async function GET(request: Request) {
 
     const grandTotal = records.reduce((sum, r) => sum + r.total, 0);
 
+    // Misiones: unique (fecha, operario) combinations
+    const missionSet = new Set<string>();
+    for (const r of records) {
+      missionSet.add(`${r.date}:${r.operario}`);
+    }
+    const totalMissions = missionSet.size;
+
+    // Participación por turno (basada en misiones de cada turno)
+    const shiftMissions: Record<string, { label: string; count: number; total: number }> = {};
+    const missionKeys = new Set<string>();
+    for (const r of records) {
+      const key = `${r.date}:${r.operario}:${r.turno}`;
+      if (!missionKeys.has(key)) {
+        missionKeys.add(key);
+        if (!shiftMissions[r.turno]) {
+          shiftMissions[r.turno] = { label: r.turnoDesc, count: 0, total: 0 };
+        }
+        shiftMissions[r.turno].count += 1;
+      }
+      if (shiftMissions[r.turno]) {
+        shiftMissions[r.turno].total += r.total;
+      }
+    }
+    const totalShiftMissions = Object.values(shiftMissions).reduce(
+      (sum, s) => sum + s.count,
+      0
+    );
+    const shiftParticipation = Object.entries(shiftMissions)
+      .map(([turno, data]) => ({
+        turno,
+        label: data.label,
+        missions: data.count,
+        total: data.total,
+        percentage:
+          totalShiftMissions > 0
+            ? Math.round((data.count / totalShiftMissions) * 100)
+            : 0,
+      }))
+      .sort((a, b) => b.percentage - a.percentage);
+
     return NextResponse.json({
       totalRecords: records.length,
       grandTotal,
+      totalMissions,
+      shiftParticipation,
       circuitData,
       shiftData,
       dateData,

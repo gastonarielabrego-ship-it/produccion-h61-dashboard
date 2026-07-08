@@ -55,7 +55,7 @@ export default function Home() {
   }, [fetchData]);
 
   const infoText = summaryData
-    ? `${summaryData.totalRecords?.toLocaleString("es-AR")} registros · ${summaryData.grandTotal?.toLocaleString("es-AR")} unidades`
+    ? `${summaryData.totalMissions?.toLocaleString("es-AR")} misiones · ${summaryData.grandTotal?.toLocaleString("es-AR")} unidades`
     : "Cargando...";
 
   return (
