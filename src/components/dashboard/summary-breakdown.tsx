@@ -9,6 +9,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
+  LabelList,
 } from "recharts";
 import {
   Card,
@@ -17,7 +18,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { PieChart as PieChartIcon } from "lucide-react";
+import { Layers } from "lucide-react";
 
 const COLORS = [
   "#10b981", "#f59e0b", "#3b82f6", "#ef4444", "#8b5cf6",
@@ -34,12 +35,7 @@ interface SummaryBreakdownProps {
   } | null;
 }
 
-function formatDate(d: number) {
-  const s = String(d);
-  return `${s.slice(6, 8)}/${s.slice(4, 6)}`;
-}
-
-function BreakdownTooltip({ active, payload, label }: any) {
+function CircuitTooltip({ active, payload, label }: any) {
   if (!active || !payload || !payload.length) return null;
   return (
     <div className="rounded-lg border bg-background p-3 shadow-md">
@@ -54,99 +50,79 @@ function BreakdownTooltip({ active, payload, label }: any) {
 export function SummaryBreakdown({ data }: SummaryBreakdownProps) {
   if (!data) {
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {Array.from({ length: 2 }).map((_, i) => (
-          <Card key={i}>
-            <CardContent className="p-4 h-[320px] flex items-center justify-center">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <Card>
+        <CardContent className="p-4 h-[400px] flex items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        </CardContent>
+      </Card>
     );
   }
 
-  const dateChartData = data.dateData.map((d) => ({
-    ...d,
-    label: formatDate(d.date),
-  }));
+  // Dynamic height based on number of circuits
+  const circuitCount = data.circuitData.length;
+  const chartHeight = Math.max(250, circuitCount * 38);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <PieChartIcon className="h-4 w-4" />
-            Producción por Circuito
-          </CardTitle>
-          <CardDescription>Top 14 circuitos por volumen total</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={data.circuitData}
-                layout="vertical"
-                margin={{ top: 0, right: 20, left: 40, bottom: 0 }}
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Layers className="h-4 w-4" />
+          Producción por Circuito
+        </CardTitle>
+        <CardDescription>
+          Circuitos ordenados por volumen total de producción
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div style={{ height: `${chartHeight}px` }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={data.circuitData}
+              layout="vertical"
+              margin={{ top: 0, right: 80, left: 50, bottom: 0 }}
+            >
+              <CartesianGrid
+                strokeDasharray="3 3"
+                className="stroke-muted"
+                horizontal={false}
+              />
+              <XAxis
+                type="number"
+                tick={{ fontSize: 10 }}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(v) =>
+                  v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)
+                }
+              />
+              <YAxis
+                type="category"
+                dataKey="circuito"
+                tick={{ fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+                width={45}
+              />
+              <Tooltip content={<CircuitTooltip />} />
+              <Bar
+                dataKey="total"
+                radius={[0, 4, 4, 0]}
+                maxBarSize={22}
               >
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" horizontal={false} />
-                <XAxis
-                  type="number"
-                  tick={{ fontSize: 10 }}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(v) =>
-                    v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)
-                  }
+                {data.circuitData.map((_, i) => (
+                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                ))}
+                <LabelList
+                  dataKey="total"
+                  position="right"
+                  formatter={(v: number) => v.toLocaleString("es-AR")}
+                  style={{ fontSize: 11, fill: "#525252" }}
                 />
-                <YAxis
-                  type="category"
-                  dataKey="circuito"
-                  tick={{ fontSize: 11 }}
-                  tickLine={false}
-                  axisLine={false}
-                  width={35}
-                />
-                <Tooltip content={<BreakdownTooltip />} />
-                <Bar dataKey="total" radius={[0, 4, 4, 0]} maxBarSize={20}>
-                  {data.circuitData.map((_, i) => (
-                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            Producción por Fecha
-          </CardTitle>
-          <CardDescription>Evolución diaria de la producción total</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dateChartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="label" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
-                <YAxis
-                  tick={{ fontSize: 10 }}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(v) =>
-                    v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)
-                  }
-                />
-                <Tooltip content={<BreakdownTooltip />} />
-                <Bar dataKey="total" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={60} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

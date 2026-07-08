@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback } from "react";
 import { FilterBar, useProductionFilters } from "@/components/dashboard/filters";
 import { SummaryCards } from "@/components/dashboard/summary-cards";
 import { HourlyChart } from "@/components/dashboard/hourly-chart";
-import { ByCircuitChart } from "@/components/dashboard/by-circuit-chart";
 import { ByShiftChart } from "@/components/dashboard/by-shift-chart";
 import { SummaryBreakdown } from "@/components/dashboard/summary-breakdown";
 import { OperatorsTable } from "@/components/dashboard/operators-table";
@@ -19,7 +18,6 @@ export default function Home() {
 
   const [hourlyData, setHourlyData] = useState<any>(null);
   const [summaryData, setSummaryData] = useState<any>(null);
-  const [circuitData, setCircuitData] = useState<any>(null);
   const [shiftData, setShiftData] = useState<any>(null);
   const [operatorData, setOperatorData] = useState<any>(null);
   const [timeWindowData, setTimeWindowData] = useState<any>(null);
@@ -32,17 +30,15 @@ export default function Home() {
     Promise.all([
       fetch(`/api/production/hourly${base}`).then((r) => r.json()),
       fetch(`/api/production/summary${base}`).then((r) => r.json()),
-      fetch(`/api/production/by-circuit${base}`).then((r) => r.json()),
       fetch(`/api/production/by-shift${base}`).then((r) => r.json()),
       fetch(`/api/production/operators${base}`).then((r) => r.json()),
       fetch(`/api/production/time-window-operators${base}`).then((r) =>
         r.json()
       ),
     ]).then(
-      ([hourly, summary, circuit, shift, operators, timeWindow]) => {
+      ([hourly, summary, shift, operators, timeWindow]) => {
         setHourlyData(hourly);
         setSummaryData(summary);
-        setCircuitData(circuit);
         setShiftData(shift);
         setOperatorData(operators);
         setTimeWindowData(timeWindow);
@@ -120,10 +116,7 @@ export default function Home() {
           <TabsContent value="general" className="space-y-6 mt-6">
             <SummaryCards data={summaryData} />
             <HourlyChart data={hourlyData} />
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              <ByShiftChart data={shiftData} />
-              <ByCircuitChart data={circuitData} />
-            </div>
+            <ByShiftChart data={shiftData} />
             <SummaryBreakdown data={summaryData} />
             <OperatorsTable data={operatorData} />
           </TabsContent>
