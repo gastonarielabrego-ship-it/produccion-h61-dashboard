@@ -20,6 +20,8 @@ interface OperatorRow {
   circuitCount: number;
   circuits: string[];
   entries: number;
+  window1Entries: number;
+  window2Entries: number;
 }
 
 interface TimeWindowData {
@@ -52,9 +54,9 @@ function WindowSummaryCards({ data }: { data: TimeWindowData["summary"] | null }
   const cards = [
     {
       title: "10:00 - 14:00",
-      subtitle: "Producción total",
+      subtitle: "Ingreso desde las 10",
       value: data.totalWindow1.toLocaleString("es-AR"),
-      detail: `${data.activeWindow1} operarios activos`,
+      detail: `${data.activeWindow1} operarios (solo ingresos 10+hs)`,
       icon: Sun,
       color: "text-amber-600",
       bg: "bg-amber-50",
@@ -62,9 +64,9 @@ function WindowSummaryCards({ data }: { data: TimeWindowData["summary"] | null }
     },
     {
       title: "18:00 - 22:00",
-      subtitle: "Producción total",
+      subtitle: "Ingreso desde las 18",
       value: data.totalWindow2.toLocaleString("es-AR"),
-      detail: `${data.activeWindow2} operarios activos`,
+      detail: `${data.activeWindow2} operarios (solo ingresos 18+hs)`,
       icon: Moon,
       color: "text-indigo-600",
       bg: "bg-indigo-50",
@@ -72,9 +74,9 @@ function WindowSummaryCards({ data }: { data: TimeWindowData["summary"] | null }
     },
     {
       title: "Ambas Franjas",
-      subtitle: "Operarios compartidos",
+      subtitle: "En ambas franjas",
       value: data.bothWindows.toLocaleString("es-AR"),
-      detail: `de ${data.totalOperators} totales`,
+      detail: `de ${data.totalOperators} operarios filtrados`,
       icon: ArrowRightLeft,
       color: "text-emerald-600",
       bg: "bg-emerald-50",
@@ -82,9 +84,9 @@ function WindowSummaryCards({ data }: { data: TimeWindowData["summary"] | null }
     },
     {
       title: "Total Operarios",
-      subtitle: "En al menos una franja",
+      subtitle: "Ingresan 10+ o 18+",
       value: data.totalOperators.toLocaleString("es-AR"),
-      detail: `con producción en franjas`,
+      detail: "excluidos quienes arrancan antes",
       icon: Users,
       color: "text-slate-600",
       bg: "bg-slate-50",
@@ -130,13 +132,34 @@ function getIntensityColor(window1: number, window2: number, maxTotal: number) {
 
 function getProfileBadge(window1: number, window2: number) {
   if (window1 > 0 && window2 > 0) {
-    return <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 text-[10px] px-1.5 py-0">Ambas</Badge>;
+    return (
+      <Badge
+        variant="secondary"
+        className="bg-emerald-100 text-emerald-700 text-[10px] px-1.5 py-0"
+      >
+        Ambas
+      </Badge>
+    );
   }
   if (window1 > 0) {
-    return <Badge variant="secondary" className="bg-amber-100 text-amber-700 text-[10px] px-1.5 py-0">10-14</Badge>;
+    return (
+      <Badge
+        variant="secondary"
+        className="bg-amber-100 text-amber-700 text-[10px] px-1.5 py-0"
+      >
+        10-14
+      </Badge>
+    );
   }
   if (window2 > 0) {
-    return <Badge variant="secondary" className="bg-indigo-100 text-indigo-700 text-[10px] px-1.5 py-0">18-22</Badge>;
+    return (
+      <Badge
+        variant="secondary"
+        className="bg-indigo-100 text-indigo-700 text-[10px] px-1.5 py-0"
+      >
+        18-22
+      </Badge>
+    );
   }
   return null;
 }
@@ -152,17 +175,20 @@ export function TimeWindowTable({ data }: { data: TimeWindowData | null }) {
     );
   }
 
-  const maxTotal = data.operators.length > 0
-    ? Math.max(...data.operators.map((o) => o.window1 + o.window2))
-    : 1;
+  const maxTotal =
+    data.operators.length > 0
+      ? Math.max(...data.operators.map((o) => o.window1 + o.window2))
+      : 1;
 
-  const maxW1 = data.operators.length > 0
-    ? Math.max(...data.operators.map((o) => o.window1))
-    : 1;
+  const maxW1 =
+    data.operators.length > 0
+      ? Math.max(...data.operators.map((o) => o.window1))
+      : 1;
 
-  const maxW2 = data.operators.length > 0
-    ? Math.max(...data.operators.map((o) => o.window2))
-    : 1;
+  const maxW2 =
+    data.operators.length > 0
+      ? Math.max(...data.operators.map((o) => o.window2))
+      : 1;
 
   return (
     <>
@@ -177,7 +203,8 @@ export function TimeWindowTable({ data }: { data: TimeWindowData | null }) {
               Franja 10:00 - 14:00
             </CardTitle>
             <CardDescription className="text-xs">
-              Producción por operario en la franja matutina — Total:{" "}
+              Solo operarios cuyo <b>primer movimiento es a las 10hs o
+              después</b> — Total:{" "}
               {data.summary.totalWindow1.toLocaleString("es-AR")} unidades
             </CardDescription>
           </CardHeader>
@@ -229,7 +256,8 @@ export function TimeWindowTable({ data }: { data: TimeWindowData | null }) {
               Franja 18:00 - 22:00
             </CardTitle>
             <CardDescription className="text-xs">
-              Producción por operario en la franja nocturna — Total:{" "}
+              Solo operarios cuyo <b>primer movimiento es a las 18hs o
+              después</b> — Total:{" "}
               {data.summary.totalWindow2.toLocaleString("es-AR")} unidades
             </CardDescription>
           </CardHeader>
@@ -283,8 +311,10 @@ export function TimeWindowTable({ data }: { data: TimeWindowData | null }) {
             Tabla Comparativa por Operario
           </CardTitle>
           <CardDescription>
-            Detalle de producción por operario en ambas franjas horarias.
-            Solo se muestran operarios con producción en al menos una franja.
+            Solo se incluyen operarios cuyo <b>primer movimiento</b> del
+            registro es a las 10hs o más tarde (franja diurna) o a las 18hs o
+            más tarde (franja nocturna). Quienes ya venían produciendo desde
+            antes quedan excluidos de esa franja.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -298,7 +328,7 @@ export function TimeWindowTable({ data }: { data: TimeWindowData | null }) {
                 <span className="text-right">18-22 hs</span>
                 <span className="text-right">Combinado</span>
                 <span className="text-right">Total Gral.</span>
-                <span className="text-center">Franja</span>
+                <span className="text-center">Ingreso</span>
               </div>
 
               {/* Rows */}
@@ -339,19 +369,28 @@ export function TimeWindowTable({ data }: { data: TimeWindowData | null }) {
                         </p>
                         <p className="text-[10px] text-muted-foreground">
                           {op.operario} · {op.circuitCount} circuito
-                          {op.circuitCount !== 1 ? "s" : ""} · {op.circuits.slice(0, 4).join(", ")}
+                          {op.circuitCount !== 1 ? "s" : ""} ·{" "}
+                          {op.circuits.slice(0, 4).join(", ")}
                           {op.circuits.length > 4 ? "..." : ""}
                         </p>
                       </div>
                       <span
-                        className={`text-sm font-semibold text-right ${op.window1 > 0 ? "text-amber-700" : "text-muted-foreground/40"}`}
+                        className={`text-sm font-semibold text-right ${
+                          op.window1 > 0
+                            ? "text-amber-700"
+                            : "text-muted-foreground/40"
+                        }`}
                       >
                         {op.window1 > 0
                           ? op.window1.toLocaleString("es-AR")
                           : "—"}
                       </span>
                       <span
-                        className={`text-sm font-semibold text-right ${op.window2 > 0 ? "text-indigo-700" : "text-muted-foreground/40"}`}
+                        className={`text-sm font-semibold text-right ${
+                          op.window2 > 0
+                            ? "text-indigo-700"
+                            : "text-muted-foreground/40"
+                        }`}
                       >
                         {op.window2 > 0
                           ? op.window2.toLocaleString("es-AR")
@@ -367,7 +406,11 @@ export function TimeWindowTable({ data }: { data: TimeWindowData | null }) {
                           <div
                             className={`h-full rounded-full transition-all duration-500 ${intensityColor}`}
                             style={{
-                              width: `${maxTotal > 0 ? Math.round((combined / maxTotal) * 100) : 0}%`,
+                              width: `${
+                                maxTotal > 0
+                                  ? Math.round((combined / maxTotal) * 100)
+                                  : 0
+                              }%`,
                             }}
                           />
                         </div>
