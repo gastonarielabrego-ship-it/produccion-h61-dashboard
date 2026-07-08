@@ -35,10 +35,17 @@ export function HeaderActions({ onRefresh }: HeaderActionsProps) {
         const formData = new FormData();
         formData.append("file", file);
 
+        // Longer timeout for large files (up to 90s)
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 90000);
+
         const response = await fetch("/api/admin/upload", {
           method: "POST",
           body: formData,
+          signal: controller.signal,
         });
+
+        clearTimeout(timeout);
 
         const data = await response.json();
 
@@ -48,8 +55,12 @@ export function HeaderActions({ onRefresh }: HeaderActionsProps) {
         } else {
           showToast("error", data.error || "Error al cargar");
         }
-      } catch {
-        showToast("error", "Error de conexión");
+      } catch (err: any) {
+        if (err.name === "AbortError") {
+          showToast("error", "Tiempo agotado. El archivo es muy grande o la conexión es lenta.");
+        } else {
+          showToast("error", `Error: ${err.message || "conexión fallida"}`);
+        }
       } finally {
         setIsUploading(false);
       }

@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "src/app/api/admin/upload/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/admin/download/route.ts": {
+      "maxDuration": 60
+    }
+  }
+}
