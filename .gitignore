@@ -1,5 +1,3 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
 # dependencies
 node_modules
 /.pnp
@@ -39,26 +37,34 @@ yarn-error.log*
 # vercel
 .vercel
 
-
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-local-*
-.claude
-.z-ai-config
+
+# logs
 *.log
+server.log
 dev.log
-dev.out.log
+
+# Non-project files
+/skills/
+/examples/
+/mini-services/
+/tool-results/
+/agent-ctx/
+/.zscripts/
+/.claude
+/.z-ai-config
 test
 prompt
+local-*
 
-server.log
-# Skills directory
-/skills/
-
-# Database
+# Database (legacy SQLite)
 /db/*.db
 /db/*.db-journal
 
-# Upload (source data)
+# Upload (source data - large files)
 /upload/
+
+# Prisma (no longer used)
+/prisma/
