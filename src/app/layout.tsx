@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Producción H61 — Dashboard de Producción por Hora",
   description: "Dashboard interactivo de producción industrial H61 con visualización por hora, turno, circuito y operario. Datos en tiempo real con filtros avanzados.",
-  keywords: ["producción", "H61", "dashboard", "manufactura", "industria", "Next.js", "Prisma"],
+  keywords: ["producción", "H61", "dashboard", "manufactura", "industria", "Next.js", "Google Sheets"],
   authors: [{ name: "H61 Production Team" }],
   icons: {
     icon: "/logo.svg",

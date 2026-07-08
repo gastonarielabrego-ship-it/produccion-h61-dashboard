@@ -1,30 +1,15 @@
-import { db } from "@/lib/db";
-import { NextRequest, NextResponse } from "next/server";
+import {
+  getAllRecords,
+  parseFilters,
+  applyFilters,
+} from "@/lib/google-sheets";
+import { NextResponse } from "next/server";
 
-export async function GET(request: NextRequest) {
+export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const date = searchParams.get("date");
-    const turno = searchParams.get("turno");
-    const funcion = searchParams.get("funcion");
-
-    const where: Record<string, unknown> = {};
-    if (date) where.date = Number(date);
-    if (turno) where.turno = turno;
-    if (funcion) where.funcion = funcion;
-
-    const records = await db.productionRecord.findMany({
-      where: Object.keys(where).length > 0 ? where : undefined,
-      select: {
-        circuito: true,
-        total: true,
-        date: true,
-        turno: true,
-        turnoDesc: true,
-        funcion: true,
-        funcionDesc: true,
-      },
-    });
+    const filters = parseFilters(request);
+    const allRecords = await getAllRecords();
+    const records = applyFilters(allRecords, filters);
 
     // Total por circuito
     const byCircuit: Record<string, number> = {};

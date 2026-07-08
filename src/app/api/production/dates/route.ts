@@ -1,41 +1,35 @@
-import { db } from "@/lib/db";
+import {
+  getAllRecords,
+  parseFilters,
+  applyFilters,
+  type ProductionRecord,
+} from "@/lib/google-sheets";
 import { NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const dates = await db.productionRecord.findMany({
-      select: { date: true },
-      distinct: ["date"],
-      orderBy: { date: "asc" },
-    });
+    const filters = parseFilters(request);
+    const allRecords = await getAllRecords();
+    const records = applyFilters(allRecords, filters);
 
-    const circuits = await db.productionRecord.findMany({
-      select: { circuito: true },
-      distinct: ["circuito"],
-      orderBy: { circuito: "asc" },
-    });
+    const dates = [...new Set(records.map((r) => r.date))].sort();
+    const circuits = [...new Set(records.map((r) => r.circuito))].sort();
 
-    const turnos = await db.productionRecord.findMany({
-      select: { turno: true, turnoDesc: true },
-      distinct: ["turno"],
-      orderBy: { turno: "asc" },
-    });
+    const shiftMap = new Map<string, string>();
+    for (const r of records) shiftMap.set(r.turno, r.turnoDesc);
+    const shifts = Array.from(shiftMap.entries()).map(([value, label]) => ({
+      value,
+      label,
+    }));
 
-    const funciones = await db.productionRecord.findMany({
-      select: { funcion: true, funcionDesc: true },
-      distinct: ["funcion"],
-      orderBy: { funcion: "asc" },
-    });
+    const funcMap = new Map<string, string>();
+    for (const r of records) funcMap.set(r.funcion, r.funcionDesc);
+    const functions = Array.from(funcMap.entries()).map(([value, label]) => ({
+      value,
+      label,
+    }));
 
-    return NextResponse.json({
-      dates: dates.map((d) => d.date),
-      circuits: circuits.map((c) => c.circuito),
-      shifts: turnos.map((t) => ({ value: t.turno, label: t.turnoDesc })),
-      functions: funciones.map((f) => ({
-        value: f.funcion,
-        label: f.funcionDesc,
-      })),
-    });
+    return NextResponse.json({ dates, circuits, shifts, functions });
   } catch (error) {
     console.error("Error fetching filters:", error);
     return NextResponse.json(

@@ -1,33 +1,29 @@
-import { db } from "@/lib/db";
-import { NextRequest, NextResponse } from "next/server";
+import {
+  getAllRecords,
+  parseFilters,
+  applyFilters,
+} from "@/lib/google-sheets";
+import { NextResponse } from "next/server";
 
-export async function GET(request: NextRequest) {
+export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const date = searchParams.get("date");
-    const turno = searchParams.get("turno");
-    const circuito = searchParams.get("circuito");
+    const filters = parseFilters(request);
+    const allRecords = await getAllRecords();
+    const records = applyFilters(allRecords, filters);
 
-    const where: Record<string, unknown> = {};
-    if (date) where.date = Number(date);
-    if (turno) where.turno = turno;
-    if (circuito) where.circuito = circuito;
+    const opMap: Record<string, { operario: string; nombre: string; total: number }> = {};
+    for (const r of records) {
+      if (!opMap[r.operario]) {
+        opMap[r.operario] = { operario: r.operario, nombre: r.nombre, total: 0 };
+      }
+      opMap[r.operario].total += r.total;
+    }
 
-    const operators = await db.productionRecord.groupBy({
-      by: ["operario", "nombre"],
-      where: Object.keys(where).length > 0 ? where : undefined,
-      _sum: { total: true },
-      orderBy: { _sum: { total: "desc" } },
-      take: 20,
-    });
+    const operators = Object.values(opMap)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 20);
 
-    const data = operators.map((o) => ({
-      operario: o.operario,
-      nombre: o.nombre,
-      total: o._sum.total || 0,
-    }));
-
-    return NextResponse.json({ operators: data });
+    return NextResponse.json({ operators });
   } catch (error) {
     console.error("Error fetching operators:", error);
     return NextResponse.json(

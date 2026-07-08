@@ -1,24 +1,15 @@
-import { db } from "@/lib/db";
-import { NextRequest, NextResponse } from "next/server";
+import {
+  getAllRecords,
+  parseFilters,
+  applyFilters,
+} from "@/lib/google-sheets";
+import { NextResponse } from "next/server";
 
-export async function GET(request: NextRequest) {
+export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const date = searchParams.get("date");
-    const turno = searchParams.get("turno");
-    const funcion = searchParams.get("funcion");
-    const circuito = searchParams.get("circuito");
-
-    const where: Record<string, unknown> = {};
-    if (date) where.date = Number(date);
-    if (turno) where.turno = turno;
-    if (funcion) where.funcion = funcion;
-    if (circuito) where.circuito = circuito;
-
-    const records = await db.productionRecord.findMany({
-      where: Object.keys(where).length > 0 ? where : undefined,
-      include: { hourlyData: { orderBy: { hour: "asc" } } },
-    });
+    const filters = parseFilters(request);
+    const allRecords = await getAllRecords();
+    const records = applyFilters(allRecords, filters);
 
     // Group by circuit and hour
     const circuitHourly: Record<string, Record<number, number>> = {};
@@ -35,7 +26,7 @@ export async function GET(request: NextRequest) {
     }
 
     const circuits = Object.keys(circuitHourly).sort();
-    const hourlyData = [];
+    const hourlyData: Record<string, string | number>[] = [];
     for (let h = 0; h <= 23; h++) {
       const point: Record<string, string | number> = {
         hour: `${String(h).padStart(2, "0")}:00`,
@@ -47,15 +38,16 @@ export async function GET(request: NextRequest) {
       hourlyData.push(point);
     }
 
-    // Totals per circuit
-    const circuitTotals = circuits.map((c) => ({
-      circuito: c,
-      total: Object.values(circuitHourly[c]).reduce((s, v) => s + v, 0),
-    }));
+    const circuitTotals = circuits
+      .map((c) => ({
+        circuito: c,
+        total: Object.values(circuitHourly[c]).reduce((s, v) => s + v, 0),
+      }))
+      .sort((a, b) => b.total - a.total);
 
     return NextResponse.json({
       circuits,
-      circuitTotals: circuitTotals.sort((a, b) => b.total - a.total),
+      circuitTotals,
       hourlyData,
     });
   } catch (error) {
