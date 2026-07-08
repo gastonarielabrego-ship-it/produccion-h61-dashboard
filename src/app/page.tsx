@@ -9,7 +9,7 @@ import { ByShiftChart } from "@/components/dashboard/by-shift-chart";
 import { SummaryBreakdown } from "@/components/dashboard/summary-breakdown";
 import { OperatorsTable } from "@/components/dashboard/operators-table";
 import { TimeWindowTable } from "@/components/dashboard/time-window-table";
-import { AdminPanel } from "@/components/dashboard/admin-panel";
+import { HeaderActions } from "@/components/dashboard/header-actions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart3, Clock } from "lucide-react";
 
@@ -54,7 +54,6 @@ export default function Home() {
     fetchData();
   }, [fetchData]);
 
-  // Build the info text from summary data
   const infoText = summaryData
     ? `${summaryData.totalRecords?.toLocaleString("es-AR")} registros · ${summaryData.grandTotal?.toLocaleString("es-AR")} unidades`
     : "Cargando...";
@@ -89,25 +88,23 @@ export default function Home() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-muted-foreground hidden sm:inline">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <span className="text-xs text-muted-foreground hidden md:inline">
               {infoText}
             </span>
-            <AdminPanel onRefresh={fetchData} />
+            <HeaderActions onRefresh={fetchData} />
           </div>
         </div>
       </header>
 
       {/* Main content */}
       <main className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 flex-1">
-        {/* Filters */}
         <FilterBar
           filters={filters}
           filterState={filterState}
           setFilterState={setFilterState}
         />
 
-        {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="general" className="gap-1.5">
@@ -121,22 +118,13 @@ export default function Home() {
           </TabsList>
 
           <TabsContent value="general" className="space-y-6 mt-6">
-            {/* KPI Cards */}
             <SummaryCards data={summaryData} />
-
-            {/* Main Hourly Chart */}
             <HourlyChart data={hourlyData} />
-
-            {/* Two column: By Shift + By Circuit */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               <ByShiftChart data={shiftData} />
               <ByCircuitChart data={circuitData} />
             </div>
-
-            {/* Breakdown: Circuits + Dates */}
             <SummaryBreakdown data={summaryData} />
-
-            {/* Operators Table */}
             <OperatorsTable data={operatorData} />
           </TabsContent>
 
@@ -146,7 +134,6 @@ export default function Home() {
         </Tabs>
       </main>
 
-      {/* Footer */}
       <footer className="border-t mt-auto">
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between text-xs text-muted-foreground">
           <span>Producción H61 · Dashboard de Control</span>

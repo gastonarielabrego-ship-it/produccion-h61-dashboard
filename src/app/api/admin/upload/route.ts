@@ -17,7 +17,7 @@ export async function POST(request: Request) {
 
     if (!file || !(file instanceof File)) {
       return NextResponse.json(
-        { error: "No se recibió ningún archivo. Usá FormData con key 'file'." },
+        { error: "No se recibió ningún archivo." },
         { status: 400 }
       );
     }
@@ -29,14 +29,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // Parse Excel
     const buffer = Buffer.from(await file.arrayBuffer());
     const workbook = XLSX.read(buffer, { type: "buffer" });
     const sheet = workbook.Sheets["Datos"];
 
     if (!sheet) {
       return NextResponse.json(
-        { error: 'No se encontró la hoja "Datos" en el archivo Excel' },
+        { error: 'No se encontró la hoja "Datos" en el archivo' },
         { status: 400 }
       );
     }
@@ -45,7 +44,6 @@ export async function POST(request: Request) {
       header: 1,
     });
 
-    // Skip header, filter empty rows
     const dataRows = rows.slice(1).filter((r) => r && r.length >= 12);
 
     if (dataRows.length === 0) {
@@ -57,10 +55,36 @@ export async function POST(request: Request) {
 
     const client = getClient();
 
-    // Clear existing data
-    await client.execute("DELETE FROM production_records");
+    // Extract unique dates from the uploaded file
+    const uploadedDates = new Set<number>();
+    for (const row of dataRows) {
+      const fecha = Number(row[2]);
+      if (fecha) uploadedDates.add(fecha);
+    }
+    const dateList = Array.from(uploadedDates).sort();
 
-    // Insert in batches
+    // Check which dates already exist
+    let existingCount = 0;
+    if (dateList.length > 0) {
+      const placeholders = dateList.map(() => "?").join(", ");
+      const existing = await client.execute({
+        sql: `SELECT DISTINCT fecha FROM production_records WHERE fecha IN (${placeholders})`,
+        args: dateList,
+      });
+      existingCount = existing.rows.length;
+
+      // Delete only the dates that are being re-uploaded (pisar)
+      if (existing.rows.length > 0) {
+        const existDates = existing.rows.map((r) => Number(r.fecha));
+        const delPlaceholders = existDates.map(() => "?").join(", ");
+        await client.execute({
+          sql: `DELETE FROM production_records WHERE fecha IN (${delPlaceholders})`,
+          args: existDates,
+        });
+      }
+    }
+
+    // Insert all rows from the file
     const BATCH_SIZE = 200;
     let inserted = 0;
 
@@ -99,10 +123,18 @@ export async function POST(request: Request) {
       inserted += batch.length;
     }
 
+    const newDates = dateList.length - existingCount;
+    const msg = existingCount > 0
+      ? `${inserted.toLocaleString("es-AR")} registros: ${newDates} fecha${newDates !== 1 ? "s" : ""} nueva${newDates !== 1 ? "s" : ""} + ${existingCount} fecha${existingCount !== 1 ? "s" : ""} actualizada${existingCount !== 1 ? "s" : ""}`
+      : `${inserted.toLocaleString("es-AR")} registros (${dateList.length} fecha${dateList.length !== 1 ? "s" : ""} nueva${dateList.length !== 1 ? "s" : ""})`;
+
     return NextResponse.json({
       success: true,
-      message: `Se cargaron ${inserted.toLocaleString("es-AR")} registros correctamente.`,
+      message: msg,
       inserted,
+      datesInFile: dateList.length,
+      datesReplaced: existingCount,
+      datesAdded: newDates,
     });
   } catch (error: any) {
     console.error("Error uploading Excel:", error);
