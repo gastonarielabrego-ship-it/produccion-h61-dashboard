@@ -221,7 +221,8 @@ export function SummaryTab({ baseQuery, funcionFilter }: SummaryTabProps) {
     const base = qs ? `?${qs}` : "";
     fetch(`/api/production/summary-tables${base}`)
       .then((r) => r.json())
-      .then(setData);
+      .then(setData)
+      .catch(() => setData({ dailyMetrics: [], dayHeatmap: [], collaboratorHeatmap: [] }));
   }, [baseQuery, funcionFilter]);
 
   useEffect(() => {

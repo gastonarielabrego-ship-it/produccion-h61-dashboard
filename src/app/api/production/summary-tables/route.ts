@@ -90,6 +90,7 @@ export async function GET(request: Request) {
 
     const sortedOps = Object.entries(opTotalMap)
       .sort((a, b) => b[1] - a[1])
+      .slice(0, 100)
       .map(([op]) => op);
 
     const opHourMap: Record<string, number> = {};
