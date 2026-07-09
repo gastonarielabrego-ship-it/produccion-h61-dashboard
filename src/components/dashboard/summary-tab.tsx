@@ -19,13 +19,13 @@ interface SummaryTabProps {
 function heatColor(value: number, max: number): string {
   if (value === 0) return "";
   const ratio = max > 0 ? value / max : 0;
-  if (ratio > 0.75) return "bg-red-600 text-white";
-  if (ratio > 0.55) return "bg-orange-500 text-white";
-  if (ratio > 0.4) return "bg-amber-400 text-amber-950";
+  if (ratio > 0.75) return "bg-green-600 text-white";
+  if (ratio > 0.55) return "bg-green-400 text-green-950";
+  if (ratio > 0.4) return "bg-lime-400 text-lime-950";
   if (ratio > 0.25) return "bg-yellow-300 text-yellow-950";
-  if (ratio > 0.12) return "bg-lime-300 text-lime-950";
-  if (ratio > 0.05) return "bg-green-300 text-green-950";
-  return "bg-green-200 text-green-900";
+  if (ratio > 0.12) return "bg-amber-400 text-amber-950";
+  if (ratio > 0.05) return "bg-orange-400 text-white";
+  return "bg-red-500 text-white";
 }
 
 function formatArgDate(d: number): string {
