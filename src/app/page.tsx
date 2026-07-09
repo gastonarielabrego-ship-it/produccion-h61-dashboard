@@ -158,5 +158,5 @@ function TimeWindowTableData({
       .then(setData);
   }, [baseQuery, funcionFilter, refreshKey]);
 
-  return <TimeWindowTable data={data} />;
+  return <TimeWindowTable data={data} filtersQuery={baseQuery} />;
 }

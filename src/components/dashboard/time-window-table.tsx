@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   Card,
   CardContent,
@@ -10,6 +11,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Target, Sun, Moon, TrendingUp, User, Clock } from "lucide-react";
+import { OperatorDetail } from "./operator-detail";
 
 interface OperatorRow {
   operario: string;
@@ -30,24 +32,19 @@ interface FranjasGroup {
 
 interface TimeWindowTableProps {
   data: FranjasGroup | null;
+  filtersQuery: string;
 }
 
 function MissionTable({
   operators,
   barColor,
+  onSelectOperator,
 }: {
   operators: OperatorRow[];
   barColor: string;
+  onSelectOperator: (operario: string) => void;
 }) {
   const maxTotal = operators[0]?.total || 1;
-
-  // Calculate hours connected per operator
-  const opHours: Record<string, number> = {};
-  for (const op of operators) {
-    // Approximate: treat each operator's bultos as if they worked the full 4h window
-    // We'll show misiones count as "1" per appearance since the API already deduplicates
-    opHours[op.operario] = 4; // each franja is 4 hours
-  }
 
   return (
     <Card>
@@ -87,8 +84,13 @@ function MissionTable({
                     )}
                   </div>
                   <User className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium truncate">{op.nombre}</p>
+                  <div
+                    className="flex-1 min-w-0 cursor-pointer group"
+                    onClick={() => onSelectOperator(op.operario)}
+                  >
+                    <p className="text-xs font-medium truncate group-hover:text-primary transition-colors underline-offset-4 group-hover:underline">
+                      {op.nombre}
+                    </p>
                     <p className="text-[10px] text-muted-foreground">
                       {op.operario}
                     </p>
@@ -135,6 +137,7 @@ function FranjaSection({
   iconColor,
   borderColor,
   barColor,
+  onSelectOperator,
 }: {
   label: string;
   icon: typeof Sun;
@@ -145,6 +148,7 @@ function FranjaSection({
   iconColor: string;
   borderColor: string;
   barColor: string;
+  onSelectOperator: (operario: string) => void;
 }) {
   const cards = [
     {
@@ -204,13 +208,16 @@ function FranjaSection({
         ))}
       </div>
       <div className="px-3 pb-3">
-        <MissionTable operators={operators} barColor={barColor} />
+        <MissionTable operators={operators} barColor={barColor} onSelectOperator={onSelectOperator} />
       </div>
     </div>
   );
 }
 
-export function TimeWindowTable({ data }: TimeWindowTableProps) {
+export function TimeWindowTable({ data, filtersQuery }: TimeWindowTableProps) {
+  const [selectedOperario, setSelectedOperario] = useState<string | null>(null);
+
+  const handleSelect = (operario: string) => setSelectedOperario(operario);
   if (!data) {
     return (
       <div className="space-y-6">
@@ -248,6 +255,7 @@ export function TimeWindowTable({ data }: TimeWindowTableProps) {
         iconColor="text-amber-600"
         borderColor="border-l-amber-400"
         barColor="bg-amber-400"
+        onSelectOperator={handleSelect}
       />
       <FranjaSection
         label="18 - 22 hs"
@@ -259,6 +267,14 @@ export function TimeWindowTable({ data }: TimeWindowTableProps) {
         iconColor="text-indigo-600"
         borderColor="border-l-indigo-400"
         barColor="bg-indigo-400"
+        onSelectOperator={handleSelect}
+      />
+
+      {/* Detail sheet */}
+      <OperatorDetail
+        operario={selectedOperario}
+        onClose={() => setSelectedOperario(null)}
+        filtersQuery={filtersQuery}
       />
     </div>
   );
