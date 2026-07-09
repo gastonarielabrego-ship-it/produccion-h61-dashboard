@@ -69,8 +69,8 @@ export async function GET(request: Request) {
       misiones18,
       bultos10_14,
       bultos18_22,
-      produccion10: misiones10 > 0 ? Math.round(bultos10_14 / misiones10) : 0,
-      produccion18: misiones18 > 0 ? Math.round(bultos18_22 / misiones18) : 0,
+      produccion10: misiones10 > 0 ? Math.round((bultos10_14 / misiones10) / 4) : 0,
+      produccion18: misiones18 > 0 ? Math.round((bultos18_22 / misiones18) / 4) : 0,
     });
   } catch (error) {
     console.error("Error fetching franjas:", error);

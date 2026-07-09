@@ -50,7 +50,7 @@ function FranjaRow({ label, icon: Icon, misiones, bultos, produccion, iconColor,
     },
     {
       title: "Producción",
-      description: "Bultos por misión",
+      description: "Bultos por misión por hora",
       value: produccion.toLocaleString("es-AR"),
       icon: TrendingUp,
       color: "text-sky-600",
