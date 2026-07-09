@@ -4,11 +4,12 @@ import { useEffect, useState, useCallback } from "react";
 import { SummaryCards } from "@/components/dashboard/summary-cards";
 import { HourlyChart } from "@/components/dashboard/hourly-chart";
 import { ByShiftChart } from "@/components/dashboard/by-shift-chart";
+import { MissionsHourlyChart } from "@/components/dashboard/missions-hourly-chart";
 import { SummaryBreakdown } from "@/components/dashboard/summary-breakdown";
 import { OperatorsTable } from "@/components/dashboard/operators-table";
 
 interface DashboardTabProps {
-  /** Optional funcion code to filter (e.g. "PSTD", "PXD"). Empty = all. */
+  /** Optional funcion code to filter (e.g. "P", "X"). Empty = all. */
   funcionFilter?: string;
   /** Additional query params from the global filter bar (date, turno, circuito) */
   baseQuery: string;
@@ -19,6 +20,7 @@ export function DashboardTab({ funcionFilter, baseQuery }: DashboardTabProps) {
   const [summaryData, setSummaryData] = useState<any>(null);
   const [shiftData, setShiftData] = useState<any>(null);
   const [operatorData, setOperatorData] = useState<any>(null);
+  const [missionsHourlyData, setMissionsHourlyData] = useState<any>(null);
 
   const buildFullQuery = useCallback(() => {
     const params = new URLSearchParams(baseQuery);
@@ -35,11 +37,13 @@ export function DashboardTab({ funcionFilter, baseQuery }: DashboardTabProps) {
       fetch(`/api/production/summary${base}`).then((r) => r.json()),
       fetch(`/api/production/by-shift${base}`).then((r) => r.json()),
       fetch(`/api/production/operators${base}`).then((r) => r.json()),
-    ]).then(([hourly, summary, shift, operators]) => {
+      fetch(`/api/production/missions-hourly${base}`).then((r) => r.json()),
+    ]).then(([hourly, summary, shift, operators, missionsHourly]) => {
       setHourlyData(hourly);
       setSummaryData(summary);
       setShiftData(shift);
       setOperatorData(operators);
+      setMissionsHourlyData(missionsHourly);
     });
   }, [buildFullQuery]);
 
@@ -51,6 +55,7 @@ export function DashboardTab({ funcionFilter, baseQuery }: DashboardTabProps) {
     <div className="space-y-6">
       <SummaryCards data={summaryData} />
       <HourlyChart data={hourlyData} />
+      <MissionsHourlyChart data={missionsHourlyData} />
       <ByShiftChart data={shiftData} />
       <SummaryBreakdown data={summaryData} />
       <OperatorsTable data={operatorData} filtersQuery={buildFullQuery()} />
