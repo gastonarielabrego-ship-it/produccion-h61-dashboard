@@ -9,6 +9,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Flame, Users, BarChart3, Clock } from "lucide-react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+} from "recharts";
 
 interface SummaryTabProps {
   baseQuery: string;
@@ -197,10 +207,50 @@ function HeatmapTable({
   );
 }
 
-// ── Misiones por Hora Table ───────────────────────────
+// ── Misiones por Hora Chart ───────────────────────────
+function heatBarColor(value: number, max: number): string {
+  if (value === 0) return "#e5e7eb";
+  const ratio = max > 0 ? value / max : 0;
+  if (ratio > 0.75) return "#16a34a";
+  if (ratio > 0.55) return "#4ade80";
+  if (ratio > 0.4) return "#a3e635";
+  if (ratio > 0.25) return "#facc15";
+  if (ratio > 0.12) return "#fbbf24";
+  if (ratio > 0.05) return "#fb923c";
+  return "#ef4444";
+}
+
+function MissionTooltip({ active, payload, label }: any) {
+  if (!active || !payload || !payload.length) return null;
+  return (
+    <div className="rounded-lg border bg-background p-3 shadow-md">
+      <p className="font-semibold text-sm mb-1">{label}:00</p>
+      {payload.map((entry: any, i: number) => (
+        <p key={i} className="text-xs flex items-center gap-1.5">
+          <span
+            className="inline-block w-2 h-2 rounded-full"
+            style={{ backgroundColor: entry.color }}
+          />
+          Misiones: {entry.value}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 function MissionsPerHourTable({ data }: { data: { hour: number; misiones: number }[] }) {
   const maxM = useMemo(() => Math.max(...data.map((d) => d.misiones), 0), [data]);
   const totalM = useMemo(() => data.reduce((s, d) => s + d.misiones, 0), [data]);
+  const activeData = useMemo(
+    () =>
+      data
+        .filter((d) => d.misiones > 0)
+        .map((d) => ({
+          ...d,
+          label: `${String(d.hour).padStart(2, "0")}:00`,
+        })),
+    [data]
+  );
 
   return (
     <Card>
@@ -210,56 +260,39 @@ function MissionsPerHourTable({ data }: { data: { hour: number; misiones: number
           Misiones por Hora
         </CardTitle>
         <CardDescription>
-          Cantidad de misiones activas en cada hora del día
+          Cantidad de misiones activas en cada hora del día — Total: {totalM}
         </CardDescription>
       </CardHeader>
-      <CardContent className="p-0 overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b">
-              <th className="text-xs font-semibold text-center p-2 min-w-[70px]">Hora</th>
-              <th className="text-xs font-semibold text-center p-2 min-w-[90px]">Misiones</th>
-              <th className="text-xs font-semibold text-center p-2 min-w-[120px]">Distribución</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.filter((d) => d.misiones > 0).map((row) => {
-              const pct = totalM > 0 ? (row.misiones / totalM) * 100 : 0;
-              return (
-                <tr key={row.hour} className="border-b hover:bg-muted/50">
-                  <td className={`text-xs font-semibold text-center p-2 ${
-                    row.hour === 10 || row.hour === 14 || row.hour === 18 || row.hour === 22
-                      ? "text-amber-600"
-                      : ""
-                  }`}>
-                    {String(row.hour).padStart(2, "0")}:00
-                  </td>
-                  <td className="text-xs text-center font-medium p-2">{row.misiones}</td>
-                  <td className="p-2">
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${heatColor(row.misiones, maxM).split(" ")[0]}`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <span className="text-[10px] text-muted-foreground w-10 text-right">
-                        {pct.toFixed(1)}%
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-          <tfoot>
-            <tr className="border-t-2 font-bold bg-muted/30">
-              <td className="text-xs font-bold text-center p-2">TOTAL</td>
-              <td className="text-xs font-bold text-center p-2">{totalM}</td>
-              <td />
-            </tr>
-          </tfoot>
-        </table>
+      <CardContent>
+        <div className="h-[300px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={activeData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+                interval={0}
+                angle={-45}
+                textAnchor="end"
+                height={60}
+              />
+              <YAxis
+                tick={{ fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+                allowDecimals={false}
+              />
+              <Tooltip content={<MissionTooltip />} />
+              <Bar dataKey="misiones" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                {activeData.map((entry, index) => (
+                  <Cell key={index} fill={heatBarColor(entry.misiones, maxM)} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </CardContent>
     </Card>
   );
