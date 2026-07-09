@@ -108,7 +108,20 @@ export default function Home() {
           </TabsContent>
 
           <TabsContent value="franjas" className="space-y-6 mt-6">
-            <TimeWindowTableData baseQuery={baseQuery} refreshKey={refreshKey} />
+            <div>
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                <Wrench className="h-3.5 w-3.5 inline mr-1.5" />
+                Preparación STD
+              </h3>
+              <TimeWindowTableData baseQuery={baseQuery} funcionFilter="P" refreshKey={refreshKey} />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                <Zap className="h-3.5 w-3.5 inline mr-1.5" />
+                Preparación XD
+              </h3>
+              <TimeWindowTableData baseQuery={baseQuery} funcionFilter="X" refreshKey={refreshKey} />
+            </div>
           </TabsContent>
         </Tabs>
       </main>
@@ -126,19 +139,24 @@ export default function Home() {
 /** Wrapper for TimeWindowTable that fetches its own data */
 function TimeWindowTableData({
   baseQuery,
+  funcionFilter,
   refreshKey,
 }: {
   baseQuery: string;
+  funcionFilter?: string;
   refreshKey: number;
 }) {
   const [data, setData] = useState<any>(null);
 
   useEffect(() => {
-    const base = baseQuery ? `?${baseQuery}` : "";
+    const params = new URLSearchParams(baseQuery);
+    if (funcionFilter) params.set("funcion", funcionFilter);
+    const qs = params.toString();
+    const base = qs ? `?${qs}` : "";
     fetch(`/api/production/time-window-operators${base}`)
       .then((r) => r.json())
       .then(setData);
-  }, [baseQuery, refreshKey]);
+  }, [baseQuery, funcionFilter, refreshKey]);
 
   return <TimeWindowTable data={data} />;
 }
