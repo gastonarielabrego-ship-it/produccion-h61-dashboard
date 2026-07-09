@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   Card,
   CardContent,
@@ -10,6 +11,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Trophy, TrendingDown, User, Clock } from "lucide-react";
+import { OperatorDetail } from "./operator-detail";
 
 interface OperatorRow {
   operario: string;
@@ -23,6 +25,7 @@ interface OperatorsTableProps {
     operators: OperatorRow[];
     bottomOperators: OperatorRow[];
   } | null;
+  filtersQuery: string;
 }
 
 function OperatorRowItem({
@@ -30,11 +33,13 @@ function OperatorRowItem({
   index,
   maxTotal,
   variant,
+  onSelect,
 }: {
   op: OperatorRow;
   index: number;
   maxTotal: number;
   variant: "top" | "bottom";
+  onSelect: (operario: string) => void;
 }) {
   const pct = maxTotal > 0 ? Math.round((op.total / maxTotal) * 100) : 0;
   const isTop = variant === "top";
@@ -64,10 +69,15 @@ function OperatorRowItem({
         )}
       </div>
 
-      {/* Name */}
+      {/* Name — clickable */}
       <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{op.nombre}</p>
+      <div
+        className="flex-1 min-w-0 cursor-pointer group"
+        onClick={() => onSelect(op.operario)}
+      >
+        <p className="text-sm font-medium truncate group-hover:text-primary transition-colors underline-offset-4 group-hover:underline">
+          {op.nombre}
+        </p>
         <p className="text-xs text-muted-foreground">{op.operario}</p>
       </div>
 
@@ -97,7 +107,9 @@ function OperatorRowItem({
   );
 }
 
-export function OperatorsTable({ data }: OperatorsTableProps) {
+export function OperatorsTable({ data, filtersQuery }: OperatorsTableProps) {
+  const [selectedOperario, setSelectedOperario] = useState<string | null>(null);
+
   if (!data) {
     return (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -116,62 +128,73 @@ export function OperatorsTable({ data }: OperatorsTableProps) {
   const bottomMax = data.bottomOperators[0]?.total || 1;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      {/* Top 20 */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Trophy className="h-4 w-4" />
-            Top 20 Más Productivos
-          </CardTitle>
-          <CardDescription>
-            Operarios con mayor producción total en el período seleccionado
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          <ScrollArea className="h-[400px]">
-            <div className="px-4 pb-4 space-y-0">
-              {data.operators.map((op, i) => (
-                <OperatorRowItem
-                  key={op.operario}
-                  op={op}
-                  index={i}
-                  maxTotal={topMax}
-                  variant="top"
-                />
-              ))}
-            </div>
-          </ScrollArea>
-        </CardContent>
-      </Card>
+    <>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Top 20 */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Trophy className="h-4 w-4" />
+              Top 20 Más Productivos
+            </CardTitle>
+            <CardDescription>
+              Operarios con mayor producción total en el período seleccionado
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <ScrollArea className="h-[400px]">
+              <div className="px-4 pb-4 space-y-0">
+                {data.operators.map((op, i) => (
+                  <OperatorRowItem
+                    key={op.operario}
+                    op={op}
+                    index={i}
+                    maxTotal={topMax}
+                    variant="top"
+                    onSelect={setSelectedOperario}
+                  />
+                ))}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
 
-      {/* Bottom 20 */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <TrendingDown className="h-4 w-4" />
-            Menos Productivos
-          </CardTitle>
-          <CardDescription>
-            Operarios con menor producción total en el período seleccionado
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          <ScrollArea className="h-[400px]">
-            <div className="px-4 pb-4 space-y-0">
-              {data.bottomOperators.map((op, i) => (
-                <OperatorRowItem
-                  key={op.operario}
-                  op={op}
-                  index={i}
-                  maxTotal={bottomMax}
-                  variant="bottom"
-                />
-              ))}
-            </div>
-          </ScrollArea>
-        </CardContent>
-      </Card>
-    </div>
+        {/* Bottom 20 */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <TrendingDown className="h-4 w-4" />
+              Menos Productivos
+            </CardTitle>
+            <CardDescription>
+              Operarios con menor producción total en el período seleccionado
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <ScrollArea className="h-[400px]">
+              <div className="px-4 pb-4 space-y-0">
+                {data.bottomOperators.map((op, i) => (
+                  <OperatorRowItem
+                    key={op.operario}
+                    op={op}
+                    index={i}
+                    maxTotal={bottomMax}
+                    variant="bottom"
+                    onSelect={setSelectedOperario}
+                  />
+                ))}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Detail sheet */}
+      <OperatorDetail
+        operario={selectedOperario}
+        onClose={() => setSelectedOperario(null)}
+        filtersQuery={filtersQuery}
+      />
+    </>
   );
 }

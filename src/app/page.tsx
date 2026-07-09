@@ -118,7 +118,7 @@ export default function Home() {
             <HourlyChart data={hourlyData} />
             <ByShiftChart data={shiftData} />
             <SummaryBreakdown data={summaryData} />
-            <OperatorsTable data={operatorData} />
+            <OperatorsTable data={operatorData} filtersQuery={buildQuery()} />
           </TabsContent>
 
           <TabsContent value="franjas" className="space-y-6 mt-6">
