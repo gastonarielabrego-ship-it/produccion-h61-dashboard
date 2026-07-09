@@ -76,9 +76,9 @@ export async function GET(request: Request) {
     const misiones10 = eligible10.size;
     const misiones18 = eligible18.size;
 
-    // Build operator lists sorted by bultos
-    const buildRanking = (bultosMap: Record<string, number>) => {
-      const list = Object.entries(bultosMap)
+    // Build full operator list sorted by bultos
+    const buildList = (bultosMap: Record<string, number>) =>
+      Object.entries(bultosMap)
         .map(([operario, total]) => ({
           operario,
           nombre: nameMap[operario] || operario,
@@ -86,14 +86,8 @@ export async function GET(request: Request) {
         }))
         .sort((a, b) => b.total - a.total);
 
-      const top = list.slice(0, 10);
-      const bottom = [...list].reverse().slice(0, 10).sort((a, b) => a.total - b.total);
-
-      return { top, bottom, total: list.length };
-    };
-
-    const ranking10 = buildRanking(opBultos10);
-    const ranking18 = buildRanking(opBultos18);
+    const operators10 = buildList(opBultos10);
+    const operators18 = buildList(opBultos18);
 
     return NextResponse.json({
       misiones10,
@@ -102,8 +96,8 @@ export async function GET(request: Request) {
       bultos18_22,
       produccion10: misiones10 > 0 ? Math.round((bultos10_14 / misiones10) / 4) : 0,
       produccion18: misiones18 > 0 ? Math.round((bultos18_22 / misiones18) / 4) : 0,
-      ranking10,
-      ranking18,
+      operators10,
+      operators18,
     });
   } catch (error) {
     console.error("Error fetching franjas:", error);

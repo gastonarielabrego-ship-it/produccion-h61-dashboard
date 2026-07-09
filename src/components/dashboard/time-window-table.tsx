@@ -9,17 +9,11 @@ import {
 } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Target, Sun, Moon, TrendingUp, Trophy, TrendingDown, User } from "lucide-react";
+import { Target, Sun, Moon, TrendingUp, User, Clock } from "lucide-react";
 
-interface OperatorRank {
+interface OperatorRow {
   operario: string;
   nombre: string;
-  total: number;
-}
-
-interface RankingData {
-  top: OperatorRank[];
-  bottom: OperatorRank[];
   total: number;
 }
 
@@ -30,51 +24,50 @@ interface FranjasGroup {
   bultos18_22: number;
   produccion10: number;
   produccion18: number;
-  ranking10: RankingData;
-  ranking18: RankingData;
+  operators10: OperatorRow[];
+  operators18: OperatorRow[];
 }
 
 interface TimeWindowTableProps {
   data: FranjasGroup | null;
 }
 
-function RankingList({
-  title,
-  icon: Icon,
+function MissionTable({
   operators,
-  maxTotal,
-  variant,
-  iconColor,
+  barColor,
 }: {
-  title: string;
-  icon: typeof Trophy;
-  operators: OperatorRank[];
-  maxTotal: number;
-  variant: "top" | "bottom";
-  iconColor: string;
+  operators: OperatorRow[];
+  barColor: string;
 }) {
-  const isTop = variant === "top";
+  const maxTotal = operators[0]?.total || 1;
+
+  // Calculate hours connected per operator
+  const opHours: Record<string, number> = {};
+  for (const op of operators) {
+    // Approximate: treat each operator's bultos as if they worked the full 4h window
+    // We'll show misiones count as "1" per appearance since the API already deduplicates
+    opHours[op.operario] = 4; // each franja is 4 hours
+  }
 
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <Icon className={`h-4 w-4 ${isTop ? "text-emerald-500" : "text-red-400"}`} />
-          {title}
+        <CardTitle className="text-sm font-medium">
+          Personas alcanzadas ({operators.length})
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
-        <ScrollArea className="h-[280px]">
+        <ScrollArea className="h-[320px]">
           <div className="px-4 pb-4 space-y-0">
             {operators.map((op, i) => {
-              const pct = maxTotal > 0 ? Math.round((op.total / maxTotal) * 100) : 0;
+              const pct = Math.round((op.total / maxTotal) * 100);
               return (
                 <div
                   key={op.operario}
                   className="flex items-center gap-3 py-2 border-b last:border-0 border-border/50"
                 >
                   <div className="w-6 text-center">
-                    {isTop && i < 3 ? (
+                    {i < 3 ? (
                       <Badge
                         variant="secondary"
                         className={`text-[10px] font-bold ${
@@ -88,18 +81,28 @@ function RankingList({
                         {i + 1}
                       </Badge>
                     ) : (
-                      <span className="text-xs text-muted-foreground">{i + 1}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {i + 1}
+                      </span>
                     )}
                   </div>
                   <User className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium truncate">{op.nombre}</p>
-                    <p className="text-[10px] text-muted-foreground">{op.operario}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {op.operario}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0 mr-1">
+                    <Clock className="h-3 w-3 text-muted-foreground" />
+                    <span className="text-[10px] text-muted-foreground w-4 text-right">
+                      4h
+                    </span>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <div className="w-20 h-2 bg-muted rounded-full overflow-hidden">
+                    <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
                       <div
-                        className={`h-full rounded-full transition-all ${iconColor}`}
+                        className={`h-full rounded-full transition-all ${barColor}`}
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -111,7 +114,9 @@ function RankingList({
               );
             })}
             {operators.length === 0 && (
-              <p className="text-xs text-muted-foreground text-center py-6">Sin datos</p>
+              <p className="text-xs text-muted-foreground text-center py-8">
+                Sin datos
+              </p>
             )}
           </div>
         </ScrollArea>
@@ -126,7 +131,7 @@ function FranjaSection({
   misiones,
   bultos,
   produccion,
-  ranking,
+  operators,
   iconColor,
   borderColor,
   barColor,
@@ -136,7 +141,7 @@ function FranjaSection({
   misiones: number;
   bultos: number;
   produccion: number;
-  ranking: RankingData;
+  operators: OperatorRow[];
   iconColor: string;
   borderColor: string;
   barColor: string;
@@ -198,23 +203,8 @@ function FranjaSection({
           </Card>
         ))}
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 px-3 pb-3">
-        <RankingList
-          title="Más Productivos"
-          icon={Trophy}
-          operators={ranking.top}
-          maxTotal={ranking.top[0]?.total || 1}
-          variant="top"
-          iconColor={barColor}
-        />
-        <RankingList
-          title="Menos Productivos"
-          icon={TrendingDown}
-          operators={ranking.bottom}
-          maxTotal={ranking.bottom[ranking.bottom.length - 1]?.total || 1}
-          variant="bottom"
-          iconColor="bg-red-400"
-        />
+      <div className="px-3 pb-3">
+        <MissionTable operators={operators} barColor={barColor} />
       </div>
     </div>
   );
@@ -235,15 +225,11 @@ export function TimeWindowTable({ data }: TimeWindowTableProps) {
                 </Card>
               ))}
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              {Array.from({ length: 2 }).map((_, i) => (
-                <Card key={i}>
-                  <CardContent className="p-4 h-[280px] flex items-center justify-center">
-                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            <Card>
+              <CardContent className="p-4 h-[320px] flex items-center justify-center">
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              </CardContent>
+            </Card>
           </div>
         ))}
       </div>
@@ -258,7 +244,7 @@ export function TimeWindowTable({ data }: TimeWindowTableProps) {
         misiones={data.misiones10}
         bultos={data.bultos10_14}
         produccion={data.produccion10}
-        ranking={data.ranking10}
+        operators={data.operators10}
         iconColor="text-amber-600"
         borderColor="border-l-amber-400"
         barColor="bg-amber-400"
@@ -269,7 +255,7 @@ export function TimeWindowTable({ data }: TimeWindowTableProps) {
         misiones={data.misiones18}
         bultos={data.bultos18_22}
         produccion={data.produccion18}
-        ranking={data.ranking18}
+        operators={data.operators18}
         iconColor="text-indigo-600"
         borderColor="border-l-indigo-400"
         barColor="bg-indigo-400"
