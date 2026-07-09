@@ -1,7 +1,6 @@
 import {
   getAllRecords,
   parseFilters,
-  type ProductionRecord,
 } from "@/lib/turso";
 import { NextResponse } from "next/server";
 
@@ -10,113 +9,65 @@ export async function GET(request: Request) {
     const filters = parseFilters(request);
     const records = await getAllRecords(filters);
 
-    const window1Hours = [10, 11, 12, 13];
-    const window2Hours = [18, 19, 20, 21];
+    const window1Hours = new Set([10, 11, 12, 13]);
+    const window2Hours = new Set([18, 19, 20, 21]);
 
-    function getFirstActiveHour(
-      hourlyData: { hour: number; quantity: number }[]
-    ): number {
-      for (const hd of hourlyData) {
-        if (hd.quantity > 0) return hd.hour;
-      }
-      return -1;
-    }
+    // Missions: unique (fecha, operario) whose first active hour of the day is 10 or 18
+    const missionSet = new Set<string>();
 
-    const operatorMap: Record<
-      string,
-      {
-        operario: string;
-        nombre: string;
-        window1: number;
-        window2: number;
-        totalGeneral: number;
-        circuits: Set<string>;
-        entries: number;
-        window1Entries: number;
-        window2Entries: number;
-      }
-    > = {};
+    // Bultos totals
+    let bultos10_14 = 0;
+    let bultos18_22 = 0;
 
-    for (const record of records) {
-      if (!operatorMap[record.operario]) {
-        operatorMap[record.operario] = {
-          operario: record.operario,
-          nombre: record.nombre,
-          window1: 0,
-          window2: 0,
-          totalGeneral: 0,
-          circuits: new Set<string>(),
-          entries: 0,
-          window1Entries: 0,
-          window2Entries: 0,
-        };
-      }
+    // Track first active hour per (date, operario)
+    const firstHourMap: Record<string, number> = {};
 
-      const op = operatorMap[record.operario];
-      op.totalGeneral += record.total;
-      op.entries += 1;
-      op.circuits.add(record.circuito);
-
-      const firstHour = getFirstActiveHour(record.hourlyData);
-
-      if (firstHour >= 10) {
-        op.window1Entries += 1;
-        for (const hd of record.hourlyData) {
-          if (window1Hours.includes(hd.hour)) {
-            op.window1 += hd.quantity;
-          }
+    for (const r of records) {
+      // Find first active hour for this record
+      let firstHour = -1;
+      for (const hd of r.hourlyData) {
+        if (hd.quantity > 0) {
+          firstHour = hd.hour;
+          break;
         }
       }
 
-      if (firstHour >= 18) {
-        op.window2Entries += 1;
-        for (const hd of record.hourlyData) {
-          if (window2Hours.includes(hd.hour)) {
-            op.window2 += hd.quantity;
-          }
+      const key = `${r.date}:${r.operario}`;
+
+      // Track earliest first active hour for this (date, operario)
+      if (firstHour >= 0) {
+        if (!(key in firstHourMap) || firstHour < firstHourMap[key]) {
+          firstHourMap[key] = firstHour;
+        }
+      }
+
+      // Count bultos in each window
+      for (const hd of r.hourlyData) {
+        if (window1Hours.has(hd.hour)) {
+          bultos10_14 += hd.quantity;
+        }
+        if (window2Hours.has(hd.hour)) {
+          bultos18_22 += hd.quantity;
         }
       }
     }
 
-    const operators = Object.values(operatorMap)
-      .filter((op) => op.window1 > 0 || op.window2 > 0)
-      .map((op) => ({
-        operario: op.operario,
-        nombre: op.nombre,
-        window1: op.window1,
-        window2: op.window2,
-        totalGeneral: op.totalGeneral,
-        circuitCount: op.circuits.size,
-        circuits: Array.from(op.circuits).sort(),
-        entries: op.entries,
-        window1Entries: op.window1Entries,
-        window2Entries: op.window2Entries,
-      }))
-      .sort((a, b) => (b.window1 + b.window2) - (a.window1 + a.window2));
-
-    const totalWindow1 = operators.reduce((s, o) => s + o.window1, 0);
-    const totalWindow2 = operators.reduce((s, o) => s + o.window2, 0);
-    const activeWindow1 = operators.filter((o) => o.window1 > 0).length;
-    const activeWindow2 = operators.filter((o) => o.window2 > 0).length;
-    const bothWindows = operators.filter(
-      (o) => o.window1 > 0 && o.window2 > 0
-    ).length;
+    // Missions = people whose earliest first hour of the day is 10 or 18
+    for (const [key, fh] of Object.entries(firstHourMap)) {
+      if (fh === 10 || fh === 18) {
+        missionSet.add(key);
+      }
+    }
 
     return NextResponse.json({
-      operators,
-      summary: {
-        totalWindow1,
-        totalWindow2,
-        activeWindow1,
-        activeWindow2,
-        bothWindows,
-        totalOperators: operators.length,
-      },
+      misiones: missionSet.size,
+      bultos10_14,
+      bultos18_22,
     });
   } catch (error) {
-    console.error("Error fetching time-window operators:", error);
+    console.error("Error fetching franjas:", error);
     return NextResponse.json(
-      { error: "Error fetching time-window data" },
+      { error: "Error fetching franjas data" },
       { status: 500 }
     );
   }
