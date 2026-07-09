@@ -26,6 +26,8 @@ interface OperatorDetailProps {
   operario: string | null;
   onClose: () => void;
   filtersQuery: string;
+  hourFrom?: number | null;
+  hourTo?: number | null;
 }
 
 function HourlyTooltip({ active, payload, label, avg }: any) {
@@ -53,6 +55,8 @@ export function OperatorDetail({
   operario,
   onClose,
   filtersQuery,
+  hourFrom,
+  hourTo,
 }: OperatorDetailProps) {
   const [detail, setDetail] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -64,15 +68,18 @@ export function OperatorDetail({
     }
 
     setLoading(true);
-    const base = filtersQuery ? `&${filtersQuery}` : "";
-    fetch(`/api/production/operator-hourly?operario=${encodeURIComponent(operario)}${base}`)
+    const parts = [`operario=${encodeURIComponent(operario)}`];
+    if (filtersQuery) parts.push(filtersQuery);
+    if (hourFrom != null) parts.push(`hourFrom=${hourFrom}`);
+    if (hourTo != null) parts.push(`hourTo=${hourTo}`);
+    fetch(`/api/production/operator-hourly?${parts.join("&")}`)
       .then((r) => r.json())
       .then((data) => {
         setDetail(data);
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [operario, filtersQuery]);
+  }, [operario, filtersQuery, hourFrom, hourTo]);
 
   const avgQuantity =
     detail && detail.horasConectado > 0

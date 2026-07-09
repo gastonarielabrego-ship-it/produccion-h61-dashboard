@@ -220,8 +220,12 @@ function FranjaSection({
 
 export function TimeWindowTable({ data, filtersQuery }: TimeWindowTableProps) {
   const [selectedOperario, setSelectedOperario] = useState<string | null>(null);
+  const [hourRange, setHourRange] = useState<{ from: number; to: number } | null>(null);
 
-  const handleSelect = (operario: string) => setSelectedOperario(operario);
+  const handleSelect = (operario: string, hourFrom: number, hourTo: number) => {
+    setSelectedOperario(operario);
+    setHourRange({ from: hourFrom, to: hourTo });
+  };
   if (!data) {
     return (
       <div className="space-y-6">
@@ -259,7 +263,7 @@ export function TimeWindowTable({ data, filtersQuery }: TimeWindowTableProps) {
         iconColor="text-amber-600"
         borderColor="border-l-amber-400"
         barColor="bg-amber-400"
-        onSelectOperator={handleSelect}
+        onSelectOperator={(op) => handleSelect(op, 10, 14)}
       />
       <FranjaSection
         label="18 - 22 hs"
@@ -271,7 +275,7 @@ export function TimeWindowTable({ data, filtersQuery }: TimeWindowTableProps) {
         iconColor="text-indigo-600"
         borderColor="border-l-indigo-400"
         barColor="bg-indigo-400"
-        onSelectOperator={handleSelect}
+        onSelectOperator={(op) => handleSelect(op, 18, 22)}
       />
 
       {/* Detail sheet */}
@@ -279,6 +283,8 @@ export function TimeWindowTable({ data, filtersQuery }: TimeWindowTableProps) {
         operario={selectedOperario}
         onClose={() => setSelectedOperario(null)}
         filtersQuery={filtersQuery}
+        hourFrom={hourRange?.from}
+        hourTo={hourRange?.to}
       />
     </div>
   );
