@@ -12,18 +12,14 @@ export async function GET(request: Request) {
     const window1Hours = new Set([10, 11, 12, 13]);
     const window2Hours = new Set([18, 19, 20, 21]);
 
-    // Missions: unique (fecha, operario) whose first active hour of the day is 10 or 18
-    const missionSet = new Set<string>();
-
-    // Bultos totals
-    let bultos10_14 = 0;
-    let bultos18_22 = 0;
-
     // Track first active hour per (date, operario)
     const firstHourMap: Record<string, number> = {};
 
+    // Bultos per (date, operario, window)
+    const bultosW1: Record<string, number> = {};
+    const bultosW2: Record<string, number> = {};
+
     for (const r of records) {
-      // Find first active hour for this record
       let firstHour = -1;
       for (const hd of r.hourlyData) {
         if (hd.quantity > 0) {
@@ -34,35 +30,47 @@ export async function GET(request: Request) {
 
       const key = `${r.date}:${r.operario}`;
 
-      // Track earliest first active hour for this (date, operario)
       if (firstHour >= 0) {
         if (!(key in firstHourMap) || firstHour < firstHourMap[key]) {
           firstHourMap[key] = firstHour;
         }
       }
 
-      // Count bultos in each window
+      // Accumulate bultos per window per (date, operario)
       for (const hd of r.hourlyData) {
-        if (window1Hours.has(hd.hour)) {
-          bultos10_14 += hd.quantity;
+        if (window1Hours.has(hd.hour) && hd.quantity > 0) {
+          bultosW1[key] = (bultosW1[key] || 0) + hd.quantity;
         }
-        if (window2Hours.has(hd.hour)) {
-          bultos18_22 += hd.quantity;
+        if (window2Hours.has(hd.hour) && hd.quantity > 0) {
+          bultosW2[key] = (bultosW2[key] || 0) + hd.quantity;
         }
       }
     }
 
-    // Missions = people whose earliest first hour of the day is 10 or 18
+    // Count missions and bultos for each window
+    let misiones10 = 0;
+    let misiones18 = 0;
+    let bultos10_14 = 0;
+    let bultos18_22 = 0;
+
     for (const [key, fh] of Object.entries(firstHourMap)) {
-      if (fh === 10 || fh === 18) {
-        missionSet.add(key);
+      if (fh === 10) {
+        misiones10 += 1;
+        bultos10_14 += bultosW1[key] || 0;
+      }
+      if (fh === 18) {
+        misiones18 += 1;
+        bultos18_22 += bultosW2[key] || 0;
       }
     }
 
     return NextResponse.json({
-      misiones: missionSet.size,
+      misiones10,
+      misiones18,
       bultos10_14,
       bultos18_22,
+      produccion10: misiones10 > 0 ? Math.round(bultos10_14 / misiones10) : 0,
+      produccion18: misiones18 > 0 ? Math.round(bultos18_22 / misiones18) : 0,
     });
   } catch (error) {
     console.error("Error fetching franjas:", error);
