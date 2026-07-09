@@ -9,19 +9,52 @@ export async function GET(request: Request) {
     const filters = parseFilters(request);
     const records = await getAllRecords(filters);
 
-    const opMap: Record<string, { operario: string; nombre: string; total: number }> = {};
+    // Aggregate per operator: total production + unique (date, hour) with activity
+    const opMap: Record<string, {
+      operario: string;
+      nombre: string;
+      total: number;
+      activeSlots: Set<string>;
+    }> = {};
+
     for (const r of records) {
       if (!opMap[r.operario]) {
-        opMap[r.operario] = { operario: r.operario, nombre: r.nombre, total: 0 };
+        opMap[r.operario] = {
+          operario: r.operario,
+          nombre: r.nombre,
+          total: 0,
+          activeSlots: new Set(),
+        };
       }
       opMap[r.operario].total += r.total;
+
+      // Count unique (date, hour) slots where operator had production > 0
+      for (const hd of r.hourlyData) {
+        if (hd.quantity > 0) {
+          opMap[r.operario].activeSlots.add(`${r.date}:${hd.hour}`);
+        }
+      }
     }
 
-    const operators = Object.values(opMap)
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 20);
+    const allOperators = Object.values(opMap)
+      .map((op) => ({
+        operario: op.operario,
+        nombre: op.nombre,
+        total: op.total,
+        horasConectado: op.activeSlots.size,
+      }))
+      .sort((a, b) => b.total - a.total);
 
-    return NextResponse.json({ operators });
+    const topOperators = allOperators.slice(0, 20);
+    const bottomOperators = [...allOperators]
+      .reverse()
+      .slice(0, 20)
+      .sort((a, b) => b.total - a.total); // keep ascending order by total (least first)
+
+    return NextResponse.json({
+      operators: topOperators,
+      bottomOperators,
+    });
   } catch (error) {
     console.error("Error fetching operators:", error);
     return NextResponse.json(
