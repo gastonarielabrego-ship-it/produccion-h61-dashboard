@@ -6,7 +6,8 @@ import { DashboardTab } from "@/components/dashboard/dashboard-tab";
 import { TimeWindowTable } from "@/components/dashboard/time-window-table";
 import { HeaderActions } from "@/components/dashboard/header-actions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BarChart3, Clock, Wrench, Zap } from "lucide-react";
+import { BarChart3, Clock, Wrench, Zap, Table2 } from "lucide-react";
+import { SummaryTab } from "@/components/dashboard/summary-tab";
 
 export default function Home() {
   const { filters, filterState, setFilterState, buildQuery } =
@@ -93,6 +94,10 @@ export default function Home() {
               <Clock className="h-3.5 w-3.5" />
               Franjas
             </TabsTrigger>
+            <TabsTrigger value="resumen" className="gap-1.5">
+              <Table2 className="h-3.5 w-3.5" />
+              Resumen
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="general" className="mt-6">
@@ -122,6 +127,10 @@ export default function Home() {
               </h3>
               <TimeWindowTableData baseQuery={baseQuery} funcionFilter="X" refreshKey={refreshKey} />
             </div>
+          </TabsContent>
+
+          <TabsContent value="resumen" className="mt-6">
+            <SummaryTab key={`res-${refreshKey}`} baseQuery={baseQuery} />
           </TabsContent>
         </Tabs>
       </main>
