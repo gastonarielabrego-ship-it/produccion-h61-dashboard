@@ -84,9 +84,13 @@ function MissionTable({
                     )}
                   </div>
                   <User className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                  <div
-                    className="flex-1 min-w-0 cursor-pointer group"
-                    onClick={() => onSelectOperator(op.operario)}
+                  <button
+                    type="button"
+                    className="flex-1 min-w-0 text-left cursor-pointer group bg-transparent border-0 p-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectOperator(op.operario);
+                    }}
                   >
                     <p className="text-xs font-medium truncate group-hover:text-primary transition-colors underline-offset-4 group-hover:underline">
                       {op.nombre}
@@ -94,7 +98,7 @@ function MissionTable({
                     <p className="text-[10px] text-muted-foreground">
                       {op.operario}
                     </p>
-                  </div>
+                  </button>
                   <div className="flex items-center gap-1 flex-shrink-0 mr-1">
                     <Clock className="h-3 w-3 text-muted-foreground" />
                     <span className="text-[10px] text-muted-foreground w-4 text-right">
