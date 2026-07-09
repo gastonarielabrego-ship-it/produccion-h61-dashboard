@@ -22,7 +22,6 @@ interface FilterState {
   date: string;
   turno: string;
   circuito: string;
-  funcion: string;
 }
 
 export function useProductionFilters() {
@@ -31,7 +30,6 @@ export function useProductionFilters() {
     date: "",
     turno: "",
     circuito: "",
-    funcion: "",
   });
 
   useEffect(() => {
@@ -45,7 +43,6 @@ export function useProductionFilters() {
     if (filterState.date) params.set("date", filterState.date);
     if (filterState.turno) params.set("turno", filterState.turno);
     if (filterState.circuito) params.set("circuito", filterState.circuito);
-    if (filterState.funcion) params.set("funcion", filterState.funcion);
     return params.toString();
   }, [filterState]);
 
@@ -88,7 +85,7 @@ export function FilterBar({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Select
             value={filterState.date}
             onValueChange={(v) =>
@@ -147,28 +144,6 @@ export function FilterBar({
                     <Factory className="h-3 w-3" />
                     {c}
                   </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={filterState.funcion}
-            onValueChange={(v) =>
-              setFilterState((prev) => ({
-                ...prev,
-                funcion: v === "__all__" ? "" : v,
-              }))
-            }
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Todas las funciones" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">Todas las funciones</SelectItem>
-              {filters.functions.map((f) => (
-                <SelectItem key={f.value} value={f.value}>
-                  {f.label}
                 </SelectItem>
               ))}
             </SelectContent>

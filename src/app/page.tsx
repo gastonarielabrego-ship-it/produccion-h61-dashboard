@@ -2,57 +2,31 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { FilterBar, useProductionFilters } from "@/components/dashboard/filters";
-import { SummaryCards } from "@/components/dashboard/summary-cards";
-import { HourlyChart } from "@/components/dashboard/hourly-chart";
-import { ByShiftChart } from "@/components/dashboard/by-shift-chart";
-import { SummaryBreakdown } from "@/components/dashboard/summary-breakdown";
-import { OperatorsTable } from "@/components/dashboard/operators-table";
+import { DashboardTab } from "@/components/dashboard/dashboard-tab";
 import { TimeWindowTable } from "@/components/dashboard/time-window-table";
 import { HeaderActions } from "@/components/dashboard/header-actions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BarChart3, Clock } from "lucide-react";
+import { BarChart3, Clock, Wrench, Zap } from "lucide-react";
 
 export default function Home() {
   const { filters, filterState, setFilterState, buildQuery } =
     useProductionFilters();
 
-  const [hourlyData, setHourlyData] = useState<any>(null);
-  const [summaryData, setSummaryData] = useState<any>(null);
-  const [shiftData, setShiftData] = useState<any>(null);
-  const [operatorData, setOperatorData] = useState<any>(null);
-  const [timeWindowData, setTimeWindowData] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("general");
 
-  const fetchData = useCallback(() => {
-    const q = buildQuery();
-    const base = q ? `?${q}` : "";
+  // Re-fetch when global filters change (date, turno, circuito)
+  const [refreshKey, setRefreshKey] = useState(0);
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
-    Promise.all([
-      fetch(`/api/production/hourly${base}`).then((r) => r.json()),
-      fetch(`/api/production/summary${base}`).then((r) => r.json()),
-      fetch(`/api/production/by-shift${base}`).then((r) => r.json()),
-      fetch(`/api/production/operators${base}`).then((r) => r.json()),
-      fetch(`/api/production/time-window-operators${base}`).then((r) =>
-        r.json()
-      ),
-    ]).then(
-      ([hourly, summary, shift, operators, timeWindow]) => {
-        setHourlyData(hourly);
-        setSummaryData(summary);
-        setShiftData(shift);
-        setOperatorData(operators);
-        setTimeWindowData(timeWindow);
-      }
-    );
-  }, [buildQuery]);
-
+  // Re-fetch when filters change
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    refresh();
+  }, [filterState.date, filterState.turno, filterState.circuito, refresh]);
 
-  const infoText = summaryData
-    ? `${summaryData.totalMissions?.toLocaleString("es-AR")} misiones · ${summaryData.grandTotal?.toLocaleString("es-AR")} unidades`
-    : "Cargando...";
+  const baseQuery = buildQuery();
+
+  // Header info from General tab
+  const infoText = `${filters ? filters.dates.length : 0} días · ${filters ? filters.circuits.length : 0} circuitos`;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -88,7 +62,7 @@ export default function Home() {
             <span className="text-xs text-muted-foreground hidden md:inline">
               {infoText}
             </span>
-            <HeaderActions onRefresh={fetchData} />
+            <HeaderActions onRefresh={refresh} />
           </div>
         </div>
       </header>
@@ -107,22 +81,34 @@ export default function Home() {
               <BarChart3 className="h-3.5 w-3.5" />
               General
             </TabsTrigger>
+            <TabsTrigger value="std" className="gap-1.5">
+              <Wrench className="h-3.5 w-3.5" />
+              Preparación STD
+            </TabsTrigger>
+            <TabsTrigger value="xd" className="gap-1.5">
+              <Zap className="h-3.5 w-3.5" />
+              Preparación XD
+            </TabsTrigger>
             <TabsTrigger value="franjas" className="gap-1.5">
               <Clock className="h-3.5 w-3.5" />
-              Franjas 10-14 / 18-22
+              Franjas
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="general" className="space-y-6 mt-6">
-            <SummaryCards data={summaryData} />
-            <HourlyChart data={hourlyData} />
-            <ByShiftChart data={shiftData} />
-            <SummaryBreakdown data={summaryData} />
-            <OperatorsTable data={operatorData} filtersQuery={buildQuery()} />
+          <TabsContent value="general" className="mt-6">
+            <DashboardTab key={`gen-${refreshKey}`} baseQuery={baseQuery} />
+          </TabsContent>
+
+          <TabsContent value="std" className="mt-6">
+            <DashboardTab key={`std-${refreshKey}`} baseQuery={baseQuery} funcionFilter="P" />
+          </TabsContent>
+
+          <TabsContent value="xd" className="mt-6">
+            <DashboardTab key={`xd-${refreshKey}`} baseQuery={baseQuery} funcionFilter="X" />
           </TabsContent>
 
           <TabsContent value="franjas" className="space-y-6 mt-6">
-            <TimeWindowTable data={timeWindowData} />
+            <TimeWindowTableData baseQuery={baseQuery} refreshKey={refreshKey} />
           </TabsContent>
         </Tabs>
       </main>
@@ -135,4 +121,24 @@ export default function Home() {
       </footer>
     </div>
   );
+}
+
+/** Wrapper for TimeWindowTable that fetches its own data */
+function TimeWindowTableData({
+  baseQuery,
+  refreshKey,
+}: {
+  baseQuery: string;
+  refreshKey: number;
+}) {
+  const [data, setData] = useState<any>(null);
+
+  useEffect(() => {
+    const base = baseQuery ? `?${baseQuery}` : "";
+    fetch(`/api/production/time-window-operators${base}`)
+      .then((r) => r.json())
+      .then(setData);
+  }, [baseQuery, refreshKey]);
+
+  return <TimeWindowTable data={data} />;
 }
