@@ -8,7 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Flame, Users, BarChart3 } from "lucide-react";
+import { Flame, Users, BarChart3, Clock } from "lucide-react";
 
 interface SummaryTabProps {
   baseQuery: string;
@@ -197,6 +197,74 @@ function HeatmapTable({
   );
 }
 
+// ── Misiones por Hora Table ───────────────────────────
+function MissionsPerHourTable({ data }: { data: { hour: number; misiones: number }[] }) {
+  const maxM = useMemo(() => Math.max(...data.map((d) => d.misiones), 0), [data]);
+  const totalM = useMemo(() => data.reduce((s, d) => s + d.misiones, 0), [data]);
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Clock className="h-4 w-4" />
+          Misiones por Hora
+        </CardTitle>
+        <CardDescription>
+          Cantidad de misiones activas en cada hora del día
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="p-0 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b">
+              <th className="text-xs font-semibold text-center p-2 min-w-[70px]">Hora</th>
+              <th className="text-xs font-semibold text-center p-2 min-w-[90px]">Misiones</th>
+              <th className="text-xs font-semibold text-center p-2 min-w-[120px]">Distribución</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.filter((d) => d.misiones > 0).map((row) => {
+              const pct = totalM > 0 ? (row.misiones / totalM) * 100 : 0;
+              return (
+                <tr key={row.hour} className="border-b hover:bg-muted/50">
+                  <td className={`text-xs font-semibold text-center p-2 ${
+                    row.hour === 10 || row.hour === 14 || row.hour === 18 || row.hour === 22
+                      ? "text-amber-600"
+                      : ""
+                  }`}>
+                    {String(row.hour).padStart(2, "0")}:00
+                  </td>
+                  <td className="text-xs text-center font-medium p-2">{row.misiones}</td>
+                  <td className="p-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${heatColor(row.misiones, maxM).split(" ")[0]}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] text-muted-foreground w-10 text-right">
+                        {pct.toFixed(1)}%
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 font-bold bg-muted/30">
+              <td className="text-xs font-bold text-center p-2">TOTAL</td>
+              <td className="text-xs font-bold text-center p-2">{totalM}</td>
+              <td />
+            </tr>
+          </tfoot>
+        </table>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Main Tab Component ─────────────────────────────────
 export function SummaryTab({ baseQuery, funcionFilter }: SummaryTabProps) {
   const [data, setData] = useState<any>(null);
@@ -240,7 +308,7 @@ export function SummaryTab({ baseQuery, funcionFilter }: SummaryTabProps) {
   if (!data) {
     return (
       <div className="space-y-6">
-        {[1, 2, 3].map((i) => (
+        {[1, 2, 3, 4].map((i) => (
           <Card key={i}>
             <CardContent className="p-4 h-[200px] flex items-center justify-center">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -269,6 +337,8 @@ export function SummaryTab({ baseQuery, funcionFilter }: SummaryTabProps) {
         data={data.collaboratorHeatmap}
         isCollaborator
       />
+
+      <MissionsPerHourTable data={data.missionsPerHour} />
     </div>
   );
 }

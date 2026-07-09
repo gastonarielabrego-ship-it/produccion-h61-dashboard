@@ -114,10 +114,27 @@ export async function GET(request: Request) {
       return row;
     });
 
+    // ── 4. Misiones por hora (total de misiones únicas por hora) ─
+    const hourMissionSet: Record<number, Set<string>> = {};
+    for (let h = 0; h <= 23; h++) hourMissionSet[h] = new Set();
+    for (const r of records) {
+      const missionKey = `${r.date}:${r.operario}`;
+      for (const hd of r.hourlyData) {
+        if (hd.quantity > 0) {
+          hourMissionSet[hd.hour].add(missionKey);
+        }
+      }
+    }
+    const missionsPerHour = Array.from({ length: 24 }, (_, h) => ({
+      hour: h,
+      misiones: hourMissionSet[h].size,
+    }));
+
     return NextResponse.json({
       dailyMetrics,
       dayHeatmap,
       collaboratorHeatmap,
+      missionsPerHour,
     });
   } catch (error) {
     console.error("Error fetching summary tables:", error);
