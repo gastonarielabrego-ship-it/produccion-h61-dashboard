@@ -8,8 +8,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Flame, Users, BarChart3 } from "lucide-react";
 
 interface SummaryTabProps {
@@ -19,7 +17,7 @@ interface SummaryTabProps {
 
 // ── Color scale for heatmap (traffic light) ────────────
 function heatColor(value: number, max: number): string {
-  if (value === 0) return "bg-transparent";
+  if (value === 0) return "";
   const ratio = max > 0 ? value / max : 0;
   if (ratio > 0.75) return "bg-red-600 text-white";
   if (ratio > 0.55) return "bg-orange-500 text-white";
@@ -31,7 +29,6 @@ function heatColor(value: number, max: number): string {
 }
 
 function formatArgDate(d: number): string {
-  // date is YYYYMMDD number
   const s = String(d);
   const day = s.slice(6, 8);
   const month = s.slice(4, 6);
@@ -63,81 +60,70 @@ function DailyMetricsTable({ data }: { data: any[] }) {
           Resumen por día: misiones, bultos y productividad
         </CardDescription>
       </CardHeader>
-      <CardContent className="p-0">
-        <ScrollArea className="w-full">
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="text-xs font-semibold sticky left-0 bg-background z-10 min-w-[70px]">Día</TableHead>
-                <TableHead className="text-xs font-semibold text-center min-w-[80px]">Misiones</TableHead>
-                <TableHead className="text-xs font-semibold text-center min-w-[100px]">Bultos Prep.</TableHead>
-                <TableHead className="text-xs font-semibold text-center min-w-[90px]">Hs. Productivas</TableHead>
-                <TableHead className="text-xs font-semibold text-center min-w-[90px]">Producción</TableHead>
-                <TableHead className="text-xs font-semibold text-center min-w-[90px]">Bultos/Hora</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.map((row) => (
-                <TableRow key={row.date} className="hover:bg-muted/50">
-                  <TableCell className="text-xs font-medium sticky left-0 bg-background z-10">
-                    {formatArgDate(row.date)}
-                  </TableCell>
-                  <TableCell className="text-xs text-center">{row.misiones}</TableCell>
-                  <TableCell className="text-xs text-center font-medium">{row.bultos.toLocaleString("es-AR")}</TableCell>
-                  <TableCell className="text-xs text-center">{row.horasProductivas}</TableCell>
-                  <TableCell className="text-xs text-center font-medium text-emerald-600">{row.produccion}</TableCell>
-                  <TableCell className="text-xs text-center font-medium text-sky-600">{row.bultosPorHora}</TableCell>
-                </TableRow>
-              ))}
-              {/* Totals row */}
-              <TableRow className="border-t-2 font-bold hover:bg-transparent bg-muted/30">
-                <TableCell className="text-xs font-bold sticky left-0 bg-muted/30 z-10">TOTAL</TableCell>
-                <TableCell className="text-xs text-center font-bold">{totals.misiones}</TableCell>
-                <TableCell className="text-xs text-center font-bold">{totals.bultos.toLocaleString("es-AR")}</TableCell>
-                <TableCell className="text-xs text-center font-bold">{totals.horasProductivas}</TableCell>
-                <TableCell className="text-xs text-center font-bold text-emerald-600">{totals.produccion}</TableCell>
-                <TableCell className="text-xs text-center font-bold text-sky-600">{totals.bultosPorHora}</TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-          <ScrollBar orientation="horizontal" />
-        </ScrollArea>
+      <CardContent className="p-0 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b">
+              <th className="text-xs font-semibold text-left p-2 sticky left-0 bg-card min-w-[70px]">Día</th>
+              <th className="text-xs font-semibold text-center p-2 min-w-[80px]">Misiones</th>
+              <th className="text-xs font-semibold text-center p-2 min-w-[100px]">Bultos Prep.</th>
+              <th className="text-xs font-semibold text-center p-2 min-w-[90px]">Hs. Productivas</th>
+              <th className="text-xs font-semibold text-center p-2 min-w-[90px]">Producción</th>
+              <th className="text-xs font-semibold text-center p-2 min-w-[90px]">Bultos/Hora</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((row) => (
+              <tr key={row.date} className="border-b hover:bg-muted/50">
+                <td className="text-xs font-medium p-2 sticky left-0 bg-card">{formatArgDate(row.date)}</td>
+                <td className="text-xs text-center p-2">{row.misiones}</td>
+                <td className="text-xs text-center font-medium p-2">{row.bultos.toLocaleString("es-AR")}</td>
+                <td className="text-xs text-center p-2">{row.horasProductivas}</td>
+                <td className="text-xs text-center font-medium text-emerald-600 p-2">{row.produccion}</td>
+                <td className="text-xs text-center font-medium text-sky-600 p-2">{row.bultosPorHora}</td>
+              </tr>
+            ))}
+            <tr className="border-t-2 font-bold bg-muted/30">
+              <td className="text-xs font-bold p-2 sticky left-0 bg-muted/30">TOTAL</td>
+              <td className="text-xs text-center font-bold p-2">{totals.misiones}</td>
+              <td className="text-xs text-center font-bold p-2">{totals.bultos.toLocaleString("es-AR")}</td>
+              <td className="text-xs text-center font-bold p-2">{totals.horasProductivas}</td>
+              <td className="text-xs text-center font-bold text-emerald-600 p-2">{totals.produccion}</td>
+              <td className="text-xs text-center font-bold text-sky-600 p-2">{totals.bultosPorHora}</td>
+            </tr>
+          </tbody>
+        </table>
       </CardContent>
     </Card>
   );
 }
 
-// ── Heatmap Component (shared for day & collaborator) ──
+// ── Heatmap Component ──────────────────────────────────
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
+
 function HeatmapTable({
   title,
   description,
   icon: Icon,
   data,
-  rowLabelKey,
-  rowLabelFn,
-  getRowId,
+  isCollaborator,
 }: {
   title: string;
   description: string;
   icon: typeof Flame;
   data: Record<string, string | number>[];
-  rowLabelKey: string;
-  rowLabelFn: (row: Record<string, string | number>) => string;
-  getRowId: (row: Record<string, string | number>) => string;
-  tall?: boolean;
+  isCollaborator?: boolean;
 }) {
-  const hours = Array.from({ length: 24 }, (_, i) => i);
-
   const maxVal = useMemo(() => {
     let m = 0;
     for (const row of data) {
-      for (const h of hours) {
+      for (const h of HOURS) {
         const v = Number(row[String(h)]) || 0;
         if (v > m) m = v;
       }
     }
     return m;
-  }, [data, hours]);
+  }, [data]);
 
   return (
     <Card>
@@ -149,62 +135,63 @@ function HeatmapTable({
         <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="p-0">
-        <ScrollArea className={tall ? "w-full max-h-[600px]" : "w-full"}>
-          <div className="min-w-[900px]">
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="text-[10px] font-semibold sticky left-0 bg-background z-10 min-w-[140px] max-w-[140px]">
-                    {rowLabelKey === "operario" ? "Colaborador / Hora" : "Día / Hora"}
-                  </TableHead>
-                  {hours.map((h) => (
-                    <TableHead
-                      key={h}
-                      className={`text-[10px] font-semibold text-center min-w-[40px] px-1 ${
-                        (h === 10 || h === 14 || h === 18 || h === 22)
-                          ? "text-amber-600 bg-amber-50"
-                          : ""
-                      }`}
-                    >
-                      {h}
-                    </TableHead>
-                  ))}
-                  <TableHead className="text-[10px] font-semibold text-center min-w-[60px] bg-background sticky right-0 z-10">
-                    Total
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.map((row) => {
-                  let rowTotal = 0;
-                  for (const h of hours) rowTotal += Number(row[String(h)]) || 0;
-                  return (
-                    <TableRow key={getRowId(row)} className="hover:bg-muted/50">
-                      <TableCell className="text-[11px] font-medium sticky left-0 bg-background z-10 max-w-[140px] truncate">
-                        {rowLabelFn(row)}
-                      </TableCell>
-                      {hours.map((h) => {
-                        const val = Number(row[String(h)]) || 0;
-                        return (
-                          <TableCell
-                            key={h}
-                            className={`text-[10px] text-center p-1 min-w-[40px] px-0.5 ${heatColor(val, maxVal)}`}
-                          >
-                            {val > 0 ? val : ""}
-                          </TableCell>
-                        );
-                      })}
-                      <TableCell className="text-[11px] text-center font-semibold sticky right-0 bg-background z-10">
-                        {rowTotal.toLocaleString("es-AR")}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-          <ScrollBar orientation="horizontal" />
-        </ScrollArea>
+        <div className={`overflow-auto ${isCollaborator ? "max-h-[600px]" : ""}`}>
+          <table className="w-full text-sm" style={{ minWidth: 900 }}>
+            <thead className="sticky top-0 z-10">
+              <tr className="border-b bg-card">
+                <th className="text-[10px] font-semibold text-left p-1 sticky left-0 bg-card z-20 min-w-[140px] max-w-[140px]">
+                  {isCollaborator ? "Colaborador / Hora" : "Día / Hora"}
+                </th>
+                {HOURS.map((h) => (
+                  <th
+                    key={h}
+                    className={`text-[10px] font-semibold text-center p-1 min-w-[38px] ${
+                      (h === 10 || h === 14 || h === 18 || h === 22)
+                        ? "text-amber-600 bg-amber-50"
+                        : ""
+                    }`}
+                  >
+                    {h}
+                  </th>
+                ))}
+                <th className="text-[10px] font-semibold text-center p-1 min-w-[55px] sticky right-0 bg-card z-20">
+                  Total
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((row) => {
+                let rowTotal = 0;
+                for (const h of HOURS) rowTotal += Number(row[String(h)]) || 0;
+                const id = isCollaborator ? String(row.operario) : String(row.date);
+                const label = isCollaborator
+                  ? `${row.nombre} (${row.operario})`
+                  : formatArgDate(Number(row.date));
+                return (
+                  <tr key={id} className="border-b hover:bg-muted/50">
+                    <td className="text-[11px] font-medium p-1 sticky left-0 bg-card z-10 max-w-[140px] truncate">
+                      {label}
+                    </td>
+                    {HOURS.map((h) => {
+                      const val = Number(row[String(h)]) || 0;
+                      return (
+                        <td
+                          key={h}
+                          className={`text-[10px] text-center p-1 min-w-[38px] ${heatColor(val, maxVal)}`}
+                        >
+                          {val > 0 ? val : ""}
+                        </td>
+                      );
+                    })}
+                    <td className="text-[11px] text-center font-semibold p-1 min-w-[55px] sticky right-0 bg-card z-10">
+                      {rowTotal.toLocaleString("es-AR")}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </CardContent>
     </Card>
   );
@@ -213,21 +200,42 @@ function HeatmapTable({
 // ── Main Tab Component ─────────────────────────────────
 export function SummaryTab({ baseQuery, funcionFilter }: SummaryTabProps) {
   const [data, setData] = useState<any>(null);
+  const [error, setError] = useState(false);
 
   const fetchData = useCallback(() => {
+    setError(false);
     const params = new URLSearchParams(baseQuery);
     if (funcionFilter) params.set("funcion", funcionFilter);
     const qs = params.toString();
     const base = qs ? `?${qs}` : "";
     fetch(`/api/production/summary-tables${base}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("API error");
+        return r.json();
+      })
       .then(setData)
-      .catch(() => setData({ dailyMetrics: [], dayHeatmap: [], collaboratorHeatmap: [] }));
+      .catch(() => setError(true));
   }, [baseQuery, funcionFilter]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="p-8 text-center">
+          <p className="text-sm text-muted-foreground">Error al cargar los datos.</p>
+          <button
+            onClick={fetchData}
+            className="mt-2 text-xs text-primary underline"
+          >
+            Reintentar
+          </button>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (!data) {
     return (
@@ -252,9 +260,6 @@ export function SummaryTab({ baseQuery, funcionFilter }: SummaryTabProps) {
         description="Horas más y menos productivas por día — cantidad de bultos"
         icon={Flame}
         data={data.dayHeatmap}
-        rowLabelKey="date"
-        rowLabelFn={(row) => formatArgDate(Number(row.date))}
-        getRowId={(row) => String(row.date)}
       />
 
       <HeatmapTable
@@ -262,10 +267,7 @@ export function SummaryTab({ baseQuery, funcionFilter }: SummaryTabProps) {
         description="Distribución horaria de cada colaborador — cantidad de bultos"
         icon={Users}
         data={data.collaboratorHeatmap}
-        rowLabelKey="operario"
-        rowLabelFn={(row) => `${row.nombre} (${row.operario})`}
-        getRowId={(row) => String(row.operario)}
-        tall
+        isCollaborator
       />
     </div>
   );
