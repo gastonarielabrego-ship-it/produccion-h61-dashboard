@@ -14,9 +14,12 @@ export async function GET(request: Request) {
 
     // Step 1: Find the true first active hour per (date, operario) across ALL their records
     const firstHourMap: Record<string, number> = {};
+    // Track operario name
+    const nameMap: Record<string, string> = {};
 
     for (const r of records) {
       const key = `${r.date}:${r.operario}`;
+      nameMap[r.operario] = r.nombre;
       let recordFirst = -1;
       for (const hd of r.hourlyData) {
         if (hd.quantity > 0) {
@@ -32,7 +35,6 @@ export async function GET(request: Request) {
     }
 
     // Step 2: Identify eligible (date, operario) for each window
-    // Only those whose FIRST active hour of the day is EXACTLY 10 or 18
     const eligible10 = new Set<string>();
     const eligible18 = new Set<string>();
 
@@ -41,7 +43,9 @@ export async function GET(request: Request) {
       if (fh === 18) eligible18.add(key);
     }
 
-    // Step 3: Count bultos ONLY from eligible people
+    // Step 3: Aggregate bultos per operario, per window, only for eligible people
+    const opBultos10: Record<string, number> = {};
+    const opBultos18: Record<string, number> = {};
     let bultos10_14 = 0;
     let bultos18_22 = 0;
 
@@ -51,7 +55,9 @@ export async function GET(request: Request) {
       if (eligible10.has(key)) {
         for (const hd of r.hourlyData) {
           if (window1Hours.has(hd.hour)) {
-            bultos10_14 += hd.quantity;
+            const q = hd.quantity;
+            bultos10_14 += q;
+            opBultos10[r.operario] = (opBultos10[r.operario] || 0) + q;
           }
         }
       }
@@ -59,7 +65,9 @@ export async function GET(request: Request) {
       if (eligible18.has(key)) {
         for (const hd of r.hourlyData) {
           if (window2Hours.has(hd.hour)) {
-            bultos18_22 += hd.quantity;
+            const q = hd.quantity;
+            bultos18_22 += q;
+            opBultos18[r.operario] = (opBultos18[r.operario] || 0) + q;
           }
         }
       }
@@ -68,6 +76,25 @@ export async function GET(request: Request) {
     const misiones10 = eligible10.size;
     const misiones18 = eligible18.size;
 
+    // Build operator lists sorted by bultos
+    const buildRanking = (bultosMap: Record<string, number>) => {
+      const list = Object.entries(bultosMap)
+        .map(([operario, total]) => ({
+          operario,
+          nombre: nameMap[operario] || operario,
+          total,
+        }))
+        .sort((a, b) => b.total - a.total);
+
+      const top = list.slice(0, 10);
+      const bottom = [...list].reverse().slice(0, 10).sort((a, b) => a.total - b.total);
+
+      return { top, bottom, total: list.length };
+    };
+
+    const ranking10 = buildRanking(opBultos10);
+    const ranking18 = buildRanking(opBultos18);
+
     return NextResponse.json({
       misiones10,
       misiones18,
@@ -75,6 +102,8 @@ export async function GET(request: Request) {
       bultos18_22,
       produccion10: misiones10 > 0 ? Math.round((bultos10_14 / misiones10) / 4) : 0,
       produccion18: misiones18 > 0 ? Math.round((bultos18_22 / misiones18) / 4) : 0,
+      ranking10,
+      ranking18,
     });
   } catch (error) {
     console.error("Error fetching franjas:", error);
