@@ -8,17 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Flame, Users, BarChart3, Clock } from "lucide-react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-} from "recharts";
+import { Flame, Users, BarChart3 } from "lucide-react";
 
 interface SummaryTabProps {
   baseQuery: string;
@@ -207,97 +197,6 @@ function HeatmapTable({
   );
 }
 
-// ── Misiones por Hora Chart ───────────────────────────
-function heatBarColor(value: number, max: number): string {
-  if (value === 0) return "#e5e7eb";
-  const ratio = max > 0 ? value / max : 0;
-  if (ratio > 0.75) return "#16a34a";
-  if (ratio > 0.55) return "#4ade80";
-  if (ratio > 0.4) return "#a3e635";
-  if (ratio > 0.25) return "#facc15";
-  if (ratio > 0.12) return "#fbbf24";
-  if (ratio > 0.05) return "#fb923c";
-  return "#ef4444";
-}
-
-function MissionTooltip({ active, payload, label }: any) {
-  if (!active || !payload || !payload.length) return null;
-  return (
-    <div className="rounded-lg border bg-background p-3 shadow-md">
-      <p className="font-semibold text-sm mb-1">{label}:00</p>
-      {payload.map((entry: any, i: number) => (
-        <p key={i} className="text-xs flex items-center gap-1.5">
-          <span
-            className="inline-block w-2 h-2 rounded-full"
-            style={{ backgroundColor: entry.color }}
-          />
-          Misiones: {entry.value}
-        </p>
-      ))}
-    </div>
-  );
-}
-
-function MissionsPerHourTable({ data }: { data: { hour: number; misiones: number }[] }) {
-  const maxM = useMemo(() => Math.max(...data.map((d) => d.misiones), 0), [data]);
-  const totalM = useMemo(() => data.reduce((s, d) => s + d.misiones, 0), [data]);
-  const activeData = useMemo(
-    () =>
-      data
-        .filter((d) => d.misiones > 0)
-        .map((d) => ({
-          ...d,
-          label: `${String(d.hour).padStart(2, "0")}:00`,
-        })),
-    [data]
-  );
-
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Clock className="h-4 w-4" />
-          Misiones por Hora
-        </CardTitle>
-        <CardDescription>
-          Cantidad de misiones activas en cada hora del día — Total: {totalM}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={activeData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-              <XAxis
-                dataKey="label"
-                tick={{ fontSize: 11 }}
-                tickLine={false}
-                axisLine={false}
-                interval={0}
-                angle={-45}
-                textAnchor="end"
-                height={60}
-              />
-              <YAxis
-                tick={{ fontSize: 11 }}
-                tickLine={false}
-                axisLine={false}
-                allowDecimals={false}
-              />
-              <Tooltip content={<MissionTooltip />} />
-              <Bar dataKey="misiones" radius={[4, 4, 0, 0]} maxBarSize={40}>
-                {activeData.map((entry, index) => (
-                  <Cell key={index} fill={heatBarColor(entry.misiones, maxM)} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 // ── Main Tab Component ─────────────────────────────────
 export function SummaryTab({ baseQuery, funcionFilter }: SummaryTabProps) {
   const [data, setData] = useState<any>(null);
@@ -341,7 +240,7 @@ export function SummaryTab({ baseQuery, funcionFilter }: SummaryTabProps) {
   if (!data) {
     return (
       <div className="space-y-6">
-        {[1, 2, 3, 4].map((i) => (
+        {[1, 2, 3].map((i) => (
           <Card key={i}>
             <CardContent className="p-4 h-[200px] flex items-center justify-center">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -371,7 +270,6 @@ export function SummaryTab({ baseQuery, funcionFilter }: SummaryTabProps) {
         isCollaborator
       />
 
-      <MissionsPerHourTable data={data.missionsPerHour} />
     </div>
   );
 }
