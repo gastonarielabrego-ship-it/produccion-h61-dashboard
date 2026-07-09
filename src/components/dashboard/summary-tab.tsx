@@ -14,18 +14,20 @@ import { Flame, Users, BarChart3 } from "lucide-react";
 
 interface SummaryTabProps {
   baseQuery: string;
+  funcionFilter?: string;
 }
 
-// ── Color scale for heatmap ────────────────────────────
+// ── Color scale for heatmap (traffic light) ────────────
 function heatColor(value: number, max: number): string {
   if (value === 0) return "bg-transparent";
   const ratio = max > 0 ? value / max : 0;
-  if (ratio > 0.8) return "bg-emerald-600 text-white";
-  if (ratio > 0.6) return "bg-emerald-500 text-white";
-  if (ratio > 0.4) return "bg-emerald-400 text-white";
-  if (ratio > 0.2) return "bg-emerald-300 text-emerald-900";
-  if (ratio > 0.1) return "bg-emerald-200 text-emerald-900";
-  return "bg-emerald-100 text-emerald-800";
+  if (ratio > 0.75) return "bg-red-600 text-white";
+  if (ratio > 0.55) return "bg-orange-500 text-white";
+  if (ratio > 0.4) return "bg-amber-400 text-amber-950";
+  if (ratio > 0.25) return "bg-yellow-300 text-yellow-950";
+  if (ratio > 0.12) return "bg-lime-300 text-lime-950";
+  if (ratio > 0.05) return "bg-green-300 text-green-950";
+  return "bg-green-200 text-green-900";
 }
 
 function formatArgDate(d: number): string {
@@ -122,6 +124,7 @@ function HeatmapTable({
   rowLabelKey: string;
   rowLabelFn: (row: Record<string, string | number>) => string;
   getRowId: (row: Record<string, string | number>) => string;
+  tall?: boolean;
 }) {
   const hours = Array.from({ length: 24 }, (_, i) => i);
 
@@ -146,7 +149,7 @@ function HeatmapTable({
         <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="p-0">
-        <ScrollArea className="w-full">
+        <ScrollArea className={tall ? "w-full max-h-[600px]" : "w-full"}>
           <div className="min-w-[900px]">
             <Table>
               <TableHeader>
@@ -208,15 +211,18 @@ function HeatmapTable({
 }
 
 // ── Main Tab Component ─────────────────────────────────
-export function SummaryTab({ baseQuery }: SummaryTabProps) {
+export function SummaryTab({ baseQuery, funcionFilter }: SummaryTabProps) {
   const [data, setData] = useState<any>(null);
 
   const fetchData = useCallback(() => {
-    const base = baseQuery ? `?${baseQuery}` : "";
+    const params = new URLSearchParams(baseQuery);
+    if (funcionFilter) params.set("funcion", funcionFilter);
+    const qs = params.toString();
+    const base = qs ? `?${qs}` : "";
     fetch(`/api/production/summary-tables${base}`)
       .then((r) => r.json())
       .then(setData);
-  }, [baseQuery]);
+  }, [baseQuery, funcionFilter]);
 
   useEffect(() => {
     fetchData();
@@ -252,12 +258,13 @@ export function SummaryTab({ baseQuery }: SummaryTabProps) {
 
       <HeatmapTable
         title="Mapa de Calor por Colaborador"
-        description="Distribución horaria de cada colaborador — cantidad de bultos (top 30)"
+        description="Distribución horaria de cada colaborador — cantidad de bultos"
         icon={Users}
         data={data.collaboratorHeatmap}
         rowLabelKey="operario"
         rowLabelFn={(row) => `${row.nombre} (${row.operario})`}
         getRowId={(row) => String(row.operario)}
+        tall
       />
     </div>
   );

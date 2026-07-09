@@ -80,7 +80,7 @@ export async function GET(request: Request) {
       return row;
     });
 
-    // ── 3. Collaborator / Hour heatmap (top 30 by total) ─
+    // ── 3. Collaborator / Hour heatmap (all, sorted by total) ─
     const opTotalMap: Record<string, number> = {};
     const opNameMap: Record<string, string> = {};
     for (const r of records) {
@@ -88,9 +88,8 @@ export async function GET(request: Request) {
       opNameMap[r.operario] = r.nombre;
     }
 
-    const topOps = Object.entries(opTotalMap)
+    const sortedOps = Object.entries(opTotalMap)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 30)
       .map(([op]) => op);
 
     const opHourMap: Record<string, number> = {};
@@ -103,7 +102,7 @@ export async function GET(request: Request) {
       }
     }
 
-    const collaboratorHeatmap = topOps.map((op) => {
+    const collaboratorHeatmap = sortedOps.map((op) => {
       const row: Record<string, string | number> = {
         operario: op,
         nombre: opNameMap[op],

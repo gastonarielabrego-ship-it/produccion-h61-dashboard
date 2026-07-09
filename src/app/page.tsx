@@ -129,8 +129,21 @@ export default function Home() {
             </div>
           </TabsContent>
 
-          <TabsContent value="resumen" className="mt-6">
-            <SummaryTab key={`res-${refreshKey}`} baseQuery={baseQuery} />
+          <TabsContent value="resumen" className="space-y-8 mt-6">
+            <div>
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                <Wrench className="h-3.5 w-3.5 inline mr-1.5" />
+                Preparación STD
+              </h3>
+              <SummaryTab key={`res-p-${refreshKey}`} baseQuery={baseQuery} funcionFilter="P" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                <Zap className="h-3.5 w-3.5 inline mr-1.5" />
+                Preparación XD
+              </h3>
+              <SummaryTab key={`res-x-${refreshKey}`} baseQuery={baseQuery} funcionFilter="X" />
+            </div>
           </TabsContent>
         </Tabs>
       </main>
