@@ -6,7 +6,7 @@ import { DashboardTab } from "@/components/dashboard/dashboard-tab";
 import { TimeWindowTable } from "@/components/dashboard/time-window-table";
 import { HeaderActions } from "@/components/dashboard/header-actions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BarChart3, Clock, Wrench, Zap, Table2 } from "lucide-react";
+import { BarChart3, Clock, Table2 } from "lucide-react";
 import { SummaryTab } from "@/components/dashboard/summary-tab";
 
 export default function Home() {
@@ -15,25 +15,23 @@ export default function Home() {
 
   const [activeTab, setActiveTab] = useState("general");
 
-  // Re-fetch data when global filters change (date, turno, circuito)
   const [refreshKey, setRefreshKey] = useState(0);
   const refreshData = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   // Full refresh after upload: reload filters + reset selections + refetch data
   const refresh = useCallback(() => {
     reloadFilters();
-    setFilterState({ date: "", turno: "", circuito: "" });
+    setFilterState({ dateFrom: "", dateTo: "", turno: "", circuito: "", funcion: "" });
     setRefreshKey((k) => k + 1);
   }, [reloadFilters]);
 
-  // Re-fetch data when filters change (don't reload filter options themselves)
+  // Re-fetch data when filters change
   useEffect(() => {
     refreshData();
-  }, [filterState.date, filterState.turno, filterState.circuito, refreshData]);
+  }, [filterState.dateFrom, filterState.dateTo, filterState.turno, filterState.circuito, filterState.funcion, refreshData]);
 
   const baseQuery = buildQuery();
 
-  // Header info from General tab
   const infoText = `${filters ? filters.dates.length : 0} días · ${filters ? filters.circuits.length : 0} circuitos`;
 
   return (
@@ -89,14 +87,6 @@ export default function Home() {
               <BarChart3 className="h-3.5 w-3.5" />
               General
             </TabsTrigger>
-            <TabsTrigger value="std" className="gap-1.5">
-              <Wrench className="h-3.5 w-3.5" />
-              Preparación STD
-            </TabsTrigger>
-            <TabsTrigger value="xd" className="gap-1.5">
-              <Zap className="h-3.5 w-3.5" />
-              Preparación XD
-            </TabsTrigger>
             <TabsTrigger value="franjas" className="gap-1.5">
               <Clock className="h-3.5 w-3.5" />
               Franjas
@@ -111,46 +101,12 @@ export default function Home() {
             <DashboardTab key={`gen-${refreshKey}`} baseQuery={baseQuery} />
           </TabsContent>
 
-          <TabsContent value="std" className="mt-6">
-            <DashboardTab key={`std-${refreshKey}`} baseQuery={baseQuery} funcionFilter="P" />
+          <TabsContent value="franjas" className="mt-6">
+            <TimeWindowTableData baseQuery={baseQuery} refreshKey={refreshKey} />
           </TabsContent>
 
-          <TabsContent value="xd" className="mt-6">
-            <DashboardTab key={`xd-${refreshKey}`} baseQuery={baseQuery} funcionFilter="X" />
-          </TabsContent>
-
-          <TabsContent value="franjas" className="space-y-6 mt-6">
-            <div>
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                <Wrench className="h-3.5 w-3.5 inline mr-1.5" />
-                Preparación STD
-              </h3>
-              <TimeWindowTableData baseQuery={baseQuery} funcionFilter="P" refreshKey={refreshKey} />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                <Zap className="h-3.5 w-3.5 inline mr-1.5" />
-                Preparación XD
-              </h3>
-              <TimeWindowTableData baseQuery={baseQuery} funcionFilter="X" refreshKey={refreshKey} />
-            </div>
-          </TabsContent>
-
-          <TabsContent value="resumen" className="space-y-8 mt-6">
-            <div>
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                <Wrench className="h-3.5 w-3.5 inline mr-1.5" />
-                Preparación STD
-              </h3>
-              <SummaryTab key={`res-p-${refreshKey}`} baseQuery={baseQuery} funcionFilter="P" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                <Zap className="h-3.5 w-3.5 inline mr-1.5" />
-                Preparación XD
-              </h3>
-              <SummaryTab key={`res-x-${refreshKey}`} baseQuery={baseQuery} funcionFilter="X" />
-            </div>
+          <TabsContent value="resumen" className="mt-6">
+            <SummaryTab key={`res-${refreshKey}`} baseQuery={baseQuery} />
           </TabsContent>
         </Tabs>
       </main>
@@ -168,24 +124,19 @@ export default function Home() {
 /** Wrapper for TimeWindowTable that fetches its own data */
 function TimeWindowTableData({
   baseQuery,
-  funcionFilter,
   refreshKey,
 }: {
   baseQuery: string;
-  funcionFilter?: string;
   refreshKey: number;
 }) {
   const [data, setData] = useState<any>(null);
 
   useEffect(() => {
-    const params = new URLSearchParams(baseQuery);
-    if (funcionFilter) params.set("funcion", funcionFilter);
-    const qs = params.toString();
-    const base = qs ? `?${qs}` : "";
+    const base = baseQuery ? `?${baseQuery}` : "";
     fetch(`/api/production/time-window-operators${base}`)
       .then((r) => r.json())
       .then(setData);
-  }, [baseQuery, funcionFilter, refreshKey]);
+  }, [baseQuery, refreshKey]);
 
   return <TimeWindowTable data={data} filtersQuery={baseQuery} />;
 }

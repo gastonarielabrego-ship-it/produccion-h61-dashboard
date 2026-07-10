@@ -23,6 +23,8 @@ export interface ProductionRecord {
 
 export type FilterOptions = {
   date?: string;
+  dateFrom?: string;
+  dateTo?: string;
   turno?: string;
   circuito?: string;
   funcion?: string;
@@ -83,6 +85,15 @@ function buildWhere(filters: FilterOptions): { sql: string; params: Record<strin
   if (filters.date) {
     conditions.push("fecha = $date");
     params.date = Number(filters.date);
+  } else {
+    if (filters.dateFrom) {
+      conditions.push("fecha >= $dateFrom");
+      params.dateFrom = Number(filters.dateFrom);
+    }
+    if (filters.dateTo) {
+      conditions.push("fecha <= $dateTo");
+      params.dateTo = Number(filters.dateTo);
+    }
   }
   if (filters.turno) {
     conditions.push("turno = $turno");
@@ -119,10 +130,14 @@ export function parseFilters(request: Request): FilterOptions {
   const url = new URL(request.url);
   const filters: FilterOptions = {};
   const date = url.searchParams.get("date");
+  const dateFrom = url.searchParams.get("dateFrom");
+  const dateTo = url.searchParams.get("dateTo");
   const turno = url.searchParams.get("turno");
   const circuito = url.searchParams.get("circuito");
   const funcion = url.searchParams.get("funcion");
   if (date) filters.date = date;
+  if (dateFrom) filters.dateFrom = dateFrom;
+  if (dateTo) filters.dateTo = dateTo;
   if (turno) filters.turno = turno;
   if (circuito) filters.circuito = circuito;
   if (funcion) filters.funcion = funcion;
@@ -137,6 +152,8 @@ export function applyFilters(
 ): ProductionRecord[] {
   return records.filter((r) => {
     if (filters.date && r.date !== Number(filters.date)) return false;
+    if (filters.dateFrom && r.date < Number(filters.dateFrom)) return false;
+    if (filters.dateTo && r.date > Number(filters.dateTo)) return false;
     if (filters.turno && r.turno !== filters.turno) return false;
     if (filters.circuito && r.circuito !== filters.circuito) return false;
     if (filters.funcion && r.funcion !== filters.funcion) return false;

@@ -9,28 +9,18 @@ import { SummaryBreakdown } from "@/components/dashboard/summary-breakdown";
 import { OperatorsTable } from "@/components/dashboard/operators-table";
 
 interface DashboardTabProps {
-  /** Optional funcion code to filter (e.g. "P", "X"). Empty = all. */
-  funcionFilter?: string;
-  /** Additional query params from the global filter bar (date, turno, circuito) */
   baseQuery: string;
 }
 
-export function DashboardTab({ funcionFilter, baseQuery }: DashboardTabProps) {
+export function DashboardTab({ baseQuery }: DashboardTabProps) {
   const [hourlyData, setHourlyData] = useState<any>(null);
   const [summaryData, setSummaryData] = useState<any>(null);
   const [shiftData, setShiftData] = useState<any>(null);
   const [operatorData, setOperatorData] = useState<any>(null);
   const [missionsHourlyData, setMissionsHourlyData] = useState<any>(null);
 
-  const buildFullQuery = useCallback(() => {
-    const params = new URLSearchParams(baseQuery);
-    if (funcionFilter) params.set("funcion", funcionFilter);
-    return params.toString();
-  }, [baseQuery, funcionFilter]);
-
   const fetchData = useCallback(() => {
-    const q = buildFullQuery();
-    const base = q ? `?${q}` : "";
+    const base = baseQuery ? `?${baseQuery}` : "";
 
     Promise.all([
       fetch(`/api/production/hourly${base}`).then((r) => r.json()),
@@ -45,7 +35,7 @@ export function DashboardTab({ funcionFilter, baseQuery }: DashboardTabProps) {
       setOperatorData(operators);
       setMissionsHourlyData(missionsHourly);
     });
-  }, [buildFullQuery]);
+  }, [baseQuery]);
 
   useEffect(() => {
     fetchData();
@@ -58,7 +48,7 @@ export function DashboardTab({ funcionFilter, baseQuery }: DashboardTabProps) {
       <MissionsHourlyChart data={missionsHourlyData} />
       <ByShiftChart data={shiftData} />
       <SummaryBreakdown data={summaryData} />
-      <OperatorsTable data={operatorData} filtersQuery={buildFullQuery()} />
+      <OperatorsTable data={operatorData} filtersQuery={baseQuery} />
     </div>
   );
 }

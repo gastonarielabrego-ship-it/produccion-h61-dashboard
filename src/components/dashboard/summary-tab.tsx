@@ -12,7 +12,6 @@ import { Flame, Users, BarChart3 } from "lucide-react";
 
 interface SummaryTabProps {
   baseQuery: string;
-  funcionFilter?: string;
 }
 
 // ── Color scale for heatmap (traffic light) ────────────
@@ -198,16 +197,13 @@ function HeatmapTable({
 }
 
 // ── Main Tab Component ─────────────────────────────────
-export function SummaryTab({ baseQuery, funcionFilter }: SummaryTabProps) {
+export function SummaryTab({ baseQuery }: SummaryTabProps) {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState(false);
 
   const fetchData = useCallback(() => {
     setError(false);
-    const params = new URLSearchParams(baseQuery);
-    if (funcionFilter) params.set("funcion", funcionFilter);
-    const qs = params.toString();
-    const base = qs ? `?${qs}` : "";
+    const base = baseQuery ? `?${baseQuery}` : "";
     fetch(`/api/production/summary-tables${base}`)
       .then((r) => {
         if (!r.ok) throw new Error("API error");
@@ -215,7 +211,7 @@ export function SummaryTab({ baseQuery, funcionFilter }: SummaryTabProps) {
       })
       .then(setData)
       .catch(() => setError(true));
-  }, [baseQuery, funcionFilter]);
+  }, [baseQuery]);
 
   useEffect(() => {
     fetchData();

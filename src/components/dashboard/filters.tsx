@@ -19,17 +19,21 @@ interface Filters {
 }
 
 interface FilterState {
-  date: string;
+  dateFrom: string;
+  dateTo: string;
   turno: string;
   circuito: string;
+  funcion: string;
 }
 
 export function useProductionFilters() {
   const [filters, setFilters] = useState<Filters | null>(null);
   const [filterState, setFilterState] = useState<FilterState>({
-    date: "",
+    dateFrom: "",
+    dateTo: "",
     turno: "",
     circuito: "",
+    funcion: "",
   });
   const [filterVersion, setFilterVersion] = useState(0);
 
@@ -43,9 +47,11 @@ export function useProductionFilters() {
 
   const buildQuery = useCallback(() => {
     const params = new URLSearchParams();
-    if (filterState.date) params.set("date", filterState.date);
+    if (filterState.dateFrom) params.set("dateFrom", filterState.dateFrom);
+    if (filterState.dateTo) params.set("dateTo", filterState.dateTo);
     if (filterState.turno) params.set("turno", filterState.turno);
     if (filterState.circuito) params.set("circuito", filterState.circuito);
+    if (filterState.funcion) params.set("funcion", filterState.funcion);
     return params.toString();
   }, [filterState]);
 
@@ -79,6 +85,13 @@ export function FilterBar({
     return `${s.slice(6, 8)}/${s.slice(4, 6)}/${s.slice(0, 4)}`;
   };
 
+  const funcOptions = filters.functions.length > 0
+    ? filters.functions
+    : [
+        { value: "P", label: "Preparación STD" },
+        { value: "X", label: "Preparación XD" },
+      ];
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -88,26 +101,68 @@ export function FilterBar({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {/* Desde */}
           <Select
-            value={filterState.date}
+            value={filterState.dateFrom}
             onValueChange={(v) =>
-              setFilterState((prev) => ({ ...prev, date: v === "__all__" ? "" : v }))
+              setFilterState((prev) => ({ ...prev, dateFrom: v === "__all__" ? "" : v }))
             }
           >
             <SelectTrigger>
-              <SelectValue placeholder="Todas las fechas" />
+              <SelectValue placeholder="Desde" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__all__">Todas las fechas</SelectItem>
+              <SelectItem value="__all__">Desde (todas)</SelectItem>
               {filters.dates.map((d) => (
-                <SelectItem key={d} value={String(d)}>
+                <SelectItem key={`from-${d}`} value={String(d)}>
                   {formatDate(d)}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
 
+          {/* Hasta */}
+          <Select
+            value={filterState.dateTo}
+            onValueChange={(v) =>
+              setFilterState((prev) => ({ ...prev, dateTo: v === "__all__" ? "" : v }))
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Hasta" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Hasta (todas)</SelectItem>
+              {filters.dates.map((d) => (
+                <SelectItem key={`to-${d}`} value={String(d)}>
+                  {formatDate(d)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Función */}
+          <Select
+            value={filterState.funcion}
+            onValueChange={(v) =>
+              setFilterState((prev) => ({ ...prev, funcion: v === "__all__" ? "" : v }))
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Todas las funciones" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Todas las funciones</SelectItem>
+              {funcOptions.map((f) => (
+                <SelectItem key={f.value} value={f.value}>
+                  {f.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Turno */}
           <Select
             value={filterState.turno}
             onValueChange={(v) =>
@@ -127,6 +182,7 @@ export function FilterBar({
             </SelectContent>
           </Select>
 
+          {/* Circuito */}
           <Select
             value={filterState.circuito}
             onValueChange={(v) =>
