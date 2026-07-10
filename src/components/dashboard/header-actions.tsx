@@ -32,42 +32,28 @@ export function HeaderActions({ onRefresh }: HeaderActionsProps) {
   const handleUpload = useCallback(
     async (file: File) => {
       setIsUploading(true);
-      setUploadStatus("Leyendo archivo...");
+      setUploadStatus("Enviando archivo...");
       try {
-        // Convert file to base64
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const result = reader.result as string;
-            resolve(result.split(",")[1]);
-          };
-          reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
-          reader.readAsDataURL(file);
-        });
-
-        setUploadStatus("Enviando al servidor...");
+        const formData = new FormData();
+        formData.append("file", file);
 
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 120000);
 
         const response = await fetch("/api/admin/upload", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ data: base64, name: file.name }),
+          body: formData,
           signal: controller.signal,
         });
 
         clearTimeout(timeout);
 
-        setUploadStatus("Procesando respuesta...");
-
         const text = await response.text();
-
         let data: any;
         try {
           data = JSON.parse(text);
         } catch {
-          showToast("error", "Error del servidor (respuesta inválida). Intentá de nuevo.");
+          showToast("error", "Error del servidor (respuesta inválida).");
           return;
         }
 
@@ -79,7 +65,7 @@ export function HeaderActions({ onRefresh }: HeaderActionsProps) {
         }
       } catch (err: any) {
         if (err.name === "AbortError") {
-          showToast("error", "Tiempo agotado. Intentá con un archivo más chico.");
+          showToast("error", "Tiempo agotado.");
         } else {
           showToast("error", `Error: ${err.message || "conexión fallida"}`);
         }

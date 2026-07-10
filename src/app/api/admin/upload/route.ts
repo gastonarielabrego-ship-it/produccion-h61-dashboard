@@ -2,7 +2,8 @@ import { getClient } from "@/lib/turso";
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 
-// GET: debug — check Turso connection and row count
+export const maxDuration = 60;
+
 export async function GET() {
   try {
     const client = getClient();
@@ -14,19 +15,20 @@ export async function GET() {
   }
 }
 
-export const maxDuration = 60; // Vercel: up to 60s
-
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { data: base64, name } = body;
-
-    if (!base64 || !name) {
-      return NextResponse.json({ error: "Archivo no proporcionado" }, { status: 400 });
+    // Read file from FormData
+    const formData = await request.formData();
+    const file = formData.get("file") as File | null;
+    if (!file) {
+      return NextResponse.json({ error: "No se recibió el archivo" }, { status: 400 });
     }
 
-    // Decode & parse xlsx
-    const raw = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    // Read file as ArrayBuffer
+    const buffer = await file.arrayBuffer();
+    const raw = new Uint8Array(buffer);
+
+    // Parse xlsx
     const wb = XLSX.read(raw, { type: "array" });
     const ws = wb.Sheets[wb.SheetNames[0]];
     const rows: (string | number | null | undefined)[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
@@ -64,12 +66,12 @@ export async function POST(request: Request) {
 
     const dataRows = rows.slice(1);
 
-    // Collect unique dates for delete
+    // Collect unique dates
     const fileDates = [...new Set(dataRows.map(r => getVal(r, colIdx["FECHA"])))].filter(Boolean);
 
     const client = getClient();
 
-    // Delete old records for file dates
+    // Delete old records
     if (fileDates.length > 0) {
       const ph = fileDates.map((_, i) => `$d${i}`).join(",");
       const dp: Record<string, number> = {};
@@ -80,56 +82,42 @@ export async function POST(request: Request) {
       });
     }
 
-    // Insert using multi-row VALUES with positional ? params
-    // Build chunks of 150 rows, each chunk = 1 SQL statement
-    const CHUNK = 150;
-    const COLS = 35; // 11 base + 24 hours
-    let inserted = 0;
-
-    const insertPrefix = `INSERT INTO production_records
+    // Build INSERT statements for batch (one per row, but sent in single HTTP call)
+    const insertSql = `INSERT INTO production_records
       (funcion, funcion_desc, fecha, turno, turno_desc, operario, nombre, actividad, circuito, tiempo_mue, total,
        hora_00, hora_01, hora_02, hora_03, hora_04, hora_05, hora_06, hora_07, hora_08, hora_09,
        hora_10, hora_11, hora_12, hora_13, hora_14, hora_15, hora_16, hora_17, hora_18, hora_19,
        hora_20, hora_21, hora_22, hora_23)
-      VALUES `;
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+       ?, ?, ?, ?)`;
 
-    for (let i = 0; i < dataRows.length; i += CHUNK) {
-      const chunk = dataRows.slice(i, i + CHUNK);
-      const placeholders: string[] = [];
-      const args: (string | number)[] = [];
+    const statements: { sql: string; args: (string | number)[] }[] = dataRows.map(row => {
+      const args: (string | number)[] = [
+        getStr(row, colIdx["FUNCION"]),
+        getStr(row, colIdx["FUNCION_DESC"]),
+        getVal(row, colIdx["FECHA"]),
+        getStr(row, colIdx["TURNO"]),
+        getStr(row, colIdx["TURNO_DESC"]),
+        getStr(row, colIdx["OPERARIO"]),
+        getStr(row, colIdx["NOMBRE"]),
+        getVal(row, colIdx["ACTIVIDAD"]),
+        getStr(row, colIdx["CIRCUITO"]),
+        getVal(row, colIdx["TIEMPO_MUE"]),
+        getVal(row, colIdx["TOTAL"]),
+      ];
+      for (let h = 0; h <= 23; h++) args.push(getVal(row, hourCols[h]));
+      return { sql: insertSql, args };
+    });
 
-      for (const row of chunk) {
-        const vals = [
-          getStr(row, colIdx["FUNCION"]),
-          getStr(row, colIdx["FUNCION_DESC"]),
-          getVal(row, colIdx["FECHA"]),
-          getStr(row, colIdx["TURNO"]),
-          getStr(row, colIdx["TURNO_DESC"]),
-          getStr(row, colIdx["OPERARIO"]),
-          getStr(row, colIdx["NOMBRE"]),
-          getVal(row, colIdx["ACTIVIDAD"]),
-          getStr(row, colIdx["CIRCUITO"]),
-          getVal(row, colIdx["TIEMPO_MUE"]),
-          getVal(row, colIdx["TOTAL"]),
-        ];
-        for (let h = 0; h <= 23; h++) {
-          vals.push(getVal(row, hourCols[h]));
-        }
-        args.push(...vals);
-        placeholders.push(`(${new Array(COLS).fill("?").join(",")})`);
-      }
-
-      await client.execute({
-        sql: insertPrefix + placeholders.join(","),
-        args: args as any,
-      });
-      inserted += chunk.length;
-    }
+    // client.batch() sends ALL statements to Turso in a single HTTP request
+    // Turso executes them locally — no per-statement network round-trip
+    await client.batch(statements as any, { mode: "sequential" });
 
     return NextResponse.json({
-      message: `${inserted.toLocaleString("es-AR")} registros cargados correctamente`,
-      inserted,
-      total: dataRows.length,
+      message: `${dataRows.length.toLocaleString("es-AR")} registros cargados correctamente`,
+      inserted: dataRows.length,
     });
   } catch (error: any) {
     console.error("Upload error:", error);
