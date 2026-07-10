@@ -10,19 +10,26 @@ import { BarChart3, Clock, Wrench, Zap, Table2 } from "lucide-react";
 import { SummaryTab } from "@/components/dashboard/summary-tab";
 
 export default function Home() {
-  const { filters, filterState, setFilterState, buildQuery } =
+  const { filters, filterState, setFilterState, buildQuery, reloadFilters } =
     useProductionFilters();
 
   const [activeTab, setActiveTab] = useState("general");
 
-  // Re-fetch when global filters change (date, turno, circuito)
+  // Re-fetch data when global filters change (date, turno, circuito)
   const [refreshKey, setRefreshKey] = useState(0);
-  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
+  const refreshData = useCallback(() => setRefreshKey((k) => k + 1), []);
 
-  // Re-fetch when filters change
+  // Full refresh after upload: reload filters + reset selections + refetch data
+  const refresh = useCallback(() => {
+    reloadFilters();
+    setFilterState({ date: "", turno: "", circuito: "" });
+    setRefreshKey((k) => k + 1);
+  }, [reloadFilters]);
+
+  // Re-fetch data when filters change (don't reload filter options themselves)
   useEffect(() => {
-    refresh();
-  }, [filterState.date, filterState.turno, filterState.circuito, refresh]);
+    refreshData();
+  }, [filterState.date, filterState.turno, filterState.circuito, refreshData]);
 
   const baseQuery = buildQuery();
 

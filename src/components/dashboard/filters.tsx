@@ -31,12 +31,15 @@ export function useProductionFilters() {
     turno: "",
     circuito: "",
   });
+  const [filterVersion, setFilterVersion] = useState(0);
+
+  const reloadFilters = useCallback(() => setFilterVersion((v) => v + 1), []);
 
   useEffect(() => {
     fetch("/api/production/dates")
       .then((r) => r.json())
       .then(setFilters);
-  }, []);
+  }, [filterVersion]);
 
   const buildQuery = useCallback(() => {
     const params = new URLSearchParams();
@@ -46,7 +49,7 @@ export function useProductionFilters() {
     return params.toString();
   }, [filterState]);
 
-  return { filters, filterState, setFilterState, buildQuery };
+  return { filters, filterState, setFilterState, buildQuery, reloadFilters };
 }
 
 export function FilterBar({
