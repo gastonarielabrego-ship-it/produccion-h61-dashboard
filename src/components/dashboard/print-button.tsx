@@ -1,44 +1,69 @@
 "use client";
 
-import { useRef, useCallback, useEffect } from "react";
+import { useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Printer } from "lucide-react";
-
-let printCounter = 0;
 
 interface PrintButtonProps {
   title?: string;
 }
 
+/**
+ * Finds the closest ancestor <div> that has the shadcn Card structure
+ * (contains both a CardHeader and CardContent, or has rounded/border/card classes).
+ * Falls back to the closest element with data-slot="card" (shadcn pattern).
+ */
+function findCardEl(from: HTMLElement): HTMLElement | null {
+  let el: HTMLElement | null = from;
+  while (el && el !== document.body) {
+    // shadcn/ui Card renders with data-slot="card" in newer versions
+    if (el.getAttribute("data-slot") === "card") return el;
+    // Fallback: look for the Card by checking class pattern
+    if (
+      el.tagName === "DIV" &&
+      el.className &&
+      typeof el.className === "string" &&
+      (el.className.includes("rounded") || el.className.includes("border")) &&
+      el.querySelector("[class*='CardHeader'], [class*='card-header']") &&
+      el.querySelector("[class*='CardContent'], [class*='card-content']")
+    ) {
+      return el;
+    }
+    el = el.parentElement;
+  }
+  return null;
+}
+
 export function PrintButton({ title }: PrintButtonProps) {
-  const cardRef = useRef<HTMLDivElement>(null);
-  const targetId = useRef(`print-target-${++printCounter}`);
+  const btnRef = useRef<HTMLDivElement>(null);
 
   const handlePrint = useCallback(() => {
-    const card = cardRef.current?.parentElement;
+    const btnEl = btnRef.current;
+    if (!btnEl) return;
+
+    // Find the Card ancestor (not just the immediate parent CardHeader)
+    const card = findCardEl(btnEl);
     if (!card) return;
 
-    // Walk up to find the top-level content wrapper
-    // The DOM is: body > div.min-h-screen > main > TabsContent > ... > Card
-    // We need to mark the Card and all ancestors up to body
-    const ancestors: HTMLElement[] = [];
+    // Collect the target + all ancestors up to body
+    const path: HTMLElement[] = [];
     let el: HTMLElement | null = card;
     while (el && el !== document.body) {
-      ancestors.push(el);
+      path.push(el);
       el = el.parentElement;
     }
 
-    // Mark body
+    // Mark everything
     document.body.classList.add("is-printing");
-    // Mark the target card
     card.setAttribute("data-printing", "true");
-    // Mark all ancestors so they stay visible
-    ancestors.forEach((a) => a.setAttribute("data-print-ancestor", "true"));
+    for (let i = 0; i < path.length - 1; i++) {
+      path[i].setAttribute("data-print-ancestor", "true");
+    }
 
     const cleanup = () => {
       document.body.classList.remove("is-printing");
       card.removeAttribute("data-printing");
-      ancestors.forEach((a) => a.removeAttribute("data-print-ancestor"));
+      path.forEach((a) => a.removeAttribute("data-print-ancestor"));
       window.removeEventListener("afterprint", cleanup);
     };
     window.addEventListener("afterprint", cleanup);
@@ -46,14 +71,8 @@ export function PrintButton({ title }: PrintButtonProps) {
     window.print();
   }, []);
 
-  useEffect(() => {
-    if (cardRef.current?.parentElement) {
-      cardRef.current.parentElement.setAttribute("data-printable", targetId.current);
-    }
-  }, []);
-
   return (
-    <div ref={cardRef} className="print-hide">
+    <div ref={btnRef} className="print-hide">
       <Button
         variant="ghost"
         size="icon"
