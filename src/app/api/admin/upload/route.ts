@@ -17,18 +17,15 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    // Read file from FormData
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
     if (!file) {
       return NextResponse.json({ error: "No se recibió el archivo" }, { status: 400 });
     }
 
-    // Read file as ArrayBuffer
     const buffer = await file.arrayBuffer();
     const raw = new Uint8Array(buffer);
 
-    // Parse xlsx
     const wb = XLSX.read(raw, { type: "array" });
     const ws = wb.Sheets[wb.SheetNames[0]];
     const rows: (string | number | null | undefined)[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
@@ -82,18 +79,11 @@ export async function POST(request: Request) {
       });
     }
 
-    // Build INSERT SQL
-    const insertSql = `INSERT INTO production_records
-      (funcion, funcion_desc, fecha, turno, turno_desc, operario, nombre, actividad, circuito, tiempo_mue, total,
-       hora_00, hora_01, hora_02, hora_03, hora_04, hora_05, hora_06, hora_07, hora_08, hora_09,
-       hora_10, hora_11, hora_12, hora_13, hora_14, hora_15, hora_16, hora_17, hora_18, hora_19,
-       hora_20, hora_21, hora_22, hora_23)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-       ?, ?, ?, ?)`;
+    // Single-row INSERT template for building multi-row
+    const cols = "funcion, funcion_desc, fecha, turno, turno_desc, operario, nombre, actividad, circuito, tiempo_mue, total, hora_00, hora_01, hora_02, hora_03, hora_04, hora_05, hora_06, hora_07, hora_08, hora_09, hora_10, hora_11, hora_12, hora_13, hora_14, hora_15, hora_16, hora_17, hora_18, hora_19, hora_20, hora_21, hora_22, hora_23";
+    const placeholders = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-    const buildArgs = (row: (string | number | null | undefined)[]): (string | number)[] => {
+    const buildRowArgs = (row: (string | number | null | undefined)[]): (string | number)[] => {
       const args: (string | number)[] = [
         getStr(row, colIdx["FUNCION"]),
         getStr(row, colIdx["FUNCION_DESC"]),
@@ -111,17 +101,16 @@ export async function POST(request: Request) {
       return args;
     };
 
-    // Process in chunks of 500 rows to avoid timeouts
-    const CHUNK_SIZE = 500;
+    // Insert in chunks using multi-row VALUES
+    const CHUNK = 150;
     let totalInserted = 0;
 
-    for (let i = 0; i < dataRows.length; i += CHUNK_SIZE) {
-      const chunk = dataRows.slice(i, i + CHUNK_SIZE);
-      const statements = chunk.map(row => ({
-        sql: insertSql,
-        args: buildArgs(row),
-      }));
-      await client.batch(statements as any);
+    for (let i = 0; i < dataRows.length; i += CHUNK) {
+      const chunk = dataRows.slice(i, i + CHUNK);
+      const valueGroups = chunk.map(() => placeholders).join(", ");
+      const sql = `INSERT INTO production_records (${cols}) VALUES ${valueGroups}`;
+      const args = chunk.flatMap(buildRowArgs);
+      await client.execute({ sql, args });
       totalInserted += chunk.length;
     }
 
