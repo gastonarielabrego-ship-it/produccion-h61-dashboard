@@ -1,14 +1,12 @@
 import {
   getAllRecords,
-  parseFilters,
-  type ProductionRecord,
 } from "@/lib/turso";
 import { NextResponse } from "next/server";
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const filters = parseFilters(request);
-    const records = await getAllRecords(filters);
+    // Always fetch ALL records for filter dropdowns (no user filters applied)
+    const records = await getAllRecords();
 
     const dates = [...new Set(records.map((r) => r.date))].sort();
     const circuits = [...new Set(records.map((r) => r.circuito))].sort();
@@ -27,7 +25,14 @@ export async function GET(request: Request) {
       label,
     }));
 
-    return NextResponse.json({ dates, circuits, shifts, functions });
+    // Operators: unique (operario, nombre) sorted by nombre
+    const opMap = new Map<string, string>();
+    for (const r of records) opMap.set(r.operario, r.nombre);
+    const operators = Array.from(opMap.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    return NextResponse.json({ dates, circuits, shifts, functions, operators });
   } catch (error) {
     console.error("Error fetching filters:", error);
     return NextResponse.json(

@@ -9,13 +9,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Filter, Factory, Activity } from "lucide-react";
+import { Filter, Factory, Activity, User } from "lucide-react";
 
 interface Filters {
   dates: number[];
   circuits: string[];
   shifts: { value: string; label: string }[];
   functions: { value: string; label: string }[];
+  operators: { value: string; label: string }[];
 }
 
 interface FilterState {
@@ -24,6 +25,7 @@ interface FilterState {
   turno: string;
   circuito: string;
   funcion: string;
+  operario: string;
 }
 
 export function useProductionFilters() {
@@ -34,6 +36,7 @@ export function useProductionFilters() {
     turno: "",
     circuito: "",
     funcion: "",
+    operario: "",
   });
   const [filterVersion, setFilterVersion] = useState(0);
 
@@ -52,6 +55,7 @@ export function useProductionFilters() {
     if (filterState.turno) params.set("turno", filterState.turno);
     if (filterState.circuito) params.set("circuito", filterState.circuito);
     if (filterState.funcion) params.set("funcion", filterState.funcion);
+    if (filterState.operario) params.set("operario", filterState.operario);
     return params.toString();
   }, [filterState]);
 
@@ -101,7 +105,7 @@ export function FilterBar({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {/* Desde */}
           <Select
             value={filterState.dateFrom}
@@ -202,6 +206,32 @@ export function FilterBar({
                   <span className="flex items-center gap-2">
                     <Factory className="h-3 w-3" />
                     {c}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Colaborador */}
+          <Select
+            value={filterState.operario}
+            onValueChange={(v) =>
+              setFilterState((prev) => ({
+                ...prev,
+                operario: v === "__all__" ? "" : v,
+              }))
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Todos los colaboradores" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Todos los colaboradores</SelectItem>
+              {filters.operators.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  <span className="flex items-center gap-2">
+                    <User className="h-3 w-3" />
+                    {o.label}
                   </span>
                 </SelectItem>
               ))}

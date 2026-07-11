@@ -28,6 +28,7 @@ export type FilterOptions = {
   turno?: string;
   circuito?: string;
   funcion?: string;
+  operario?: string;
 };
 
 // ─── Singleton Client ───────────────────────────────────
@@ -107,6 +108,10 @@ function buildWhere(filters: FilterOptions): { sql: string; params: Record<strin
     conditions.push("funcion = $funcion");
     params.funcion = filters.funcion;
   }
+  if (filters.operario) {
+    conditions.push("operario = $operario");
+    params.operario = filters.operario;
+  }
 
   const sql = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
   return { sql, params };
@@ -135,12 +140,14 @@ export function parseFilters(request: Request): FilterOptions {
   const turno = url.searchParams.get("turno");
   const circuito = url.searchParams.get("circuito");
   const funcion = url.searchParams.get("funcion");
+  const operario = url.searchParams.get("operario");
   if (date) filters.date = date;
   if (dateFrom) filters.dateFrom = dateFrom;
   if (dateTo) filters.dateTo = dateTo;
   if (turno) filters.turno = turno;
   if (circuito) filters.circuito = circuito;
   if (funcion) filters.funcion = funcion;
+  if (operario) filters.operario = operario;
   return filters;
 }
 
@@ -157,6 +164,7 @@ export function applyFilters(
     if (filters.turno && r.turno !== filters.turno) return false;
     if (filters.circuito && r.circuito !== filters.circuito) return false;
     if (filters.funcion && r.funcion !== filters.funcion) return false;
+    if (filters.operario && r.operario !== filters.operario) return false;
     return true;
   });
 }

@@ -21,14 +21,14 @@ export default function Home() {
   // Full refresh after upload: reload filters + reset selections + refetch data
   const refresh = useCallback(() => {
     reloadFilters();
-    setFilterState({ dateFrom: "", dateTo: "", turno: "", circuito: "", funcion: "" });
+    setFilterState({ dateFrom: "", dateTo: "", turno: "", circuito: "", funcion: "", operario: "" });
     setRefreshKey((k) => k + 1);
   }, [reloadFilters]);
 
   // Re-fetch data when filters change
   useEffect(() => {
     refreshData();
-  }, [filterState.dateFrom, filterState.dateTo, filterState.turno, filterState.circuito, filterState.funcion, refreshData]);
+  }, [filterState.dateFrom, filterState.dateTo, filterState.turno, filterState.circuito, filterState.funcion, filterState.operario, refreshData]);
 
   const baseQuery = buildQuery();
 
