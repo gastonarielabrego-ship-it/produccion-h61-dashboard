@@ -82,7 +82,7 @@ export async function POST(request: Request) {
       });
     }
 
-    // Build INSERT statements for batch
+    // Build INSERT SQL
     const insertSql = `INSERT INTO production_records
       (funcion, funcion_desc, fecha, turno, turno_desc, operario, nombre, actividad, circuito, tiempo_mue, total,
        hora_00, hora_01, hora_02, hora_03, hora_04, hora_05, hora_06, hora_07, hora_08, hora_09,
@@ -93,7 +93,7 @@ export async function POST(request: Request) {
        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
        ?, ?, ?, ?)`;
 
-    const statements: { sql: string; args: (string | number)[] }[] = dataRows.map(row => {
+    const buildArgs = (row: (string | number | null | undefined)[]): (string | number)[] => {
       const args: (string | number)[] = [
         getStr(row, colIdx["FUNCION"]),
         getStr(row, colIdx["FUNCION_DESC"]),
@@ -108,15 +108,26 @@ export async function POST(request: Request) {
         getVal(row, colIdx["TOTAL"]),
       ];
       for (let h = 0; h <= 23; h++) args.push(getVal(row, hourCols[h]));
-      return { sql: insertSql, args };
-    });
+      return args;
+    };
 
-    // client.batch() sends ALL statements to Turso in a single HTTP request
-    await client.batch(statements as any, { mode: "sequential" });
+    // Process in chunks of 500 rows to avoid timeouts
+    const CHUNK_SIZE = 500;
+    let totalInserted = 0;
+
+    for (let i = 0; i < dataRows.length; i += CHUNK_SIZE) {
+      const chunk = dataRows.slice(i, i + CHUNK_SIZE);
+      const statements = chunk.map(row => ({
+        sql: insertSql,
+        args: buildArgs(row),
+      }));
+      await client.batch(statements as any);
+      totalInserted += chunk.length;
+    }
 
     return NextResponse.json({
-      message: `${dataRows.length.toLocaleString("es-AR")} registros cargados correctamente`,
-      inserted: dataRows.length,
+      message: `${totalInserted.toLocaleString("es-AR")} registros cargados correctamente`,
+      inserted: totalInserted,
     });
   } catch (error: any) {
     console.error("Upload error:", error);
