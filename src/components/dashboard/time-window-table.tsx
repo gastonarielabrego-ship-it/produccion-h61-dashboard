@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Target, Sun, Moon, TrendingUp, User, Clock, Sunrise } from "lucide-react";
 import { OperatorDetail } from "./operator-detail";
 import { PrintButton } from "./print-button";
+import { FranjaHourlyChart } from "./franja-hourly-chart";
 
 interface OperatorRow {
   operario: string;
@@ -35,9 +36,15 @@ interface FranjasGroup {
   operators18: OperatorRow[];
 }
 
+interface ShiftHourlyData {
+  shifts: { turno: string; label: string; total: number }[];
+  hourlyData: Record<string, string | number>[];
+}
+
 interface TimeWindowTableProps {
   data: FranjasGroup | null;
   filtersQuery: string;
+  shiftHourly: ShiftHourlyData | null;
 }
 
 function MissionTable({
@@ -147,6 +154,9 @@ function FranjaSection({
   borderColor,
   barColor,
   onSelectOperator,
+  shiftHourly,
+  hourFrom,
+  hourTo,
 }: {
   label: string;
   icon: typeof Sun;
@@ -158,6 +168,9 @@ function FranjaSection({
   borderColor: string;
   barColor: string;
   onSelectOperator: (operario: string) => void;
+  shiftHourly: ShiftHourlyData | null;
+  hourFrom: number;
+  hourTo: number;
 }) {
   const cards = [
     {
@@ -219,6 +232,14 @@ function FranjaSection({
           </Card>
         ))}
       </div>
+      <div className="px-3 pb-1">
+        <FranjaHourlyChart
+          hourlyData={shiftHourly?.hourlyData ?? null}
+          shifts={shiftHourly?.shifts ?? null}
+          hourFrom={hourFrom}
+          hourTo={hourTo}
+        />
+      </div>
       <div className="px-3 pb-3">
         <MissionTable operators={operators} barColor={barColor} onSelectOperator={onSelectOperator} />
       </div>
@@ -226,7 +247,7 @@ function FranjaSection({
   );
 }
 
-export function TimeWindowTable({ data, filtersQuery }: TimeWindowTableProps) {
+export function TimeWindowTable({ data, filtersQuery, shiftHourly }: TimeWindowTableProps) {
   const [selectedOperario, setSelectedOperario] = useState<string | null>(null);
   const [hourRange, setHourRange] = useState<{ from: number; to: number } | null>(null);
 
@@ -272,6 +293,9 @@ export function TimeWindowTable({ data, filtersQuery }: TimeWindowTableProps) {
         borderColor="border-l-rose-400"
         barColor="bg-rose-400"
         onSelectOperator={(op) => handleSelect(op, 6, 10)}
+        shiftHourly={shiftHourly}
+        hourFrom={6}
+        hourTo={10}
       />
       <FranjaSection
         label="10 - 14 hs"
@@ -284,6 +308,9 @@ export function TimeWindowTable({ data, filtersQuery }: TimeWindowTableProps) {
         borderColor="border-l-amber-400"
         barColor="bg-amber-400"
         onSelectOperator={(op) => handleSelect(op, 10, 14)}
+        shiftHourly={shiftHourly}
+        hourFrom={10}
+        hourTo={14}
       />
       <FranjaSection
         label="18 - 22 hs"
@@ -296,6 +323,9 @@ export function TimeWindowTable({ data, filtersQuery }: TimeWindowTableProps) {
         borderColor="border-l-indigo-400"
         barColor="bg-indigo-400"
         onSelectOperator={(op) => handleSelect(op, 18, 22)}
+        shiftHourly={shiftHourly}
+        hourFrom={18}
+        hourTo={22}
       />
 
       {/* Detail sheet */}

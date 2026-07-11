@@ -130,13 +130,17 @@ function TimeWindowTableData({
   refreshKey: number;
 }) {
   const [data, setData] = useState<any>(null);
+  const [shiftHourly, setShiftHourly] = useState<any>(null);
 
   useEffect(() => {
     const base = baseQuery ? `?${baseQuery}` : "";
     fetch(`/api/production/time-window-operators${base}`)
       .then((r) => r.json())
       .then(setData);
+    fetch(`/api/production/by-shift${base}`)
+      .then((r) => r.json())
+      .then(setShiftHourly);
   }, [baseQuery, refreshKey]);
 
-  return <TimeWindowTable data={data} filtersQuery={baseQuery} />;
+  return <TimeWindowTable data={data} filtersQuery={baseQuery} shiftHourly={shiftHourly} />;
 }
