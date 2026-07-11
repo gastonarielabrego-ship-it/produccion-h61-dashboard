@@ -1,5 +1,6 @@
 import {
   getAllRecords,
+  getSourceTable,
   parseFilters,
 } from "@/lib/turso";
 import { NextResponse } from "next/server";
@@ -7,7 +8,8 @@ import { NextResponse } from "next/server";
 export async function GET(request: Request) {
   try {
     const filters = parseFilters(request);
-    const records = await getAllRecords(filters);
+    const tableName = getSourceTable(request);
+    const records = await getAllRecords(filters, tableName);
 
     const window6Hours = new Set([6, 7, 8, 9]);     // 6-10 hs
     const window1Hours = new Set([10, 11, 12, 13]);  // 10-14 hs

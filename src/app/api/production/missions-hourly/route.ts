@@ -1,5 +1,6 @@
 import {
   getAllRecords,
+  getSourceTable,
   parseFilters,
 } from "@/lib/turso";
 import { NextResponse } from "next/server";
@@ -13,7 +14,8 @@ const SHIFT_LABELS: Record<string, string> = {
 export async function GET(request: Request) {
   try {
     const filters = parseFilters(request);
-    const records = await getAllRecords(filters);
+    const tableName = getSourceTable(request);
+    const records = await getAllRecords(filters, tableName);
 
     // Count unique (date, operario) per shift per hour
     const shiftHourMissions: Record<string, Record<number, Set<string>>> = {};

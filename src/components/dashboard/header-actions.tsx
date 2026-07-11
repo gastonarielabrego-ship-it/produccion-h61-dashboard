@@ -12,10 +12,11 @@ import {
 
 interface HeaderActionsProps {
   onRefresh?: () => void;
+  onRefreshClarkistas?: () => void;
 }
 
-export function HeaderActions({ onRefresh }: HeaderActionsProps) {
-  const [isUploading, setIsUploading] = useState(false);
+export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsProps) {
+  const [uploading, setUploading] = useState<"prep" | "clark" | null>(null);
   const [uploadStatus, setUploadStatus] = useState("");
   const [isDownloading, setIsDownloading] = useState(false);
   const [toast, setToast] = useState<{
@@ -23,6 +24,7 @@ export function HeaderActions({ onRefresh }: HeaderActionsProps) {
     message: string;
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const clarkInputRef = useRef<HTMLInputElement>(null);
 
   const showToast = (type: "success" | "error", message: string) => {
     setToast({ type, message });
@@ -30,9 +32,9 @@ export function HeaderActions({ onRefresh }: HeaderActionsProps) {
   };
 
   const handleUpload = useCallback(
-    async (file: File) => {
-      setIsUploading(true);
-      setUploadStatus("Enviando archivo...");
+    async (file: File, endpoint: string, label: string, refreshFn?: () => void) => {
+      setUploading(label as "prep" | "clark");
+      setUploadStatus(`Enviando ${label}...`);
       try {
         const formData = new FormData();
         formData.append("file", file);
@@ -40,7 +42,7 @@ export function HeaderActions({ onRefresh }: HeaderActionsProps) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 120000);
 
-        const response = await fetch("/api/admin/upload", {
+        const response = await fetch(endpoint, {
           method: "POST",
           body: formData,
           signal: controller.signal,
@@ -59,7 +61,7 @@ export function HeaderActions({ onRefresh }: HeaderActionsProps) {
 
         if (response.ok) {
           showToast("success", data.message);
-          setTimeout(() => onRefresh?.(), 600);
+          setTimeout(() => refreshFn?.(), 600);
         } else {
           showToast("error", data.error || "Error al cargar");
         }
@@ -70,11 +72,11 @@ export function HeaderActions({ onRefresh }: HeaderActionsProps) {
           showToast("error", `Error: ${err.message || "conexión fallida"}`);
         }
       } finally {
-        setIsUploading(false);
+        setUploading(null);
         setUploadStatus("");
       }
     },
-    [onRefresh]
+    []
   );
 
   const handleDownload = useCallback(async () => {
@@ -108,8 +110,14 @@ export function HeaderActions({ onRefresh }: HeaderActionsProps) {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) handleUpload(file);
+    if (file) handleUpload(file, "/api/admin/upload", "prep", onRefresh);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleClarkFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleUpload(file, "/api/admin/upload-clarkistas", "clark", onRefreshClarkistas);
+    if (clarkInputRef.current) clarkInputRef.current.value = "";
   };
 
   return (
@@ -121,20 +129,42 @@ export function HeaderActions({ onRefresh }: HeaderActionsProps) {
         onChange={handleFileChange}
         className="hidden"
       />
+      <input
+        ref={clarkInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        onChange={handleClarkFileChange}
+        className="hidden"
+      />
 
       <Button
         variant="outline"
         size="sm"
-        onClick={() => !isUploading && fileInputRef.current?.click()}
-        disabled={isUploading}
+        onClick={() => !uploading && fileInputRef.current?.click()}
+        disabled={!!uploading}
         className="gap-1.5 text-xs h-8"
       >
-        {isUploading ? (
+        {uploading === "prep" ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
         ) : (
           <Upload className="h-3.5 w-3.5" />
         )}
-        {isUploading ? "Cargando..." : "Cargar datos"}
+        {uploading === "prep" ? "Cargando..." : "Preparación"}
+      </Button>
+
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => !uploading && clarkInputRef.current?.click()}
+        disabled={!!uploading}
+        className="gap-1.5 text-xs h-8"
+      >
+        {uploading === "clark" ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Upload className="h-3.5 w-3.5" />
+        )}
+        {uploading === "clark" ? "Cargando..." : "Clarkistas"}
       </Button>
 
       <Button
@@ -153,14 +183,14 @@ export function HeaderActions({ onRefresh }: HeaderActionsProps) {
       </Button>
 
       {/* Upload progress bar */}
-      {isUploading && uploadStatus && (
+      {uploading && uploadStatus && (
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[100] bg-background border rounded-lg px-4 py-2.5 shadow-lg flex items-center gap-3">
           <Loader2 className="h-4 w-4 animate-spin text-emerald-600 shrink-0" />
           <span className="text-sm text-foreground">{uploadStatus}</span>
         </div>
       )}
 
-      {/* Toast - positioned lower, centered at bottom */}
+      {/* Toast */}
       {toast && (
         <div
           className={`fixed bottom-20 left-1/2 -translate-x-1/2 z-[100] max-w-md w-auto flex items-center gap-2.5 rounded-lg px-5 py-3.5 text-sm shadow-xl transition-all animate-in slide-in-from-bottom-4 fade-in duration-300 ${

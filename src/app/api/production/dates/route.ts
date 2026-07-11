@@ -1,12 +1,14 @@
 import {
   getAllRecords,
+  getSourceTable,
 } from "@/lib/turso";
 import { NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     // Always fetch ALL records for filter dropdowns (no user filters applied)
-    const records = await getAllRecords();
+    const tableName = getSourceTable(request);
+    const records = await getAllRecords(undefined, tableName);
 
     const dates = [...new Set(records.map((r) => r.date))].sort();
     const circuits = [...new Set(records.map((r) => r.circuito))].sort();

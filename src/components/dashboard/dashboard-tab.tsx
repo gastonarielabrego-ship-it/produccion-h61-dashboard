@@ -9,9 +9,10 @@ import { OperatorsTable } from "@/components/dashboard/operators-table";
 
 interface DashboardTabProps {
   baseQuery: string;
+  apiBase?: string;
 }
 
-export function DashboardTab({ baseQuery }: DashboardTabProps) {
+export function DashboardTab({ baseQuery, apiBase = "/api/production" }: DashboardTabProps) {
   const [combinedHourlyData, setCombinedHourlyData] = useState<any>(null);
   const [summaryData, setSummaryData] = useState<any>(null);
   const [shiftData, setShiftData] = useState<any>(null);
@@ -21,10 +22,10 @@ export function DashboardTab({ baseQuery }: DashboardTabProps) {
     const base = baseQuery ? `?${baseQuery}` : "";
 
     Promise.all([
-      fetch(`/api/production/hourly-combined${base}`).then((r) => r.json()),
-      fetch(`/api/production/summary${base}`).then((r) => r.json()),
-      fetch(`/api/production/by-shift${base}`).then((r) => r.json()),
-      fetch(`/api/production/operators${base}`).then((r) => r.json()),
+      fetch(`${apiBase}/hourly-combined${base}`).then((r) => r.json()),
+      fetch(`${apiBase}/summary${base}`).then((r) => r.json()),
+      fetch(`${apiBase}/by-shift${base}`).then((r) => r.json()),
+      fetch(`${apiBase}/operators${base}`).then((r) => r.json()),
     ]).then(([combinedHourly, summary, shift, operators]) => {
       setCombinedHourlyData(combinedHourly);
       setSummaryData(summary);

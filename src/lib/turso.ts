@@ -119,16 +119,21 @@ function buildWhere(filters: FilterOptions): { sql: string; params: Record<strin
 
 // ─── Public API (drop-in replacement for google-sheets.ts) ─
 
-export async function getAllRecords(filters?: FilterOptions): Promise<ProductionRecord[]> {
+export async function getAllRecords(filters?: FilterOptions, tableName = "production_records"): Promise<ProductionRecord[]> {
   const client = getClient();
   const { sql, params } = buildWhere(filters ?? {});
 
   const result = await client.execute({
-    sql: `SELECT * FROM production_records ${sql}`,
+    sql: `SELECT * FROM ${tableName} ${sql}`,
     args: params,
   });
 
   return result.rows.map(rowToRecord);
+}
+
+export function getSourceTable(request: Request): string {
+  const url = new URL(request.url);
+  return url.searchParams.get("source") === "clarkistas" ? "clarkistas_records" : "production_records";
 }
 
 export function parseFilters(request: Request): FilterOptions {

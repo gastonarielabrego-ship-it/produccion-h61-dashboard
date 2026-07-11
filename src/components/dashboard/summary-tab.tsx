@@ -13,6 +13,7 @@ import { PrintButton } from "./print-button";
 
 interface SummaryTabProps {
   baseQuery: string;
+  apiBase?: string;
 }
 
 // ── Color scale for heatmap (traffic light) ────────────
@@ -206,14 +207,14 @@ function HeatmapTable({
 }
 
 // ── Main Tab Component ─────────────────────────────────
-export function SummaryTab({ baseQuery }: SummaryTabProps) {
+export function SummaryTab({ baseQuery, apiBase = "/api/production" }: SummaryTabProps) {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState(false);
 
   const fetchData = useCallback(() => {
     setError(false);
     const base = baseQuery ? `?${baseQuery}` : "";
-    fetch(`/api/production/summary-tables${base}`)
+    fetch(`${apiBase}/summary-tables${base}`)
       .then((r) => {
         if (!r.ok) throw new Error("API error");
         return r.json();

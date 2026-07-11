@@ -28,7 +28,7 @@ interface FilterState {
   operario: string;
 }
 
-export function useProductionFilters() {
+export function useProductionFilters(apiBase = "/api/production") {
   const [filters, setFilters] = useState<Filters | null>(null);
   const [filterState, setFilterState] = useState<FilterState>({
     dateFrom: "",
@@ -43,10 +43,10 @@ export function useProductionFilters() {
   const reloadFilters = useCallback(() => setFilterVersion((v) => v + 1), []);
 
   useEffect(() => {
-    fetch("/api/production/dates")
+    fetch(`${apiBase}/dates`)
       .then((r) => r.json())
       .then(setFilters);
-  }, [filterVersion]);
+  }, [filterVersion, apiBase]);
 
   const buildQuery = useCallback(() => {
     const params = new URLSearchParams();
@@ -66,10 +66,12 @@ export function FilterBar({
   filters,
   filterState,
   setFilterState,
+  title,
 }: {
   filters: Filters | null;
   filterState: FilterState;
   setFilterState: React.Dispatch<React.SetStateAction<FilterState>>;
+  title?: string;
 }) {
   if (!filters) {
     return (
@@ -101,7 +103,7 @@ export function FilterBar({
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <Filter className="h-4 w-4" />
-          Filtros de Producción
+          Filtros{title ? ` — ${title}` : ""}
         </CardTitle>
       </CardHeader>
       <CardContent>

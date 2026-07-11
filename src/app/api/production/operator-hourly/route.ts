@@ -1,5 +1,6 @@
 import {
   getAllRecords,
+  getSourceTable,
   parseFilters,
 } from "@/lib/turso";
 import { NextResponse } from "next/server";
@@ -22,7 +23,8 @@ export async function GET(request: Request) {
     const hTo = hourTo ? parseInt(hourTo, 10) : null;
 
     const filters = parseFilters(request);
-    const records = await getAllRecords(filters);
+    const tableName = getSourceTable(request);
+    const records = await getAllRecords(filters, tableName);
 
     // Filter records for this operator
     const opRecords = records.filter((r) => r.operario === operario);

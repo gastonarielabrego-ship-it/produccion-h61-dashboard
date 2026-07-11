@@ -1,5 +1,6 @@
 import {
   getAllRecords,
+  getSourceTable,
   parseFilters,
 } from "@/lib/turso";
 import { NextResponse } from "next/server";
@@ -7,7 +8,8 @@ import { NextResponse } from "next/server";
 export async function GET(request: Request) {
   try {
     const filters = parseFilters(request);
-    const records = await getAllRecords(filters);
+    const tableName = getSourceTable(request);
+    const records = await getAllRecords(filters, tableName);
 
     // ── 1. Daily metrics ─────────────────────────────────
     const dayMap: Record<

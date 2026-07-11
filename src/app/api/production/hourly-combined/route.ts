@@ -1,5 +1,6 @@
 import {
   getAllRecords,
+  getSourceTable,
   parseFilters,
 } from "@/lib/turso";
 import { NextResponse } from "next/server";
@@ -13,7 +14,8 @@ const SHIFT_LABELS: Record<string, string> = {
 export async function GET(request: Request) {
   try {
     const filters = parseFilters(request);
-    const records = await getAllRecords(filters);
+    const tableName = getSourceTable(request);
+    const records = await getAllRecords(filters, tableName);
 
     // 1) Aggregate hourly production (bultos)
     const hourlyTotals: Record<number, number> = {};
