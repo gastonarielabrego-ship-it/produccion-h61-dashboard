@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Flame, Users, BarChart3 } from "lucide-react";
+import { PrintButton } from "./print-button";
 
 interface SummaryTabProps {
   baseQuery: string;
@@ -50,14 +51,17 @@ function DailyMetricsTable({ data }: { data: any[] }) {
 
   return (
     <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <BarChart3 className="h-4 w-4" />
-          Métricas Diarias
-        </CardTitle>
-        <CardDescription>
-          Resumen por día: misiones, bultos y productividad
-        </CardDescription>
+      <CardHeader className="flex flex-row items-start justify-between space-y-0">
+        <div>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <BarChart3 className="h-4 w-4" />
+            Métricas Diarias
+          </CardTitle>
+          <CardDescription>
+            Resumen por día: misiones, bultos y productividad
+          </CardDescription>
+        </div>
+        <PrintButton title="Métricas Diarias" />
       </CardHeader>
       <CardContent className="p-0 overflow-x-auto">
         <table className="w-full text-sm">
@@ -106,12 +110,14 @@ function HeatmapTable({
   icon: Icon,
   data,
   isCollaborator,
+  printTitle,
 }: {
   title: string;
   description: string;
   icon: typeof Flame;
   data: Record<string, string | number>[];
   isCollaborator?: boolean;
+  printTitle: string;
 }) {
   const maxVal = useMemo(() => {
     let m = 0;
@@ -126,12 +132,15 @@ function HeatmapTable({
 
   return (
     <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Icon className="h-4 w-4" />
-          {title}
-        </CardTitle>
-        <CardDescription>{description}</CardDescription>
+      <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
+        <div>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Icon className="h-4 w-4" />
+            {title}
+          </CardTitle>
+          <CardDescription>{description}</CardDescription>
+        </div>
+        <PrintButton title={printTitle} />
       </CardHeader>
       <CardContent className="p-0">
         <div className={`overflow-auto ${isCollaborator ? "max-h-[600px]" : ""}`}>
@@ -256,6 +265,7 @@ export function SummaryTab({ baseQuery }: SummaryTabProps) {
         description="Horas más y menos productivas por día — cantidad de bultos"
         icon={Flame}
         data={data.dayHeatmap}
+        printTitle="Mapa de Calor por Día"
       />
 
       <HeatmapTable
@@ -264,6 +274,7 @@ export function SummaryTab({ baseQuery }: SummaryTabProps) {
         icon={Users}
         data={data.collaboratorHeatmap}
         isCollaborator
+        printTitle="Mapa de Calor por Colaborador"
       />
 
     </div>

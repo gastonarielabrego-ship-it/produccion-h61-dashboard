@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Target, Sun, Moon, TrendingUp, User, Clock, Sunrise } from "lucide-react";
 import { OperatorDetail } from "./operator-detail";
+import { PrintButton } from "./print-button";
 
 interface OperatorRow {
   operario: string;
@@ -186,13 +187,16 @@ function FranjaSection({
   ];
 
   return (
-    <div className={`border-l-4 ${borderColor} rounded-r-lg space-y-4`}>
-      <div className="px-4 pt-3 pb-1">
-        <h4 className="text-sm font-semibold flex items-center gap-1.5">
-          <Icon className={`h-4 w-4 ${iconColor}`} />
-          Franja {label}
-        </h4>
-      </div>
+    <Card className="border-l-4">
+      <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2 p-4 pb-1">
+        <div className="pt-0">
+          <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
+            <Icon className={`h-4 w-4 ${iconColor}`} />
+            Franja {label}
+          </CardTitle>
+        </div>
+        <PrintButton title={`Franja ${label}`} />
+      </CardHeader>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 px-3 pb-2">
         {cards.map((card) => (
           <Card key={card.title} className="shadow-sm">
@@ -218,7 +222,7 @@ function FranjaSection({
       <div className="px-3 pb-3">
         <MissionTable operators={operators} barColor={barColor} onSelectOperator={onSelectOperator} />
       </div>
-    </div>
+    </Card>
   );
 }
 

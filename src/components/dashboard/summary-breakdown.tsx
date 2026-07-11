@@ -19,6 +19,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Layers } from "lucide-react";
+import { PrintButton } from "./print-button";
 
 const COLORS = [
   "#10b981", "#f59e0b", "#3b82f6", "#ef4444", "#8b5cf6",
@@ -64,14 +65,17 @@ export function SummaryBreakdown({ data }: SummaryBreakdownProps) {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Layers className="h-4 w-4" />
-          Producción por Circuito
-        </CardTitle>
-        <CardDescription>
-          Circuitos ordenados por volumen total de producción
-        </CardDescription>
+      <CardHeader className="flex flex-row items-start justify-between space-y-0">
+        <div>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Layers className="h-4 w-4" />
+            Producción por Circuito
+          </CardTitle>
+          <CardDescription>
+            Circuitos ordenados por volumen total de producción
+          </CardDescription>
+        </div>
+        <PrintButton title="Producción por Circuito" />
       </CardHeader>
       <CardContent>
         <div style={{ height: `${chartHeight}px` }}>

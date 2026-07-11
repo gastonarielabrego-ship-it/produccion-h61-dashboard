@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Trophy, TrendingDown, User, Clock } from "lucide-react";
 import { OperatorDetail } from "./operator-detail";
+import { PrintButton } from "./print-button";
 
 interface OperatorRow {
   operario: string;
@@ -132,14 +133,17 @@ export function OperatorsTable({ data, filtersQuery }: OperatorsTableProps) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Top 20 */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Trophy className="h-4 w-4" />
-              Top 20 Más Productivos
-            </CardTitle>
-            <CardDescription>
-              Operarios con mayor producción total en el período seleccionado
-            </CardDescription>
+          <CardHeader className="flex flex-row items-start justify-between space-y-0">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Trophy className="h-4 w-4" />
+                Top 20 Más Productivos
+              </CardTitle>
+              <CardDescription>
+                Operarios con mayor producción total en el período seleccionado
+              </CardDescription>
+            </div>
+            <PrintButton title="Top 20 Más Productivos" />
           </CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="h-[400px]">
@@ -161,14 +165,17 @@ export function OperatorsTable({ data, filtersQuery }: OperatorsTableProps) {
 
         {/* Bottom 20 */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <TrendingDown className="h-4 w-4" />
-              Menos Productivos
-            </CardTitle>
-            <CardDescription>
-              Operarios con menor producción total en el período seleccionado
-            </CardDescription>
+          <CardHeader className="flex flex-row items-start justify-between space-y-0">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <TrendingDown className="h-4 w-4" />
+                Menos Productivos
+              </CardTitle>
+              <CardDescription>
+                Operarios con menor producción total en el período seleccionado
+              </CardDescription>
+            </div>
+            <PrintButton title="Menos Productivos" />
           </CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="h-[400px]">

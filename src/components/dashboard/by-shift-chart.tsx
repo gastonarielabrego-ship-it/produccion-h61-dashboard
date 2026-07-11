@@ -18,6 +18,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Clock } from "lucide-react";
+import { PrintButton } from "@/components/dashboard/print-button";
 
 const SHIFT_COLORS: Record<string, string> = {
   Mañana: "#10b981",
@@ -65,14 +66,17 @@ export function ByShiftChart({ data }: ByShiftChartProps) {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Clock className="h-4 w-4" />
-          Producción por Hora y Turno
-        </CardTitle>
-        <CardDescription>
-          Perfil de producción horaria según turno (Mañana / Tarde / Noche)
-        </CardDescription>
+      <CardHeader className="flex flex-row items-start justify-between space-y-0">
+        <div>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Clock className="h-4 w-4" />
+            Producción por Hora y Turno
+          </CardTitle>
+          <CardDescription>
+            Perfil de producción horaria según turno (Mañana / Tarde / Noche)
+          </CardDescription>
+        </div>
+        <PrintButton title="Producción por Hora y Turno" />
       </CardHeader>
       <CardContent>
         <div className="h-[450px]">

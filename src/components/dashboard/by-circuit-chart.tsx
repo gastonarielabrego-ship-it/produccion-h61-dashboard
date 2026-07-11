@@ -18,6 +18,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Layers } from "lucide-react";
+import { PrintButton } from "./print-button";
 
 const CIRCUIT_COLORS = [
   "#10b981",
@@ -79,14 +80,17 @@ export function ByCircuitChart({ data }: ByCircuitChartProps) {
   const topCircuits = data.circuitTotals.slice(0, 8).map((c) => c.circuito);
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Layers className="h-4 w-4" />
-          Producción por Hora y Circuito
-        </CardTitle>
-        <CardDescription>
-          Comparación horaria entre los 8 circuitos con mayor producción
-        </CardDescription>
+      <CardHeader className="flex flex-row items-start justify-between space-y-0">
+        <div>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Layers className="h-4 w-4" />
+            Producción por Hora y Circuito
+          </CardTitle>
+          <CardDescription>
+            Comparación horaria entre los 8 circuitos con mayor producción
+          </CardDescription>
+        </div>
+        <PrintButton title="Producción por Hora y Circuito" />
       </CardHeader>
       <CardContent>
         <div className="h-[400px]">
