@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Target, Sun, Moon, TrendingUp, User, Clock } from "lucide-react";
+import { Target, Sun, Moon, TrendingUp, User, Clock, Sunrise } from "lucide-react";
 import { OperatorDetail } from "./operator-detail";
 
 interface OperatorRow {
@@ -20,12 +20,16 @@ interface OperatorRow {
 }
 
 interface FranjasGroup {
+  misiones6: number;
   misiones10: number;
   misiones18: number;
+  bultos6_10: number;
   bultos10_14: number;
   bultos18_22: number;
+  produccion6: number;
   produccion10: number;
   produccion18: number;
+  operators6: OperatorRow[];
   operators10: OperatorRow[];
   operators18: OperatorRow[];
 }
@@ -157,7 +161,7 @@ function FranjaSection({
   const cards = [
     {
       title: "Misiones",
-      description: `Personas que inician a las ${label === "10 - 14 hs" ? "10" : "18"} hs`,
+      description: `Personas que ${label === "6 - 10 hs" ? "inician antes de las 6 y se quedan hasta las 10" : label === "10 - 14 hs" ? "inician a las 10" : "inician a las 18"} hs`,
       value: misiones.toLocaleString("es-AR"),
       icon: Target,
       color: "text-emerald-600",
@@ -169,7 +173,7 @@ function FranjaSection({
       value: bultos.toLocaleString("es-AR"),
       icon: Icon,
       color: iconColor,
-      bg: iconColor === "text-amber-600" ? "bg-amber-50" : "bg-indigo-50",
+      bg: iconColor === "text-amber-600" ? "bg-amber-50" : iconColor === "text-rose-600" ? "bg-rose-50" : "bg-indigo-50",
     },
     {
       title: "Producción",
@@ -229,7 +233,7 @@ export function TimeWindowTable({ data, filtersQuery }: TimeWindowTableProps) {
   if (!data) {
     return (
       <div className="space-y-6">
-        {[1, 2].map((g) => (
+        {[1, 2, 3].map((g) => (
           <div key={g} className="border-l-4 border-l-muted rounded-r-lg p-4 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {Array.from({ length: 3 }).map((_, i) => (
@@ -253,6 +257,18 @@ export function TimeWindowTable({ data, filtersQuery }: TimeWindowTableProps) {
 
   return (
     <div className="space-y-5">
+      <FranjaSection
+        label="6 - 10 hs"
+        icon={Sunrise}
+        misiones={data.misiones6}
+        bultos={data.bultos6_10}
+        produccion={data.produccion6}
+        operators={data.operators6}
+        iconColor="text-rose-600"
+        borderColor="border-l-rose-400"
+        barColor="bg-rose-400"
+        onSelectOperator={(op) => handleSelect(op, 6, 10)}
+      />
       <FranjaSection
         label="10 - 14 hs"
         icon={Sun}
