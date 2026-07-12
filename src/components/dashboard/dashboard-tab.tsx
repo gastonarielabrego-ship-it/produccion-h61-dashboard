@@ -18,14 +18,17 @@ export function DashboardTab({ baseQuery, apiBase = "/api/production" }: Dashboa
   const [shiftData, setShiftData] = useState<any>(null);
   const [operatorData, setOperatorData] = useState<any>(null);
 
+  // Always use /api/production — source param is already in baseQuery
+  const effectiveBase = "/api/production";
+
   const fetchData = useCallback(() => {
     const base = baseQuery ? `?${baseQuery}` : "";
 
     Promise.all([
-      fetch(`${apiBase}/hourly-combined${base}`).then((r) => r.json()),
-      fetch(`${apiBase}/summary${base}`).then((r) => r.json()),
-      fetch(`${apiBase}/by-shift${base}`).then((r) => r.json()),
-      fetch(`${apiBase}/operators${base}`).then((r) => r.json()),
+      fetch(`${effectiveBase}/hourly-combined${base}`).then((r) => r.json()),
+      fetch(`${effectiveBase}/summary${base}`).then((r) => r.json()),
+      fetch(`${effectiveBase}/by-shift${base}`).then((r) => r.json()),
+      fetch(`${effectiveBase}/operators${base}`).then((r) => r.json()),
     ]).then(([combinedHourly, summary, shift, operators]) => {
       setCombinedHourlyData(combinedHourly);
       setSummaryData(summary);

@@ -10,7 +10,6 @@ import { BarChart3, Clock, Table2, Cog } from "lucide-react";
 import { SummaryTab } from "@/components/dashboard/summary-tab";
 
 const API_PRODUCTION = "/api/production";
-const API_CLARKISTAS = "/api/clarkistas";
 
 export default function Home() {
   // ── Preparación state ──
@@ -96,7 +95,7 @@ export default function Home() {
             <DashboardTab key={`gen-${refreshKey}`} baseQuery={baseQuery} apiBase={API_PRODUCTION} />
           </TabsContent>
           <TabsContent value="franjas" className="mt-6">
-            <TimeWindowWrapper key={`fw-${refreshKey}`} baseQuery={baseQuery} apiBase={API_PRODUCTION} />
+            <TimeWindowWrapper key={`fw-${refreshKey}`} baseQuery={baseQuery} refreshKey={refreshKey} />
           </TabsContent>
           <TabsContent value="resumen" className="mt-6">
             <SummaryTab key={`res-${refreshKey}`} baseQuery={baseQuery} apiBase={API_PRODUCTION} />
@@ -119,16 +118,16 @@ export default function Home() {
   );
 }
 
-/** Reusable time-window wrapper that fetches from configurable API */
-function TimeWindowWrapper({ baseQuery, apiBase, refreshKey }: { baseQuery: string; apiBase: string; refreshKey: number }) {
+/** Reusable time-window wrapper — always uses /api/production, source is in baseQuery */
+function TimeWindowWrapper({ baseQuery, refreshKey }: { baseQuery: string; refreshKey: number }) {
   const [data, setData] = useState<any>(null);
   const [shiftHourly, setShiftHourly] = useState<any>(null);
 
   useEffect(() => {
     const base = baseQuery ? `?${baseQuery}` : "";
-    fetch(`${apiBase}/time-window-operators${base}`).then((r) => r.json()).then(setData);
-    fetch(`${apiBase}/by-shift${base}`).then((r) => r.json()).then(setShiftHourly);
-  }, [baseQuery, refreshKey, apiBase]);
+    fetch(`/api/production/time-window-operators${base}`).then((r) => r.json()).then(setData);
+    fetch(`/api/production/by-shift${base}`).then((r) => r.json()).then(setShiftHourly);
+  }, [baseQuery, refreshKey]);
 
   return <TimeWindowTable data={data} filtersQuery={baseQuery} shiftHourly={shiftHourly} />;
 }
@@ -141,7 +140,7 @@ function ClarkistasDashboard({ refreshKey }: { refreshKey: number }) {
     setFilterState,
     buildQuery,
     reloadFilters,
-  } = useProductionFilters(API_CLARKISTAS);
+  } = useProductionFilters("/api/clarkistas");
 
   const [cRefreshKey, setCRefreshKey] = useState(0);
   const cRefreshData = useCallback(() => setCRefreshKey((k) => k + 1), []);
@@ -175,13 +174,13 @@ function ClarkistasDashboard({ refreshKey }: { refreshKey: number }) {
           </TabsTrigger>
         </TabsList>
         <TabsContent value="general" className="mt-6">
-          <DashboardTab key={`cg-${cRefreshKey}`} baseQuery={cBaseQuery} apiBase={API_CLARKISTAS} />
+          <DashboardTab key={`cg-${cRefreshKey}`} baseQuery={cBaseQuery} />
         </TabsContent>
         <TabsContent value="franjas" className="mt-6">
-          <TimeWindowWrapper key={`cfw-${cRefreshKey}`} baseQuery={cBaseQuery} apiBase={API_CLARKISTAS} />
+          <TimeWindowWrapper key={`cfw-${cRefreshKey}`} baseQuery={cBaseQuery} refreshKey={cRefreshKey} />
         </TabsContent>
         <TabsContent value="resumen" className="mt-6">
-          <SummaryTab key={`cr-${cRefreshKey}`} baseQuery={cBaseQuery} apiBase={API_CLARKISTAS} />
+          <SummaryTab key={`cr-${cRefreshKey}`} baseQuery={cBaseQuery} />
         </TabsContent>
       </Tabs>
     </div>

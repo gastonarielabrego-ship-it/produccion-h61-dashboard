@@ -42,14 +42,31 @@ export function useProductionFilters(apiBase = "/api/production") {
 
   const reloadFilters = useCallback(() => setFilterVersion((v) => v + 1), []);
 
+  // Extract source param from apiBase (e.g. "/api/clarkistas" → "clarkistas")
+  const sourceParam = apiBase === "/api/clarkistas" ? "clarkistas" : undefined;
+
   useEffect(() => {
-    fetch(`${apiBase}/dates`)
+    const url = sourceParam
+      ? `/api/production/dates?source=${sourceParam}`
+      : `${apiBase}/dates`;
+    fetch(url)
       .then((r) => r.json())
-      .then(setFilters);
-  }, [filterVersion, apiBase]);
+      .then((data) => {
+        if (data && !data.error) {
+          setFilters(data);
+        } else {
+          // Table might not exist yet — return empty filters
+          setFilters({ dates: [], circuits: [], shifts: [], functions: [], operators: [] });
+        }
+      })
+      .catch(() => {
+        setFilters({ dates: [], circuits: [], shifts: [], functions: [], operators: [] });
+      });
+  }, [filterVersion, apiBase, sourceParam]);
 
   const buildQuery = useCallback(() => {
     const params = new URLSearchParams();
+    if (sourceParam) params.set("source", sourceParam);
     if (filterState.dateFrom) params.set("dateFrom", filterState.dateFrom);
     if (filterState.dateTo) params.set("dateTo", filterState.dateTo);
     if (filterState.turno) params.set("turno", filterState.turno);
@@ -57,7 +74,7 @@ export function useProductionFilters(apiBase = "/api/production") {
     if (filterState.funcion) params.set("funcion", filterState.funcion);
     if (filterState.operario) params.set("operario", filterState.operario);
     return params.toString();
-  }, [filterState]);
+  }, [filterState, sourceParam]);
 
   return { filters, filterState, setFilterState, buildQuery, reloadFilters };
 }

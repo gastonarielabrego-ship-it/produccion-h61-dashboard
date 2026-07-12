@@ -213,8 +213,9 @@ export function SummaryTab({ baseQuery, apiBase = "/api/production" }: SummaryTa
 
   const fetchData = useCallback(() => {
     setError(false);
+    // Always use /api/production — source param is already in baseQuery
     const base = baseQuery ? `?${baseQuery}` : "";
-    fetch(`${apiBase}/summary-tables${base}`)
+    fetch(`/api/production/summary-tables${base}`)
       .then((r) => {
         if (!r.ok) throw new Error("API error");
         return r.json();
