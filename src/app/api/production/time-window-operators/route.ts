@@ -52,13 +52,9 @@ export async function GET(request: Request) {
     }
 
     // Step 3: Aggregate bultos per operario, per window, only for eligible people
-    // Also track shift count per operator per window
     const opBultos6: Record<string, number> = {};
     const opBultos10: Record<string, number> = {};
     const opBultos18: Record<string, number> = {};
-    const opShifts6: Record<string, number> = {};
-    const opShifts10: Record<string, number> = {};
-    const opShifts18: Record<string, number> = {};
     let bultos6_10 = 0;
     let bultos10_14 = 0;
     let bultos18_22 = 0;
@@ -67,39 +63,33 @@ export async function GET(request: Request) {
       const key = `${r.date}:${r.operario}`;
 
       if (eligible6.has(key)) {
-        let hasBultos = false;
         for (const hd of r.hourlyData) {
-          if (window6Hours.has(hd.hour) && hd.quantity > 0) {
-            bultos6_10 += hd.quantity;
-            opBultos6[r.operario] = (opBultos6[r.operario] || 0) + hd.quantity;
-            hasBultos = true;
+          if (window6Hours.has(hd.hour)) {
+            const q = hd.quantity;
+            bultos6_10 += q;
+            opBultos6[r.operario] = (opBultos6[r.operario] || 0) + q;
           }
         }
-        if (hasBultos) opShifts6[r.operario] = (opShifts6[r.operario] || 0) + 1;
       }
 
       if (eligible10.has(key)) {
-        let hasBultos = false;
         for (const hd of r.hourlyData) {
-          if (window1Hours.has(hd.hour) && hd.quantity > 0) {
-            bultos10_14 += hd.quantity;
-            opBultos10[r.operario] = (opBultos10[r.operario] || 0) + hd.quantity;
-            hasBultos = true;
+          if (window1Hours.has(hd.hour)) {
+            const q = hd.quantity;
+            bultos10_14 += q;
+            opBultos10[r.operario] = (opBultos10[r.operario] || 0) + q;
           }
         }
-        if (hasBultos) opShifts10[r.operario] = (opShifts10[r.operario] || 0) + 1;
       }
 
       if (eligible18.has(key)) {
-        let hasBultos = false;
         for (const hd of r.hourlyData) {
-          if (window2Hours.has(hd.hour) && hd.quantity > 0) {
-            bultos18_22 += hd.quantity;
-            opBultos18[r.operario] = (opBultos18[r.operario] || 0) + hd.quantity;
-            hasBultos = true;
+          if (window2Hours.has(hd.hour)) {
+            const q = hd.quantity;
+            bultos18_22 += q;
+            opBultos18[r.operario] = (opBultos18[r.operario] || 0) + q;
           }
         }
-        if (hasBultos) opShifts18[r.operario] = (opShifts18[r.operario] || 0) + 1;
       }
     }
 
@@ -107,35 +97,19 @@ export async function GET(request: Request) {
     const misiones10 = eligible10.size;
     const misiones18 = eligible18.size;
 
-    // Build full operator list sorted by bultos, with shiftCount and pct
-    const buildList = (
-      bultosMap: Record<string, number>,
-      shiftsMap: Record<string, number>,
-      totalMisiones: number,
-      totalBultos: number
-    ) => {
-      // Franja average: bultos per person per hour
-      const avgHourlyRate = totalMisiones > 0 ? (totalBultos / totalMisiones) / 4 : 0;
-
-      return Object.entries(bultosMap)
-        .map(([operario, total]) => {
-          const shifts = shiftsMap[operario] || 1;
-          const opHourlyRate = total / (shifts * 4);
-          const pct = avgHourlyRate > 0 ? Math.round((opHourlyRate / avgHourlyRate) * 100) : 0;
-          return {
-            operario,
-            nombre: nameMap[operario] || operario,
-            total,
-            shifts,
-            pct,
-          };
-        })
+    // Build full operator list sorted by bultos
+    const buildList = (bultosMap: Record<string, number>) =>
+      Object.entries(bultosMap)
+        .map(([operario, total]) => ({
+          operario,
+          nombre: nameMap[operario] || operario,
+          total,
+        }))
         .sort((a, b) => b.total - a.total);
-    };
 
-    const operators6 = buildList(opBultos6, opShifts6, misiones6, bultos6_10);
-    const operators10 = buildList(opBultos10, opShifts10, misiones10, bultos10_14);
-    const operators18 = buildList(opBultos18, opShifts18, misiones18, bultos18_22);
+    const operators6 = buildList(opBultos6);
+    const operators10 = buildList(opBultos10);
+    const operators18 = buildList(opBultos18);
 
     return NextResponse.json({
       misiones6,
