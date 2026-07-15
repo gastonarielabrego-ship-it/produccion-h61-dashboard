@@ -26,7 +26,7 @@ export type FilterOptions = {
   dateFrom?: string;
   dateTo?: string;
   turno?: string;
-  circuito?: string;
+  circuito?: string[];
   funcion?: string;
   operario?: string;
 };
@@ -100,9 +100,10 @@ function buildWhere(filters: FilterOptions): { sql: string; params: Record<strin
     conditions.push("turno = $turno");
     params.turno = filters.turno;
   }
-  if (filters.circuito) {
-    conditions.push("circuito = $circuito");
-    params.circuito = filters.circuito;
+  if (filters.circuito && filters.circuito.length > 0) {
+    const placeholders = filters.circuito.map((c, i) => `$circuito_${i}`);
+    conditions.push(`circuito IN (${placeholders.join(", ")})`);
+    filters.circuito.forEach((c, i) => { params[`circuito_${i}`] = c; });
   }
   if (filters.funcion) {
     conditions.push("funcion = $funcion");
@@ -197,14 +198,14 @@ export function parseFilters(request: Request): FilterOptions {
   const dateFrom = url.searchParams.get("dateFrom");
   const dateTo = url.searchParams.get("dateTo");
   const turno = url.searchParams.get("turno");
-  const circuito = url.searchParams.get("circuito");
+  const circuitoAll = url.searchParams.getAll("circuito");
   const funcion = url.searchParams.get("funcion");
   const operario = url.searchParams.get("operario");
   if (date) filters.date = date;
   if (dateFrom) filters.dateFrom = dateFrom;
   if (dateTo) filters.dateTo = dateTo;
   if (turno) filters.turno = turno;
-  if (circuito) filters.circuito = circuito;
+  if (circuitoAll.length > 0) filters.circuito = circuitoAll;
   if (funcion) filters.funcion = funcion;
   if (operario) filters.operario = operario;
   return filters;
@@ -221,7 +222,7 @@ export function applyFilters(
     if (filters.dateFrom && r.date < Number(filters.dateFrom)) return false;
     if (filters.dateTo && r.date > Number(filters.dateTo)) return false;
     if (filters.turno && r.turno !== filters.turno) return false;
-    if (filters.circuito && r.circuito !== filters.circuito) return false;
+    if (filters.circuito && filters.circuito.length > 0 && !filters.circuito.includes(r.circuito)) return false;
     if (filters.funcion && r.funcion !== filters.funcion) return false;
     if (filters.operario && r.operario !== filters.operario) return false;
     return true;

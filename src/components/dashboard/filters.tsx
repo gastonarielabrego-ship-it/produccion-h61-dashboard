@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Select,
   SelectContent,
@@ -9,7 +9,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Filter, Factory, Activity, User } from "lucide-react";
+import { Filter, Factory, Activity, User, Check, ChevronsUpDown, X } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface Filters {
   dates: number[];
@@ -23,7 +28,7 @@ interface FilterState {
   dateFrom: string;
   dateTo: string;
   turno: string;
-  circuito: string;
+  circuito: string[];
   funcion: string;
   operario: string;
 }
@@ -34,7 +39,7 @@ export function useProductionFilters(apiBase = "/api/production") {
     dateFrom: "",
     dateTo: "",
     turno: "",
-    circuito: "",
+    circuito: [],
     funcion: "",
     operario: "",
   });
@@ -70,13 +75,141 @@ export function useProductionFilters(apiBase = "/api/production") {
     if (filterState.dateFrom) params.set("dateFrom", filterState.dateFrom);
     if (filterState.dateTo) params.set("dateTo", filterState.dateTo);
     if (filterState.turno) params.set("turno", filterState.turno);
-    if (filterState.circuito) params.set("circuito", filterState.circuito);
+    for (const c of filterState.circuito) {
+      params.append("circuito", c);
+    }
     if (filterState.funcion) params.set("funcion", filterState.funcion);
     if (filterState.operario) params.set("operario", filterState.operario);
     return params.toString();
   }, [filterState, sourceParam]);
 
   return { filters, filterState, setFilterState, buildQuery, reloadFilters };
+}
+
+/** Multi-select component for circuito */
+function CircuitoMultiSelect({
+  circuits,
+  selected,
+  onChange,
+}: {
+  circuits: string[];
+  selected: string[];
+  onChange: (value: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const filtered = circuits.filter((c) =>
+    c.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const toggle = (c: string) => {
+    if (selected.includes(c)) {
+      onChange(selected.filter((x) => x !== c));
+    } else {
+      onChange([...selected, c]);
+    }
+  };
+
+  const selectAll = () => onChange(circuits.length === selected.length ? [] : [...circuits]);
+  const allSelected = circuits.length > 0 && circuits.length === selected.length;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="h-9 w-full justify-between text-sm font-normal"
+        >
+          <span className="flex items-center gap-1.5 truncate">
+            <Factory className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            {selected.length === 0 ? (
+              <span className="text-muted-foreground">Todos los circuitos</span>
+            ) : (
+              <span className="truncate">
+                {selected.length === 1
+                  ? selected[0]
+                  : `${selected.length} circuitos`}
+              </span>
+            )}
+          </span>
+          <ChevronsUpDown className="ml-1 h-3.5 w-3.5 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        {/* Search */}
+        <div className="flex items-center border-b px-3 py-2">
+          <input
+            ref={inputRef}
+            placeholder="Buscar circuito..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          />
+        </div>
+        {/* Select all / clear */}
+        <div className="flex items-center justify-between border-b px-3 py-1.5">
+          <button
+            onClick={selectAll}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {allSelected ? "Desmarcar todos" : "Seleccionar todos"}
+          </button>
+          {selected.length > 0 && (
+            <button
+              onClick={() => onChange([])}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Limpiar
+            </button>
+          )}
+        </div>
+        {/* Options list */}
+        <ScrollArea className="max-h-60">
+          <div className="p-1">
+            {filtered.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Sin resultados
+              </p>
+            ) : (
+              filtered.map((c) => {
+                const isChecked = selected.includes(c);
+                return (
+                  <label
+                    key={c}
+                    className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
+                    onClick={() => toggle(c)}
+                  >
+                    <Checkbox checked={isChecked} />
+                    <span className="flex-1 truncate">{c}</span>
+                  </label>
+                );
+              })
+            )}
+          </div>
+        </ScrollArea>
+        {/* Selected badges */}
+        {selected.length > 1 && (
+          <div className="flex flex-wrap gap-1 border-t p-2">
+            {selected.map((c) => (
+              <Badge key={c} variant="secondary" className="text-xs gap-1 px-1.5 py-0">
+                {c}
+                <button
+                  onClick={(e) => { e.stopPropagation(); toggle(c); }}
+                  className="ml-0.5 hover:text-destructive"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            ))}
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 export function FilterBar({
@@ -205,31 +338,14 @@ export function FilterBar({
             </SelectContent>
           </Select>
 
-          {/* Circuito */}
-          <Select
-            value={filterState.circuito}
-            onValueChange={(v) =>
-              setFilterState((prev) => ({
-                ...prev,
-                circuito: v === "__all__" ? "" : v,
-              }))
+          {/* Circuito — Multi-select */}
+          <CircuitoMultiSelect
+            circuits={filters.circuits}
+            selected={filterState.circuito}
+            onChange={(value) =>
+              setFilterState((prev) => ({ ...prev, circuito: value }))
             }
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Todos los circuitos" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">Todos los circuitos</SelectItem>
-              {filters.circuits.map((c) => (
-                <SelectItem key={c} value={c}>
-                  <span className="flex items-center gap-2">
-                    <Factory className="h-3 w-3" />
-                    {c}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          />
 
           {/* Colaborador */}
           <Select
