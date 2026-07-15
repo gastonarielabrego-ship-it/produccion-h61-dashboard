@@ -17,14 +17,14 @@ export async function GET(request: Request) {
       getTMByDateOperario(filters),
     ]);
 
-    const dayMap: Record<number, { misionesSet: Set<string>; bultos: number; activeHourSet: Set<string> }> = {};
+    const dayMap: Record<number, { misionesSet: Set<string>; bultos: number; horasBrutas: number }> = {};
     for (const r of records) {
-      if (!dayMap[r.date]) dayMap[r.date] = { misionesSet: new Set(), bultos: 0, activeHourSet: new Set() };
+      if (!dayMap[r.date]) dayMap[r.date] = { misionesSet: new Set(), bultos: 0, horasBrutas: 0 };
       const d = dayMap[r.date];
       d.misionesSet.add(r.operario);
       d.bultos += r.total;
       for (const hd of r.hourlyData) {
-        if (hd.quantity > 0) d.activeHourSet.add(`${r.date}:${hd.hour}`);
+        if (hd.quantity > 0) d.horasBrutas += 1;
       }
     }
 
@@ -34,7 +34,7 @@ export async function GET(request: Request) {
       const d = dayMap[date];
       const misiones = d.misionesSet.size;
       const bultos = d.bultos;
-      const horasProductivas = d.activeHourSet.size;
+      const horasProductivas = d.horasBrutas;
       const tmMinutos = tmByDate[date] || 0;
       const tmHoras = Math.round((tmMinutos / 60) * 100) / 100;
       const horasNetas = Math.round((horasProductivas - tmHoras) * 100) / 100;
