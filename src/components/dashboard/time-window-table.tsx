@@ -19,6 +19,8 @@ interface OperatorRow {
   operario: string;
   nombre: string;
   total: number;
+  shifts: number;
+  pct: number;
 }
 
 interface FranjasGroup {
@@ -47,6 +49,12 @@ interface TimeWindowTableProps {
   shiftHourly: ShiftHourlyData | null;
 }
 
+function pctColor(pct: number): string {
+  if (pct >= 85) return "bg-emerald-600 text-white";
+  if (pct >= 71) return "bg-amber-400 text-amber-950";
+  return "bg-red-500 text-white";
+}
+
 function MissionTable({
   operators,
   barColor,
@@ -69,7 +77,7 @@ function MissionTable({
         <ScrollArea className="h-[320px]">
           <div className="px-4 pb-4 space-y-0">
             {operators.map((op, i) => {
-              const pct = Math.round((op.total / maxTotal) * 100);
+              const barPct = Math.round((op.total / maxTotal) * 100);
               return (
                 <div
                   key={op.operario}
@@ -111,17 +119,20 @@ function MissionTable({
                       {op.operario}
                     </p>
                   </button>
-                  <div className="flex items-center gap-1 flex-shrink-0 mr-1">
+                  <Badge className={`text-[10px] font-bold px-1.5 py-0 h-5 flex-shrink-0 ${pctColor(op.pct)}`}>
+                    {op.pct}%
+                  </Badge>
+                  <div className="flex items-center gap-1 flex-shrink-0">
                     <Clock className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-[10px] text-muted-foreground w-4 text-right">
-                      4h
+                    <span className="text-[10px] text-muted-foreground w-6 text-right">
+                      {op.shifts}×4h
                     </span>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
+                    <div className="w-20 h-2 bg-muted rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all ${barColor}`}
-                        style={{ width: `${pct}%` }}
+                        style={{ width: `${Math.min(barPct, 100)}%` }}
                       />
                     </div>
                     <span className="text-xs font-semibold w-14 text-right">
