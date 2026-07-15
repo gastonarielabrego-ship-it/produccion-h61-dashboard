@@ -2,6 +2,7 @@ import {
   getAllRecords,
   getSourceTable,
   parseFilters,
+  getTMByDate,
 } from "@/lib/turso";
 import { NextResponse } from "next/server";
 
@@ -10,6 +11,9 @@ export async function GET(request: Request) {
     const filters = parseFilters(request);
     const tableName = getSourceTable(request);
     const records = await getAllRecords(filters, tableName);
+    const tmByDate = await getTMByDate(filters);
+    const totalTMMinutos = Object.values(tmByDate).reduce((s, v) => s + v, 0);
+    const totalTMHoras = Math.round((totalTMMinutos / 60) * 100) / 100;
 
     // Total por circuito
     const byCircuit: Record<string, number> = {};
@@ -103,6 +107,8 @@ export async function GET(request: Request) {
       totalRecords: records.length,
       grandTotal,
       totalMissions,
+      totalTMMinutos,
+      totalTMHoras,
       shiftParticipation,
       circuitData,
       shiftData,

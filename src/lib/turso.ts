@@ -228,5 +228,79 @@ export function applyFilters(
   });
 }
 
+// ─── Tiempos Muertos ────────────────────────────────────
+let _tmTableEnsured = false;
+
+async function ensureTMTable() {
+  if (_tmTableEnsured) return;
+  const client = getClient();
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS tiempos_muertos (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      fecha       INTEGER NOT NULL,
+      turno       TEXT    NOT NULL,
+      operario    TEXT    NOT NULL,
+      nombre      TEXT    NOT NULL,
+      estado      TEXT,
+      motivo      INTEGER,
+      minutos     INTEGER NOT NULL DEFAULT 0,
+      observacion TEXT,
+      usuario_alta TEXT
+    )
+  `);
+  await client.execute(`CREATE INDEX IF NOT EXISTS idx_tm_fecha ON tiempos_muertos(fecha)`);
+  await client.execute(`CREATE INDEX IF NOT EXISTS idx_tm_fecha_operario ON tiempos_muertos(fecha, operario)`);
+  _tmTableEnsured = true;
+}
+
+export async function getTMByDateOperario(
+  filters?: FilterOptions
+): Promise<Record<string, number>> {
+  await ensureTMTable();
+  const client = getClient();
+  const conditions: string[] = [];
+  const params: Record<string, string | number> = {};
+  if (filters?.date) {
+    conditions.push("fecha = $date");
+    params.date = Number(filters.date);
+  } else {
+    if (filters?.dateFrom) { conditions.push("fecha >= $dateFrom"); params.dateFrom = Number(filters.dateFrom); }
+    if (filters?.dateTo) { conditions.push("fecha <= $dateTo"); params.dateTo = Number(filters.dateTo); }
+  }
+  if (filters?.operario) { conditions.push("operario = $operario"); params.operario = filters.operario; }
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const sql = `SELECT fecha, operario, SUM(minutos) as total_minutos FROM tiempos_muertos ${where} GROUP BY fecha, operario`;
+  const result = await client.execute({ sql, args: params });
+  const map: Record<string, number> = {};
+  for (const row of result.rows) {
+    map[`${row.fecha}:${row.operario}`] = Number(row.total_minutos) || 0;
+  }
+  return map;
+}
+
+export async function getTMByDate(
+  filters?: FilterOptions
+): Promise<Record<number, number>> {
+  await ensureTMTable();
+  const client = getClient();
+  const conditions: string[] = [];
+  const params: Record<string, string | number> = {};
+  if (filters?.date) {
+    conditions.push("fecha = $date");
+    params.date = Number(filters.date);
+  } else {
+    if (filters?.dateFrom) { conditions.push("fecha >= $dateFrom"); params.dateFrom = Number(filters.dateFrom); }
+    if (filters?.dateTo) { conditions.push("fecha <= $dateTo"); params.dateTo = Number(filters.dateTo); }
+  }
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const sql = `SELECT fecha, SUM(minutos) as total_minutos FROM tiempos_muertos ${where} GROUP BY fecha`;
+  const result = await client.execute({ sql, args: params });
+  const map: Record<number, number> = {};
+  for (const row of result.rows) {
+    map[Number(row.fecha)] = Number(row.total_minutos) || 0;
+  }
+  return map;
+}
+
 // ─── Raw client access for seed script ──────────────────
 export { getClient };
