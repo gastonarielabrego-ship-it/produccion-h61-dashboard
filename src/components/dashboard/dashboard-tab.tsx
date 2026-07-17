@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { SummaryCards } from "@/components/dashboard/summary-cards";
 import { CombinedHourlyChart } from "@/components/dashboard/hourly-combined-chart";
-import { ByShiftChart } from "@/components/dashboard/by-shift-chart";
+import { ActivityChart } from "@/components/dashboard/activity-chart";
 import { SummaryBreakdown } from "@/components/dashboard/summary-breakdown";
 import { OperatorsTable } from "@/components/dashboard/operators-table";
 
@@ -15,7 +15,7 @@ interface DashboardTabProps {
 export function DashboardTab({ baseQuery, apiBase = "/api/production" }: DashboardTabProps) {
   const [combinedHourlyData, setCombinedHourlyData] = useState<any>(null);
   const [summaryData, setSummaryData] = useState<any>(null);
-  const [shiftData, setShiftData] = useState<any>(null);
+  const [activityData, setActivityData] = useState<any>(null);
   const [operatorData, setOperatorData] = useState<any>(null);
 
   // Always use /api/production — source param is already in baseQuery
@@ -32,7 +32,7 @@ export function DashboardTab({ baseQuery, apiBase = "/api/production" }: Dashboa
     ]).then(([combinedHourly, summary, shift, operators]) => {
       setCombinedHourlyData(combinedHourly);
       setSummaryData(summary);
-      setShiftData(shift);
+      setActivityData(shift);
       setOperatorData(operators);
     });
   }, [baseQuery]);
@@ -45,7 +45,7 @@ export function DashboardTab({ baseQuery, apiBase = "/api/production" }: Dashboa
     <div className="space-y-6">
       <SummaryCards data={summaryData} />
       <CombinedHourlyChart data={combinedHourlyData} />
-      <ByShiftChart data={shiftData} />
+      <ActivityChart data={activityData} />
       <SummaryBreakdown data={summaryData} />
       <OperatorsTable data={operatorData} filtersQuery={baseQuery} />
     </div>

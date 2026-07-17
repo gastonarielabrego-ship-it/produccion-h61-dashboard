@@ -17,21 +17,24 @@ export async function GET(request: Request) {
     const tableName = getSourceTable(request);
     const records = await getAllRecords(filters, tableName);
 
-    // Group by shift and hour
-    const shiftHourly: Record<string, Record<number, number>> = {};
+    // Group by shift and hour — actividad
+    const shiftHourlyAct: Record<string, Record<number, number>> = {};
 
     for (const record of records) {
-      if (!shiftHourly[record.turno]) {
+      if (!shiftHourlyAct[record.turno]) {
         const obj: Record<number, number> = {};
         for (let h = 0; h <= 23; h++) obj[h] = 0;
-        shiftHourly[record.turno] = obj;
+        shiftHourlyAct[record.turno] = obj;
       }
+      // Add actividad to each hour where the operator had production
       for (const hd of record.hourlyData) {
-        shiftHourly[record.turno][hd.hour] += hd.quantity;
+        if (hd.quantity > 0) {
+          shiftHourlyAct[record.turno][hd.hour] += record.actividad;
+        }
       }
     }
 
-    const shifts = Object.keys(shiftHourly).sort();
+    const shifts = Object.keys(shiftHourlyAct).sort();
     const hourlyData: Record<string, string | number>[] = [];
     for (let h = 0; h <= 23; h++) {
       const point: Record<string, string | number> = {
@@ -40,7 +43,7 @@ export async function GET(request: Request) {
       };
       for (const s of shifts) {
         const label = SHIFT_LABELS[s] || s;
-        point[label] = shiftHourly[s][h];
+        point[label] = shiftHourlyAct[s][h];
       }
       hourlyData.push(point);
     }
@@ -48,7 +51,7 @@ export async function GET(request: Request) {
     const shiftTotals = shifts.map((s) => ({
       turno: s,
       label: SHIFT_LABELS[s] || s,
-      total: Object.values(shiftHourly[s]).reduce((sum, v) => sum + v, 0),
+      total: Object.values(shiftHourlyAct[s]).reduce((sum, v) => sum + v, 0),
     }));
 
     return NextResponse.json({
