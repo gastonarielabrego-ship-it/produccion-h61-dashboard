@@ -20,11 +20,7 @@ import {
 import { Activity } from "lucide-react";
 import { PrintButton } from "@/components/dashboard/print-button";
 
-const SHIFT_COLORS: Record<string, string> = {
-  Mañana: "#10b981",
-  Tarde: "#f59e0b",
-  Noche: "#6366f1",
-};
+const DEFAULT_COLORS = ["#10b981", "#6366f1", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899", "#84cc16"];
 
 function ActivityTooltip({ active, payload, label }: any) {
   if (!active || !payload || !payload.length) return null;
@@ -46,7 +42,7 @@ function ActivityTooltip({ active, payload, label }: any) {
 
 interface ActivityChartProps {
   data: {
-    shifts: { turno: string; label: string; total: number }[];
+    activities: { actividad: string; label: string; total: number; color: string }[];
     hourlyData: Record<string, string | number>[];
   } | null;
 }
@@ -62,7 +58,7 @@ export function ActivityChart({ data }: ActivityChartProps) {
     );
   }
 
-  const shiftLabels = data.shifts.map((s) => s.label);
+  const labels = data.activities.map((a) => a.label);
 
   return (
     <Card>
@@ -70,13 +66,13 @@ export function ActivityChart({ data }: ActivityChartProps) {
         <div>
           <CardTitle className="flex items-center gap-2 text-base">
             <Activity className="h-4 w-4" />
-            Actividad por Hora y Turno
+            Preparación por Hora y Actividad
           </CardTitle>
           <CardDescription>
-            Actividad horaria según turno (Mañana / Tarde / Noche)
+            Bultos preparados por hora según tipo de actividad
           </CardDescription>
         </div>
-        <PrintButton title="Actividad por Hora y Turno" />
+        <PrintButton title="Preparación por Hora y Actividad" />
       </CardHeader>
       <CardContent>
         <div className="h-[450px]">
@@ -104,11 +100,11 @@ export function ActivityChart({ data }: ActivityChartProps) {
                 iconType="circle"
                 iconSize={8}
               />
-              {shiftLabels.map((label) => (
+              {labels.map((label, i) => (
                 <Bar
                   key={label}
                   dataKey={label}
-                  fill={SHIFT_COLORS[label] || "#888"}
+                  fill={data.activities[i]?.color || DEFAULT_COLORS[i % DEFAULT_COLORS.length]}
                   radius={[2, 2, 0, 0]}
                   stackId="a"
                 />
