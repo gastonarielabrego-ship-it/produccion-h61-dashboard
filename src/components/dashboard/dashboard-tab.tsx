@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback } from "react";
 import { SummaryCards } from "@/components/dashboard/summary-cards";
 import { CombinedHourlyChart } from "@/components/dashboard/hourly-combined-chart";
 import { ComboChart } from "@/components/dashboard/activity-chart";
-import { ActivityBreakdown } from "@/components/dashboard/activity-breakdown-chart";
 
 interface DashboardTabProps {
   baseQuery: string;
@@ -42,7 +41,6 @@ export function DashboardTab({ baseQuery, apiBase = "/api/production" }: Dashboa
       <SummaryCards data={summaryData} />
       <CombinedHourlyChart data={combinedHourlyData} />
       <ComboChart data={activityData} />
-      <ActivityBreakdown data={activityData} />
     </div>
   );
 }
