@@ -19,6 +19,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 interface Filters {
   dates: number[];
   circuits: string[];
+  activities: string[];
   shifts: { value: string; label: string }[];
   functions: { value: string; label: string }[];
   operators: { value: string; label: string }[];
@@ -29,6 +30,7 @@ interface FilterState {
   dateTo: string;
   turno: string;
   circuito: string[];
+  actividad: string;
   funcion: string;
   operario: string;
 }
@@ -40,6 +42,7 @@ export function useProductionFilters(apiBase = "/api/production") {
     dateTo: "",
     turno: "",
     circuito: [],
+    actividad: "",
     funcion: "",
     operario: "",
   });
@@ -61,11 +64,11 @@ export function useProductionFilters(apiBase = "/api/production") {
           setFilters(data);
         } else {
           // Table might not exist yet — return empty filters
-          setFilters({ dates: [], circuits: [], shifts: [], functions: [], operators: [] });
+          setFilters({ dates: [], circuits: [], activities: [], shifts: [], functions: [], operators: [] });
         }
       })
       .catch(() => {
-        setFilters({ dates: [], circuits: [], shifts: [], functions: [], operators: [] });
+        setFilters({ dates: [], circuits: [], activities: [], shifts: [], functions: [], operators: [] });
       });
   }, [filterVersion, apiBase, sourceParam]);
 
@@ -78,6 +81,7 @@ export function useProductionFilters(apiBase = "/api/production") {
     for (const c of filterState.circuito) {
       params.append("circuito", c);
     }
+    if (filterState.actividad) params.set("actividad", filterState.actividad);
     if (filterState.funcion) params.set("funcion", filterState.funcion);
     if (filterState.operario) params.set("operario", filterState.operario);
     return params.toString();
@@ -257,7 +261,7 @@ export function FilterBar({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
           {/* Desde */}
           <Select
             value={filterState.dateFrom}
@@ -333,6 +337,29 @@ export function FilterBar({
               {filters.shifts.map((s) => (
                 <SelectItem key={s.value} value={s.value}>
                   {s.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Actividad */}
+          <Select
+            value={filterState.actividad}
+            onValueChange={(v) =>
+              setFilterState((prev) => ({ ...prev, actividad: v === "__all__" ? "" : v }))
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Todas las actividades" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Todas las actividades</SelectItem>
+              {filters.activities.map((a) => (
+                <SelectItem key={a} value={a}>
+                  <span className="flex items-center gap-2">
+                    <Activity className="h-3 w-3" />
+                    Actividad {a}
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>

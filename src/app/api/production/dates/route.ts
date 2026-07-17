@@ -12,6 +12,7 @@ export async function GET(request: Request) {
 
     const dates = [...new Set(records.map((r) => r.date))].sort();
     const circuits = [...new Set(records.map((r) => r.circuito))].sort();
+    const activities = [...new Set(records.map((r) => String(r.actividad)))].sort((a, b) => Number(a) - Number(b));
 
     const shiftMap = new Map<string, string>();
     for (const r of records) shiftMap.set(r.turno, r.turnoDesc);
@@ -34,7 +35,7 @@ export async function GET(request: Request) {
       .map(([value, label]) => ({ value, label }))
       .sort((a, b) => a.label.localeCompare(b.label));
 
-    return NextResponse.json({ dates, circuits, shifts, functions, operators });
+    return NextResponse.json({ dates, circuits, activities, shifts, functions, operators });
   } catch (error) {
     console.error("Error fetching filters:", error);
     return NextResponse.json(

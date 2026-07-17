@@ -27,6 +27,7 @@ export type FilterOptions = {
   dateTo?: string;
   turno?: string;
   circuito?: string[];
+  actividad?: string;
   funcion?: string;
   operario?: string;
 };
@@ -104,6 +105,10 @@ function buildWhere(filters: FilterOptions): { sql: string; params: Record<strin
     const placeholders = filters.circuito.map((c, i) => `$circuito_${i}`);
     conditions.push(`circuito IN (${placeholders.join(", ")})`);
     filters.circuito.forEach((c, i) => { params[`circuito_${i}`] = c; });
+  }
+  if (filters.actividad) {
+    conditions.push("actividad = $actividad");
+    params.actividad = Number(filters.actividad);
   }
   if (filters.funcion) {
     conditions.push("funcion = $funcion");
@@ -199,6 +204,7 @@ export function parseFilters(request: Request): FilterOptions {
   const dateTo = url.searchParams.get("dateTo");
   const turno = url.searchParams.get("turno");
   const circuitoAll = url.searchParams.getAll("circuito");
+  const actividad = url.searchParams.get("actividad");
   const funcion = url.searchParams.get("funcion");
   const operario = url.searchParams.get("operario");
   if (date) filters.date = date;
@@ -206,6 +212,7 @@ export function parseFilters(request: Request): FilterOptions {
   if (dateTo) filters.dateTo = dateTo;
   if (turno) filters.turno = turno;
   if (circuitoAll.length > 0) filters.circuito = circuitoAll;
+  if (actividad) filters.actividad = actividad;
   if (funcion) filters.funcion = funcion;
   if (operario) filters.operario = operario;
   return filters;
@@ -223,6 +230,7 @@ export function applyFilters(
     if (filters.dateTo && r.date > Number(filters.dateTo)) return false;
     if (filters.turno && r.turno !== filters.turno) return false;
     if (filters.circuito && filters.circuito.length > 0 && !filters.circuito.includes(r.circuito)) return false;
+    if (filters.actividad && String(r.actividad) !== filters.actividad) return false;
     if (filters.funcion && r.funcion !== filters.funcion) return false;
     if (filters.operario && r.operario !== filters.operario) return false;
     return true;

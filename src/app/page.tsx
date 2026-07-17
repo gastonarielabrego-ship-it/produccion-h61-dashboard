@@ -27,7 +27,7 @@ export default function Home() {
 
   const refresh = useCallback(() => {
     reloadFilters();
-    setFilterState({ dateFrom: "", dateTo: "", turno: "", circuito: [], funcion: "", operario: "" });
+    setFilterState({ dateFrom: "", dateTo: "", turno: "", circuito: [], actividad: "", funcion: "", operario: "" });
     setRefreshKey((k) => k + 1);
   }, [reloadFilters]);
 
