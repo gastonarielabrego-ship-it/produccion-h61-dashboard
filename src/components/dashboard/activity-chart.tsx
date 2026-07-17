@@ -1,14 +1,16 @@
 "use client";
 
 import {
-  BarChart,
+  ComposedChart,
   Bar,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
   Legend,
+  ReferenceLine,
 } from "recharts";
 import {
   Card,
@@ -17,12 +19,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Activity } from "lucide-react";
+import { Activity, Users } from "lucide-react";
 import { PrintButton } from "@/components/dashboard/print-button";
 
 const DEFAULT_COLORS = ["#10b981", "#6366f1", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899", "#84cc16"];
 
-function ActivityTooltip({ active, payload, label }: any) {
+function ComboTooltip({ active, payload, label }: any) {
   if (!active || !payload || !payload.length) return null;
   return (
     <div className="rounded-lg border bg-background p-3 shadow-md">
@@ -33,21 +35,27 @@ function ActivityTooltip({ active, payload, label }: any) {
             className="inline-block w-2 h-2 rounded-full"
             style={{ backgroundColor: entry.color }}
           />
-          {entry.name}: {Number(entry.value).toLocaleString("es-AR")}
+          {entry.name}: {entry.dataKey === "Operarios"
+            ? `${Number(entry.value)} personas`
+            : Number(entry.value).toLocaleString("es-AR")
+          }
         </p>
       ))}
     </div>
   );
 }
 
-interface ActivityChartProps {
+interface ComboChartProps {
   data: {
     activities: { actividad: string; label: string; total: number; color: string }[];
     hourlyData: Record<string, string | number>[];
+    avgHourly: number;
+    totalBultos: number;
+    totalMisiones: number;
   } | null;
 }
 
-export function ActivityChart({ data }: ActivityChartProps) {
+export function ComboChart({ data }: ComboChartProps) {
   if (!data) {
     return (
       <Card>
@@ -69,7 +77,8 @@ export function ActivityChart({ data }: ActivityChartProps) {
             Preparación por Hora y Actividad
           </CardTitle>
           <CardDescription>
-            Bultos preparados por hora según tipo de actividad
+            Unidades por actividad (barras) y operarios activos (línea) —{" "}
+            {data.totalBultos.toLocaleString("es-AR")} unidades · {data.totalMisiones} operarios peak
           </CardDescription>
         </div>
         <PrintButton title="Preparación por Hora y Actividad" />
@@ -77,7 +86,7 @@ export function ActivityChart({ data }: ActivityChartProps) {
       <CardContent>
         <div className="h-[450px]">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data.hourlyData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+            <ComposedChart data={data.hourlyData} margin={{ top: 5, right: 60, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
               <XAxis
                 dataKey="hour"
@@ -87,6 +96,7 @@ export function ActivityChart({ data }: ActivityChartProps) {
                 interval={1}
               />
               <YAxis
+                yAxisId="left"
                 tick={{ fontSize: 11 }}
                 tickLine={false}
                 axisLine={false}
@@ -94,22 +104,54 @@ export function ActivityChart({ data }: ActivityChartProps) {
                   v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)
                 }
               />
-              <Tooltip content={<ActivityTooltip />} />
+              <YAxis
+                yAxisId="right"
+                orientation="right"
+                tick={{ fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <Tooltip content={<ComboTooltip />} />
               <Legend
                 wrapperStyle={{ fontSize: 11, paddingTop: 10 }}
                 iconType="circle"
                 iconSize={8}
               />
+              {/* Average reference line */}
+              <ReferenceLine
+                yAxisId="left"
+                y={data.avgHourly}
+                stroke="#eab308"
+                strokeDasharray="6 3"
+                label={{
+                  value: `Prom: ${data.avgHourly.toLocaleString("es-AR")}`,
+                  position: "insideTopRight",
+                  fill: "#eab308",
+                  fontSize: 10,
+                }}
+              />
+              {/* Stacked bars per activity */}
               {labels.map((label, i) => (
                 <Bar
                   key={label}
+                  yAxisId="left"
                   dataKey={label}
                   fill={data.activities[i]?.color || DEFAULT_COLORS[i % DEFAULT_COLORS.length]}
-                  radius={[2, 2, 0, 0]}
-                  stackId="a"
+                  stackId="bultos"
+                  radius={i === labels.length - 1 ? [2, 2, 0, 0] : undefined}
+                  maxBarSize={40}
                 />
               ))}
-            </BarChart>
+              {/* Operators line */}
+              <Line
+                yAxisId="right"
+                dataKey="Operarios"
+                stroke="#0ea5e9"
+                strokeWidth={2}
+                dot={{ r: 3, fill: "#0ea5e9" }}
+                activeDot={{ r: 5 }}
+              />
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       </CardContent>
