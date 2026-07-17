@@ -5,7 +5,6 @@ import { SummaryCards } from "@/components/dashboard/summary-cards";
 import { CombinedHourlyChart } from "@/components/dashboard/hourly-combined-chart";
 import { ComboChart } from "@/components/dashboard/activity-chart";
 import { ActivityBreakdown } from "@/components/dashboard/activity-breakdown-chart";
-import { OperatorsTable } from "@/components/dashboard/operators-table";
 
 interface DashboardTabProps {
   baseQuery: string;
@@ -16,7 +15,6 @@ export function DashboardTab({ baseQuery, apiBase = "/api/production" }: Dashboa
   const [combinedHourlyData, setCombinedHourlyData] = useState<any>(null);
   const [summaryData, setSummaryData] = useState<any>(null);
   const [activityData, setActivityData] = useState<any>(null);
-  const [operatorData, setOperatorData] = useState<any>(null);
 
   // Always use /api/production — source param is already in baseQuery
   const effectiveBase = "/api/production";
@@ -28,12 +26,10 @@ export function DashboardTab({ baseQuery, apiBase = "/api/production" }: Dashboa
       fetch(`${effectiveBase}/hourly-combined${base}`).then((r) => r.json()),
       fetch(`${effectiveBase}/summary${base}`).then((r) => r.json()),
       fetch(`${effectiveBase}/by-shift${base}`).then((r) => r.json()),
-      fetch(`${effectiveBase}/operators${base}`).then((r) => r.json()),
-    ]).then(([combinedHourly, summary, activity, operators]) => {
+    ]).then(([combinedHourly, summary, activity]) => {
       setCombinedHourlyData(combinedHourly);
       setSummaryData(summary);
       setActivityData(activity);
-      setOperatorData(operators);
     });
   }, [baseQuery]);
 
@@ -47,7 +43,6 @@ export function DashboardTab({ baseQuery, apiBase = "/api/production" }: Dashboa
       <CombinedHourlyChart data={combinedHourlyData} />
       <ComboChart data={activityData} />
       <ActivityBreakdown data={activityData} />
-      <OperatorsTable data={operatorData} filtersQuery={baseQuery} />
     </div>
   );
 }
