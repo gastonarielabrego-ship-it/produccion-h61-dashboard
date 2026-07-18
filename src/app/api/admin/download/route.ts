@@ -31,7 +31,7 @@ export async function GET() {
     const byDate: Record<number, number> = {};
     const byOp: Record<string, { nombre: string; total: number; entries: number }> = {};
     const hourly: number[] = Array(24).fill(0);
-    const dayPersonHours: Record<number, number> = {};
+    const dayPersonHours: Record<number, Set<string>> = {};
 
     for (const r of rows) {
       const circ = String(r.circuito), turno = String(r.turno), turnoDesc = String(r.turno_desc);
@@ -43,11 +43,11 @@ export async function GET() {
       byDate[fecha] = (byDate[fecha] || 0) + total;
       if (!byOp[op]) byOp[op] = { nombre, total: 0, entries: 0 };
       byOp[op].total += total; byOp[op].entries += 1;
-      if (!dayPersonHours[fecha]) dayPersonHours[fecha] = 0;
+      if (!dayPersonHours[fecha]) dayPersonHours[fecha] = new Set();
       for (let h = 0; h <= 23; h++) {
         const val = Number(r[`hora_${String(h).padStart(2, "0")}`]) || 0;
         hourly[h] += val;
-        if (val > 0) dayPersonHours[fecha] += 1;
+        if (val > 0) dayPersonHours[fecha].add(`${op}:${h}`);
       }
     }
 
@@ -78,7 +78,7 @@ export async function GET() {
     let sumB = 0, sumBrutas = 0, sumTM = 0;
     for (const [fecha, total] of Object.entries(byDate).sort((a, b) => Number(a[0]) - Number(b[0]))) {
       const f = Number(fecha);
-      const brutas = dayPersonHours[f] || 0, tm = tmByDate[f] || 0;
+      const brutas = dayPersonHours[f]?.size || 0, tm = tmByDate[f] || 0;
       const tmH = Math.round((tm / 60) * 100) / 100, netas = Math.round((brutas - tmH) * 100) / 100;
       sumB += total; sumBrutas += brutas; sumTM += tm;
       resumen.push([formatDate(f), total, brutas, tm, tmH, netas,
