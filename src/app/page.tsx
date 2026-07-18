@@ -33,7 +33,7 @@ export default function Home() {
 
   useEffect(() => {
     refreshData();
-  }, [filterState.mes, filterState.dateFrom, filterState.dateTo, filterState.turno, filterState.circuito.length, filterState.funcion, filterState.operario, refreshData]);
+  }, [filterState.mes, filterState.dateFrom, filterState.dateTo, filterState.turno, filterState.circuito.length, filterState.actividad, filterState.funcion, filterState.operario, refreshData]);
 
   const baseQuery = buildQuery();
   const infoText = `${filters ? filters.dates.length : 0} días · ${filters ? filters.circuits.length : 0} circuitos`;
@@ -153,7 +153,7 @@ function ClarkistasDashboard({ refreshKey }: { refreshKey: number }) {
 
   useEffect(() => {
     cRefreshData();
-  }, [filterState.mes, filterState.dateFrom, filterState.dateTo, filterState.turno, filterState.circuito.length, filterState.funcion, filterState.operario, cRefreshData]);
+  }, [filterState.mes, filterState.dateFrom, filterState.dateTo, filterState.turno, filterState.circuito.length, filterState.actividad, filterState.funcion, filterState.operario, cRefreshData]);
 
   const cBaseQuery = buildQuery();
   const [cActiveTab, setCActiveTab] = useState("general");

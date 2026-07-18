@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Upload, FileDown, CheckCircle2, AlertCircle, Loader2, Timer } from "lucide-react";
 
@@ -25,30 +25,30 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
     setTimeout(() => setToast(null), 5000);
   };
 
-  const handleUpload = useCallback(
-    async (file: File, endpoint: string, label: UploadingLabel, refreshFn?: () => void) => {
-      setUploading(label);
-      setUploadStatus(`Enviando...`);
-      try {
-        const formData = new FormData();
-        formData.append("file", file);
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 120000);
-        const response = await fetch(endpoint, { method: "POST", body: formData, signal: controller.signal });
-        clearTimeout(timeout);
-        const text = await response.text();
-        let data: any;
-        try { data = JSON.parse(text); } catch { showToast("error", "Error del servidor."); return; }
-        if (response.ok) { showToast("success", data.message); setTimeout(() => refreshFn?.(), 600); }
-        else { showToast("error", data.error || "Error al cargar"); }
-      } catch (err: any) {
-        if (err.name === "AbortError") showToast("error", "Tiempo agotado.");
-        else showToast("error", `Error: ${err.message || "conexión fallida"}`);
-      } finally { setUploading(null); setUploadStatus(""); }
-    }, []
-  );
+  const handleUpload = async (
+    file: File, endpoint: string, label: UploadingLabel, refreshFn?: () => void
+  ) => {
+    setUploading(label);
+    setUploadStatus(`Enviando...`);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 120000);
+      const response = await fetch(endpoint, { method: "POST", body: formData, signal: controller.signal });
+      clearTimeout(timeout);
+      const text = await response.text();
+      let data: any;
+      try { data = JSON.parse(text); } catch { showToast("error", "Error del servidor."); return; }
+      if (response.ok) { showToast("success", data.message); setTimeout(() => refreshFn?.(), 600); }
+      else { showToast("error", data.error || "Error al cargar"); }
+    } catch (err: any) {
+      if (err.name === "AbortError") showToast("error", "Tiempo agotado.");
+      else showToast("error", `Error: ${err.message || "conexión fallida"}`);
+    } finally { setUploading(null); setUploadStatus(""); }
+  };
 
-  const handleDownload = useCallback(async () => {
+  const handleDownload = async () => {
     setIsDownloading(true);
     try {
       const response = await fetch("/api/admin/download");
@@ -61,7 +61,7 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
       a.download = m ? m[1] : "informe_produccion_h61.xlsx";
       document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
     } catch { showToast("error", "Error al descargar"); } finally { setIsDownloading(false); }
-  }, []);
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
