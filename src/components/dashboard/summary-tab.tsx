@@ -29,12 +29,14 @@ function formatArgDate(d: number): string {
 
 function DailyMetricsTable({ data }: { data: any[] }) {
   const totals = useMemo(() => {
-    let m = 0, b = 0, h = 0;
-    for (const r of data) { m += r.misiones; b += r.bultos; h += r.horasProductivas; }
+    let m = 0, b = 0, hb = 0, tm = 0;
+    for (const r of data) { m += r.misiones; b += r.bultos; hb += r.horasProductivas; tm += r.tmHoras || 0; }
+    const hn = Math.round((hb - tm) * 100) / 100;
     return {
-      misiones: m, bultos: b, horasProductivas: h,
+      misiones: m, bultos: b, horasProductivas: hb, tmHoras: Math.round(tm * 100) / 100, horasNetas: hn,
       produccion: m > 0 ? Math.round((b / m) * 10) / 10 : 0,
-      bultosPorHora: h > 0 ? Math.round((b / h) * 10) / 10 : 0,
+      bultosPorHoraBruta: hb > 0 ? Math.round((b / hb) * 10) / 10 : 0,
+      bultosPorHoraNeta: hn > 0 ? Math.round((b / hn) * 10) / 10 : 0,
     };
   }, [data]);
 
@@ -43,7 +45,7 @@ function DailyMetricsTable({ data }: { data: any[] }) {
       <CardHeader className="flex flex-row items-start justify-between space-y-0">
         <div>
           <CardTitle className="flex items-center gap-2 text-base"><BarChart3 className="h-4 w-4" />Métricas Diarias</CardTitle>
-          <CardDescription>Resumen por día</CardDescription>
+          <CardDescription>Resumen por día con descuento de tiempos muertos</CardDescription>
         </div>
         <PrintButton title="Métricas Diarias" />
       </CardHeader>
@@ -55,8 +57,11 @@ function DailyMetricsTable({ data }: { data: any[] }) {
               <th className="text-xs font-semibold text-center p-2 min-w-[75px]">Misiones</th>
               <th className="text-xs font-semibold text-center p-2 min-w-[90px]">Bultos</th>
               <th className="text-xs font-semibold text-center p-2 min-w-[80px]">Hs. Brutas</th>
+              <th className="text-xs font-semibold text-center p-2 min-w-[75px] text-red-600">TM (hs)</th>
+              <th className="text-xs font-semibold text-center p-2 min-w-[80px]">Hs. Netas</th>
               <th className="text-xs font-semibold text-center p-2 min-w-[85px]">Prod.</th>
-              <th className="text-xs font-semibold text-center p-2 min-w-[85px]">B/H</th>
+              <th className="text-xs font-semibold text-center p-2 min-w-[85px]">B/H Bruta</th>
+              <th className="text-xs font-semibold text-center p-2 min-w-[85px]">B/H Neta</th>
             </tr>
           </thead>
           <tbody>
@@ -66,8 +71,11 @@ function DailyMetricsTable({ data }: { data: any[] }) {
                 <td className="text-xs text-center p-2">{row.misiones}</td>
                 <td className="text-xs text-center font-medium p-2">{row.bultos.toLocaleString("es-AR")}</td>
                 <td className="text-xs text-center p-2">{row.horasProductivas}</td>
+                <td className="text-xs text-center p-2 text-red-600 font-medium">{row.tmHoras || 0}</td>
+                <td className="text-xs text-center p-2 font-medium">{row.horasNetas}</td>
                 <td className="text-xs text-center font-medium text-emerald-600 p-2">{row.produccion}</td>
-                <td className="text-xs text-center font-bold text-sky-600 p-2">{row.bultosPorHora}</td>
+                <td className="text-xs text-center p-2 text-sky-600">{row.bultosPorHoraBruta}</td>
+                <td className="text-xs text-center font-bold text-sky-600 p-2">{row.bultosPorHoraNeta}</td>
               </tr>
             ))}
             <tr className="border-t-2 font-bold bg-muted/30">
@@ -75,8 +83,11 @@ function DailyMetricsTable({ data }: { data: any[] }) {
               <td className="text-xs text-center font-bold p-2">{totals.misiones}</td>
               <td className="text-xs text-center font-bold p-2">{totals.bultos.toLocaleString("es-AR")}</td>
               <td className="text-xs text-center font-bold p-2">{totals.horasProductivas}</td>
+              <td className="text-xs text-center font-bold p-2 text-red-600">{totals.tmHoras}</td>
+              <td className="text-xs text-center font-bold p-2">{totals.horasNetas}</td>
               <td className="text-xs text-center font-bold text-emerald-600 p-2">{totals.produccion}</td>
-              <td className="text-xs text-center font-bold text-sky-600 p-2">{totals.bultosPorHora}</td>
+              <td className="text-xs text-center font-bold text-sky-600 p-2">{totals.bultosPorHoraBruta}</td>
+              <td className="text-xs text-center font-bold text-sky-600 p-2">{totals.bultosPorHoraNeta}</td>
             </tr>
           </tbody>
         </table>

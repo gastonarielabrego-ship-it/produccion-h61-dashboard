@@ -2,6 +2,7 @@ import {
   getAllRecords,
   getSourceTable,
   parseFilters,
+  getTMByDate,
 } from "@/lib/turso";
 import { NextResponse } from "next/server";
 
@@ -9,7 +10,10 @@ export async function GET(request: Request) {
   try {
     const filters = parseFilters(request);
     const tableName = getSourceTable(request);
-    const records = await getAllRecords(filters, tableName);
+    const [records, tmByDate] = await Promise.all([
+      getAllRecords(filters, tableName),
+      getTMByDate(filters),
+    ]);
 
     // Per-day aggregation using unique (operario, hour) pairs for person-hours
     const dayMap: Record<number, { misionesSet: Set<string>; bultos: number; activeSlots: Set<string> }> = {};
@@ -30,9 +34,12 @@ export async function GET(request: Request) {
       const misiones = d.misionesSet.size;
       const bultos = d.bultos;
       const horasProductivas = d.activeSlots.size;
+      const tmHoras = Math.round((((tmByDate[date] || 0) / 60)) * 100) / 100;
+      const horasNetas = Math.round((horasProductivas - tmHoras) * 100) / 100;
       const produccion = misiones > 0 ? Math.round((bultos / misiones) * 10) / 10 : 0;
-      const bultosPorHora = horasProductivas > 0 ? Math.round((bultos / horasProductivas) * 10) / 10 : 0;
-      return { date, misiones, bultos, horasProductivas, produccion, bultosPorHora };
+      const bultosPorHoraBruta = horasProductivas > 0 ? Math.round((bultos / horasProductivas) * 10) / 10 : 0;
+      const bultosPorHoraNeta = horasNetas > 0 ? Math.round((bultos / horasNetas) * 10) / 10 : 0;
+      return { date, misiones, bultos, horasProductivas, tmHoras, horasNetas, produccion, bultosPorHoraBruta, bultosPorHoraNeta };
     });
 
     // Day heatmap: total bultos per (date, hour)
