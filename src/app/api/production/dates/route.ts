@@ -35,7 +35,12 @@ export async function GET(request: Request) {
       .map(([value, label]) => ({ value, label }))
       .sort((a, b) => a.label.localeCompare(b.label));
 
-    return NextResponse.json({ dates, circuits, activities, shifts, functions, operators });
+    // Months: unique YYYYMM from dates, with labels
+    const monthSet = new Set<number>();
+    for (const d of dates) monthSet.add(Math.floor(d / 100));
+    const months = Array.from(monthSet).sort((a, b) => b - a); // most recent first
+
+    return NextResponse.json({ dates, circuits, activities, shifts, functions, operators, months });
   } catch (error) {
     console.error("Error fetching filters:", error);
     return NextResponse.json(

@@ -18,6 +18,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface Filters {
   dates: number[];
+  months: number[];
   circuits: string[];
   activities: string[];
   shifts: { value: string; label: string }[];
@@ -26,6 +27,7 @@ interface Filters {
 }
 
 interface FilterState {
+  mes: string;
   dateFrom: string;
   dateTo: string;
   turno: string;
@@ -40,6 +42,7 @@ export function useProductionFilters(apiBase = "/api/production") {
   const [filterState, setFilterState] = useState<FilterState>({
     dateFrom: "",
     dateTo: "",
+    mes: "",
     turno: "",
     circuito: [],
     actividad: "",
@@ -64,19 +67,28 @@ export function useProductionFilters(apiBase = "/api/production") {
           setFilters(data);
         } else {
           // Table might not exist yet — return empty filters
-          setFilters({ dates: [], circuits: [], activities: [], shifts: [], functions: [], operators: [] });
+          setFilters({ dates: [], months: [], circuits: [], activities: [], shifts: [], functions: [], operators: [] });
         }
       })
       .catch(() => {
-        setFilters({ dates: [], circuits: [], activities: [], shifts: [], functions: [], operators: [] });
+        setFilters({ dates: [], months: [], circuits: [], activities: [], shifts: [], functions: [], operators: [] });
       });
   }, [filterVersion, apiBase, sourceParam]);
 
   const buildQuery = useCallback(() => {
     const params = new URLSearchParams();
     if (sourceParam) params.set("source", sourceParam);
-    if (filterState.dateFrom) params.set("dateFrom", filterState.dateFrom);
-    if (filterState.dateTo) params.set("dateTo", filterState.dateTo);
+    if (filterState.mes) {
+      const mesNum = Number(filterState.mes);
+      const year = Math.floor(mesNum / 100);
+      const month = mesNum % 100;
+      const lastDay = new Date(year, month, 0).getDate();
+      params.set("dateFrom", `${mesNum}01`);
+      params.set("dateTo", `${mesNum}${String(lastDay).padStart(2, "0")}`);
+    } else {
+      if (filterState.dateFrom) params.set("dateFrom", filterState.dateFrom);
+      if (filterState.dateTo) params.set("dateTo", filterState.dateTo);
+    }
     if (filterState.turno) params.set("turno", filterState.turno);
     for (const c of filterState.circuito) {
       params.append("circuito", c);
