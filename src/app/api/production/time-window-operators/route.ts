@@ -15,15 +15,40 @@ export async function GET(request: Request) {
     const window1Hours = new Set([10, 11, 12, 13]);  // 10-14 hs
     const window2Hours = new Set([18, 19, 20, 21]);  // 18-22 hs
 
-    // Track operario name
     const nameMap: Record<string, string> = {};
 
-    // Sets of (date, operario) that actually produced bultos in each window
-    const active6 = new Set<string>();
-    const active10 = new Set<string>();
-    const active18 = new Set<string>();
+    // Step 1: Find the true first active hour per (date, operario) across ALL their records
+    const firstHourMap: Record<string, number> = {};
 
-    // Bultos per operario per window (aggregated across dates)
+    for (const r of records) {
+      const key = `${r.date}:${r.operario}`;
+      nameMap[r.operario] = r.nombre;
+      let recordFirst = -1;
+      for (const hd of r.hourlyData) {
+        if (hd.quantity > 0) {
+          recordFirst = hd.hour;
+          break;
+        }
+      }
+      if (recordFirst >= 0) {
+        if (!(key in firstHourMap) || recordFirst < firstHourMap[key]) {
+          firstHourMap[key] = recordFirst;
+        }
+      }
+    }
+
+    // Step 2: Eligibility by first active hour
+    const eligible6 = new Set<string>();   // first hour < 6
+    const eligible10 = new Set<string>();  // first hour = 10
+    const eligible18 = new Set<string>();  // first hour = 18
+
+    for (const [key, fh] of Object.entries(firstHourMap)) {
+      if (fh < 6) eligible6.add(key);
+      if (fh === 10) eligible10.add(key);
+      if (fh === 18) eligible18.add(key);
+    }
+
+    // Step 3: Aggregate bultos only for eligible operators, and track who actually produced
     const opBultos6: Record<string, number> = {};
     const opBultos10: Record<string, number> = {};
     const opBultos18: Record<string, number> = {};
@@ -31,54 +56,64 @@ export async function GET(request: Request) {
     let bultos10_14 = 0;
     let bultos18_22 = 0;
 
+    // Track which eligible (date, operario) actually produced in the window
+    const produced6 = new Set<string>();
+    const produced10 = new Set<string>();
+    const produced18 = new Set<string>();
+
     for (const r of records) {
       const key = `${r.date}:${r.operario}`;
-      nameMap[r.operario] = r.nombre;
 
-      // Window 6-10
-      let q6 = 0;
-      for (const hd of r.hourlyData) {
-        if (window6Hours.has(hd.hour)) {
-          q6 += hd.quantity;
+      // Window 6-10: only eligible (first hour < 6)
+      if (eligible6.has(key)) {
+        let q = 0;
+        for (const hd of r.hourlyData) {
+          if (window6Hours.has(hd.hour)) {
+            q += hd.quantity;
+          }
+        }
+        if (q > 0) {
+          produced6.add(key);
+          bultos6_10 += q;
+          opBultos6[r.operario] = (opBultos6[r.operario] || 0) + q;
         }
       }
-      if (q6 > 0) {
-        active6.add(key);
-        bultos6_10 += q6;
-        opBultos6[r.operario] = (opBultos6[r.operario] || 0) + q6;
-      }
 
-      // Window 10-14
-      let q10 = 0;
-      for (const hd of r.hourlyData) {
-        if (window1Hours.has(hd.hour)) {
-          q10 += hd.quantity;
+      // Window 10-14: only eligible (first hour = 10)
+      if (eligible10.has(key)) {
+        let q = 0;
+        for (const hd of r.hourlyData) {
+          if (window1Hours.has(hd.hour)) {
+            q += hd.quantity;
+          }
+        }
+        if (q > 0) {
+          produced10.add(key);
+          bultos10_14 += q;
+          opBultos10[r.operario] = (opBultos10[r.operario] || 0) + q;
         }
       }
-      if (q10 > 0) {
-        active10.add(key);
-        bultos10_14 += q10;
-        opBultos10[r.operario] = (opBultos10[r.operario] || 0) + q10;
-      }
 
-      // Window 18-22
-      let q18 = 0;
-      for (const hd of r.hourlyData) {
-        if (window2Hours.has(hd.hour)) {
-          q18 += hd.quantity;
+      // Window 18-22: only eligible (first hour = 18)
+      if (eligible18.has(key)) {
+        let q = 0;
+        for (const hd of r.hourlyData) {
+          if (window2Hours.has(hd.hour)) {
+            q += hd.quantity;
+          }
         }
-      }
-      if (q18 > 0) {
-        active18.add(key);
-        bultos18_22 += q18;
-        opBultos18[r.operario] = (opBultos18[r.operario] || 0) + q18;
+        if (q > 0) {
+          produced18.add(key);
+          bultos18_22 += q;
+          opBultos18[r.operario] = (opBultos18[r.operario] || 0) + q;
+        }
       }
     }
 
-    // Misiones = unique (date, operario) pairs with actual production in window
-    const misiones6 = active6.size;
-    const misiones10 = active10.size;
-    const misiones18 = active18.size;
+    // Misiones = eligible AND produced bultos in the window
+    const misiones6 = produced6.size;
+    const misiones10 = produced10.size;
+    const misiones18 = produced18.size;
 
     // Build full operator list sorted by bultos (only those with production)
     const buildList = (bultosMap: Record<string, number>) =>
