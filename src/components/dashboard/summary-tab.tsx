@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Flame, Users, BarChart3 } from "lucide-react";
 import { PrintButton } from "./print-button";
+import { MonthlySummary } from "./monthly-summary";
 
 interface SummaryTabProps {
   baseQuery: string;
@@ -192,6 +193,7 @@ export function SummaryTab({ baseQuery, apiBase = "/api/production" }: SummaryTa
 
   return (
     <div className="space-y-6">
+      <MonthlySummary baseQuery={baseQuery} />
       <DailyMetricsTable data={data.dailyMetrics} />
       <HeatmapTable title="Mapa de Calor por Día" description="Horas más y menos productivas por día — cantidad de bultos" icon={Flame} data={data.dayHeatmap} printTitle="Mapa de Calor por Día" operatorName={data.filteredOperatorName} />
       <HeatmapTable title="Mapa de Calor por Colaborador" description="Distribución horaria de cada colaborador — cantidad de bultos" icon={Users} data={data.collaboratorHeatmap} isCollaborator printTitle="Mapa de Calor por Colaborador" />

@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Filter, Factory, Activity, User, Check, ChevronsUpDown, X } from "lucide-react";
+import { Filter, Factory, Activity, User, Check, ChevronsUpDown, X, CalendarDays } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -273,13 +273,42 @@ export function FilterBar({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+          {/* Mes */}
+          <Select
+            value={filterState.mes}
+            onValueChange={(v) =>
+              setFilterState((prev) => ({ ...prev, mes: v === "__all__" ? "" : v, dateFrom: "", dateTo: "" }))
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Todos los meses" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Todos los meses</SelectItem>
+              {(filters.months || []).map((m) => {
+                const s = String(m);
+                const monthNames = ["", "Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+                const label = `${monthNames[Number(s.slice(4, 6))]} ${s.slice(0, 4)}`;
+                return (
+                  <SelectItem key={m} value={String(m)}>
+                    <span className="flex items-center gap-2">
+                      <CalendarDays className="h-3 w-3" />
+                      {label}
+                    </span>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+
           {/* Desde */}
           <Select
             value={filterState.dateFrom}
             onValueChange={(v) =>
-              setFilterState((prev) => ({ ...prev, dateFrom: v === "__all__" ? "" : v }))
+              setFilterState((prev) => ({ ...prev, dateFrom: v === "__all__" ? "" : v, mes: "" }))
             }
+            disabled={!!filterState.mes}
           >
             <SelectTrigger>
               <SelectValue placeholder="Desde" />
@@ -298,8 +327,9 @@ export function FilterBar({
           <Select
             value={filterState.dateTo}
             onValueChange={(v) =>
-              setFilterState((prev) => ({ ...prev, dateTo: v === "__all__" ? "" : v }))
+              setFilterState((prev) => ({ ...prev, dateTo: v === "__all__" ? "" : v, mes: "" }))
             }
+            disabled={!!filterState.mes}
           >
             <SelectTrigger>
               <SelectValue placeholder="Hasta" />
