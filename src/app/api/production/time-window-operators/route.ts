@@ -15,43 +15,15 @@ export async function GET(request: Request) {
     const window1Hours = new Set([10, 11, 12, 13]);  // 10-14 hs
     const window2Hours = new Set([18, 19, 20, 21]);  // 18-22 hs
 
-    // Step 1: Find the true first active hour per (date, operario) across ALL their records
-    const firstHourMap: Record<string, number> = {};
     // Track operario name
     const nameMap: Record<string, string> = {};
 
-    for (const r of records) {
-      const key = `${r.date}:${r.operario}`;
-      nameMap[r.operario] = r.nombre;
-      let recordFirst = -1;
-      for (const hd of r.hourlyData) {
-        if (hd.quantity > 0) {
-          recordFirst = hd.hour;
-          break;
-        }
-      }
-      if (recordFirst >= 0) {
-        if (!(key in firstHourMap) || recordFirst < firstHourMap[key]) {
-          firstHourMap[key] = recordFirst;
-        }
-      }
-    }
+    // Sets of (date, operario) that actually produced bultos in each window
+    const active6 = new Set<string>();
+    const active10 = new Set<string>();
+    const active18 = new Set<string>();
 
-    // Step 2: Identify eligible (date, operario) for each window
-    const eligible6 = new Set<string>();
-    const eligible10 = new Set<string>();
-    const eligible18 = new Set<string>();
-
-    for (const [key, fh] of Object.entries(firstHourMap)) {
-      // Franja 6-10: personal que tiene bultos ANTES de las 6 y se queda hasta las 10
-      if (fh < 6) eligible6.add(key);
-      // Franja 10-14: personal que inicia exactamente a las 10
-      if (fh === 10) eligible10.add(key);
-      // Franja 18-22: personal que inicia exactamente a las 18
-      if (fh === 18) eligible18.add(key);
-    }
-
-    // Step 3: Aggregate bultos per operario, per window, only for eligible people
+    // Bultos per operario per window (aggregated across dates)
     const opBultos6: Record<string, number> = {};
     const opBultos10: Record<string, number> = {};
     const opBultos18: Record<string, number> = {};
@@ -61,43 +33,54 @@ export async function GET(request: Request) {
 
     for (const r of records) {
       const key = `${r.date}:${r.operario}`;
+      nameMap[r.operario] = r.nombre;
 
-      if (eligible6.has(key)) {
-        for (const hd of r.hourlyData) {
-          if (window6Hours.has(hd.hour)) {
-            const q = hd.quantity;
-            bultos6_10 += q;
-            opBultos6[r.operario] = (opBultos6[r.operario] || 0) + q;
-          }
+      // Window 6-10
+      let q6 = 0;
+      for (const hd of r.hourlyData) {
+        if (window6Hours.has(hd.hour)) {
+          q6 += hd.quantity;
         }
       }
-
-      if (eligible10.has(key)) {
-        for (const hd of r.hourlyData) {
-          if (window1Hours.has(hd.hour)) {
-            const q = hd.quantity;
-            bultos10_14 += q;
-            opBultos10[r.operario] = (opBultos10[r.operario] || 0) + q;
-          }
-        }
+      if (q6 > 0) {
+        active6.add(key);
+        bultos6_10 += q6;
+        opBultos6[r.operario] = (opBultos6[r.operario] || 0) + q6;
       }
 
-      if (eligible18.has(key)) {
-        for (const hd of r.hourlyData) {
-          if (window2Hours.has(hd.hour)) {
-            const q = hd.quantity;
-            bultos18_22 += q;
-            opBultos18[r.operario] = (opBultos18[r.operario] || 0) + q;
-          }
+      // Window 10-14
+      let q10 = 0;
+      for (const hd of r.hourlyData) {
+        if (window1Hours.has(hd.hour)) {
+          q10 += hd.quantity;
         }
+      }
+      if (q10 > 0) {
+        active10.add(key);
+        bultos10_14 += q10;
+        opBultos10[r.operario] = (opBultos10[r.operario] || 0) + q10;
+      }
+
+      // Window 18-22
+      let q18 = 0;
+      for (const hd of r.hourlyData) {
+        if (window2Hours.has(hd.hour)) {
+          q18 += hd.quantity;
+        }
+      }
+      if (q18 > 0) {
+        active18.add(key);
+        bultos18_22 += q18;
+        opBultos18[r.operario] = (opBultos18[r.operario] || 0) + q18;
       }
     }
 
-    const misiones6 = eligible6.size;
-    const misiones10 = eligible10.size;
-    const misiones18 = eligible18.size;
+    // Misiones = unique (date, operario) pairs with actual production in window
+    const misiones6 = active6.size;
+    const misiones10 = active10.size;
+    const misiones18 = active18.size;
 
-    // Build full operator list sorted by bultos
+    // Build full operator list sorted by bultos (only those with production)
     const buildList = (bultosMap: Record<string, number>) =>
       Object.entries(bultosMap)
         .map(([operario, total]) => ({
