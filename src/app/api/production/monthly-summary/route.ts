@@ -3,6 +3,7 @@ import {
   getSourceTable,
   parseFilters,
   getTMByDate,
+  getTMByDateOperario,
 } from "@/lib/turso";
 import { NextResponse } from "next/server";
 
@@ -12,9 +13,10 @@ export async function GET(request: Request) {
   try {
     const filters = parseFilters(request);
     const tableName = getSourceTable(request);
-    const [records, tmByDate] = await Promise.all([
+    const [records, tmByDate, tmByDateOp] = await Promise.all([
       getAllRecords(filters, tableName),
       getTMByDate(filters),
+      getTMByDateOperario(filters),
     ]);
 
     // Group by month (YYYYMM)
@@ -51,7 +53,11 @@ export async function GET(request: Request) {
       // Sum TM for this month
       let tmMinutos = 0;
       for (const d of m.days) {
-        tmMinutos += tmByDate[d] || 0;
+        if (filters.operario) {
+          tmMinutos += tmByDateOp[`${d}:${filters.operario}`] || 0;
+        } else {
+          tmMinutos += tmByDate[d] || 0;
+        }
       }
       const tmHoras = Math.round((tmMinutos / 60) * 100) / 100;
       const horasNetas = Math.round((horasBrutas - tmHoras) * 100) / 100;

@@ -3,6 +3,7 @@ import {
   getSourceTable,
   parseFilters,
   getTMByDate,
+  getTMByDateOperario,
 } from "@/lib/turso";
 import { NextResponse } from "next/server";
 
@@ -10,9 +11,10 @@ export async function GET(request: Request) {
   try {
     const filters = parseFilters(request);
     const tableName = getSourceTable(request);
-    const [records, tmByDate] = await Promise.all([
+    const [records, tmByDate, tmByDateOp] = await Promise.all([
       getAllRecords(filters, tableName),
       getTMByDate(filters),
+      getTMByDateOperario(filters),
     ]);
 
     // Per-day aggregation using unique (operario, hour) pairs for person-hours
@@ -34,7 +36,13 @@ export async function GET(request: Request) {
       const misiones = d.misionesSet.size;
       const bultos = d.bultos;
       const horasProductivas = d.activeSlots.size;
-      const tmHoras = Math.round((((tmByDate[date] || 0) / 60)) * 100) / 100;
+      let tmMinutos = 0;
+      if (filters.operario) {
+        tmMinutos = tmByDateOp[`${date}:${filters.operario}`] || 0;
+      } else {
+        tmMinutos = tmByDate[date] || 0;
+      }
+      const tmHoras = Math.round((tmMinutos / 60) * 100) / 100;
       const horasNetas = Math.round((horasProductivas - tmHoras) * 100) / 100;
       const produccion = misiones > 0 ? Math.round((bultos / misiones) * 10) / 10 : 0;
       const bultosPorHoraBruta = horasProductivas > 0 ? Math.round((bultos / horasProductivas) * 10) / 10 : 0;

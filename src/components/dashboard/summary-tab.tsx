@@ -28,7 +28,7 @@ function formatArgDate(d: number): string {
   return `${s.slice(6, 8)}/${s.slice(4, 6)}`;
 }
 
-function DailyMetricsTable({ data }: { data: any[] }) {
+function DailyMetricsTable({ data, operatorName }: { data: any[]; operatorName?: string | null }) {
   const totals = useMemo(() => {
     let m = 0, b = 0, hb = 0, tm = 0;
     for (const r of data) { m += r.misiones; b += r.bultos; hb += r.horasProductivas; tm += r.tmHoras || 0; }
@@ -55,7 +55,7 @@ function DailyMetricsTable({ data }: { data: any[] }) {
           <thead>
             <tr className="border-b">
               <th className="text-xs font-semibold text-left p-2 sticky left-0 bg-card min-w-[70px]">Día</th>
-              <th className="text-xs font-semibold text-center p-2 min-w-[75px]">Misiones</th>
+              <th className="text-xs font-semibold text-center p-2 min-w-[75px]">{operatorName || "Misiones"}</th>
               <th className="text-xs font-semibold text-center p-2 min-w-[90px]">Bultos</th>
               <th className="text-xs font-semibold text-center p-2 min-w-[80px]">Hs. Brutas</th>
               <th className="text-xs font-semibold text-center p-2 min-w-[75px] text-red-600">TM (hs)</th>
@@ -69,7 +69,7 @@ function DailyMetricsTable({ data }: { data: any[] }) {
             {data.map((row) => (
               <tr key={row.date} className="border-b hover:bg-muted/50">
                 <td className="text-xs font-medium p-2 sticky left-0 bg-card">{formatArgDate(row.date)}</td>
-                <td className="text-xs text-center p-2">{row.misiones}</td>
+                <td className="text-xs text-center p-2">{operatorName || row.misiones}</td>
                 <td className="text-xs text-center font-medium p-2">{row.bultos.toLocaleString("es-AR")}</td>
                 <td className="text-xs text-center p-2">{row.horasProductivas}</td>
                 <td className="text-xs text-center p-2 text-red-600 font-medium">{row.tmHoras || 0}</td>
@@ -81,7 +81,7 @@ function DailyMetricsTable({ data }: { data: any[] }) {
             ))}
             <tr className="border-t-2 font-bold bg-muted/30">
               <td className="text-xs font-bold p-2 sticky left-0 bg-muted/30">TOTAL</td>
-              <td className="text-xs text-center font-bold p-2">{totals.misiones}</td>
+              <td className="text-xs text-center font-bold p-2">{operatorName || totals.misiones}</td>
               <td className="text-xs text-center font-bold p-2">{totals.bultos.toLocaleString("es-AR")}</td>
               <td className="text-xs text-center font-bold p-2">{totals.horasProductivas}</td>
               <td className="text-xs text-center font-bold p-2 text-red-600">{totals.tmHoras}</td>
@@ -194,7 +194,7 @@ export function SummaryTab({ baseQuery, apiBase = "/api/production" }: SummaryTa
   return (
     <div className="space-y-6">
       <MonthlySummary baseQuery={baseQuery} />
-      <DailyMetricsTable data={data.dailyMetrics} />
+      <DailyMetricsTable data={data.dailyMetrics} operatorName={data.filteredOperatorName} />
       <HeatmapTable title="Mapa de Calor por Día" description="Horas más y menos productivas por día — cantidad de bultos" icon={Flame} data={data.dayHeatmap} printTitle="Mapa de Calor por Día" operatorName={data.filteredOperatorName} />
       <HeatmapTable title="Mapa de Calor por Colaborador" description="Distribución horaria de cada colaborador — cantidad de bultos" icon={Users} data={data.collaboratorHeatmap} isCollaborator printTitle="Mapa de Calor por Colaborador" />
     </div>
