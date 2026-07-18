@@ -69,7 +69,10 @@ export async function GET(request: Request) {
       return row;
     });
 
-    return NextResponse.json({ dailyMetrics, dayHeatmap, collaboratorHeatmap });
+    // If filtered by operario, return their name for the UI
+    const filteredOperatorName = filters.operario && records.length > 0 ? records[0].nombre : null;
+
+    return NextResponse.json({ dailyMetrics, dayHeatmap, collaboratorHeatmap, filteredOperatorName });
   } catch (error) {
     console.error("Error fetching summary tables:", error);
     return NextResponse.json({ error: "Error fetching summary tables" }, { status: 500 });

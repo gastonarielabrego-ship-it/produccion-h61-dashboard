@@ -87,9 +87,10 @@ function DailyMetricsTable({ data }: { data: any[] }) {
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
-function HeatmapTable({ title, description, icon: Icon, data, isCollaborator, printTitle }: {
+function HeatmapTable({ title, description, icon: Icon, data, isCollaborator, printTitle, operatorName }: {
   title: string; description: string; icon: typeof Flame;
   data: Record<string, string | number>[]; isCollaborator?: boolean; printTitle: string;
+  operatorName?: string | null;
 }) {
   const maxVal = useMemo(() => {
     let m = 0;
@@ -111,9 +112,12 @@ function HeatmapTable({ title, description, icon: Icon, data, isCollaborator, pr
           <table className="w-full text-sm" style={{ minWidth: 900 }}>
             <thead className="sticky top-0 z-10">
               <tr className="border-b bg-card">
-                <th className="text-[10px] font-semibold text-left p-1 sticky left-0 bg-card z-20 min-w-[140px] max-w-[140px]">
+                <th className="text-[10px] font-semibold text-left p-1 sticky left-0 bg-card z-20 min-w-[140px] max-w-[260px]">
                   {isCollaborator ? "Colaborador / Hora" : "Día / Hora"}
                 </th>
+                {operatorName && !isCollaborator && (
+                  <th className="text-[10px] font-semibold text-left p-1 min-w-[120px]">Colaborador</th>
+                )}
                 {HOURS.map((h) => (
                   <th key={h} className={`text-[10px] font-semibold text-center p-1 min-w-[38px] ${(h === 10 || h === 14 || h === 18 || h === 22) ? "text-amber-600 bg-amber-50" : ""}`}>{h}</th>
                 ))}
@@ -129,6 +133,9 @@ function HeatmapTable({ title, description, icon: Icon, data, isCollaborator, pr
                 return (
                   <tr key={id} className="border-b hover:bg-muted/50">
                     <td className="text-[11px] font-medium p-1 sticky left-0 bg-card z-10 max-w-[140px] truncate">{label}</td>
+                    {operatorName && !isCollaborator && (
+                      <td className="text-[11px] p-1 text-muted-foreground truncate">{operatorName}</td>
+                    )}
                     {HOURS.map((h) => {
                       const val = Number(row[String(h)]) || 0;
                       return <td key={h} className={`text-[10px] text-center p-1 min-w-[38px] ${heatColor(val, maxVal)}`}>{val > 0 ? val : ""}</td>;
@@ -175,7 +182,7 @@ export function SummaryTab({ baseQuery, apiBase = "/api/production" }: SummaryTa
   return (
     <div className="space-y-6">
       <DailyMetricsTable data={data.dailyMetrics} />
-      <HeatmapTable title="Mapa de Calor por Día" description="Horas más y menos productivas por día — cantidad de bultos" icon={Flame} data={data.dayHeatmap} printTitle="Mapa de Calor por Día" />
+      <HeatmapTable title="Mapa de Calor por Día" description="Horas más y menos productivas por día — cantidad de bultos" icon={Flame} data={data.dayHeatmap} printTitle="Mapa de Calor por Día" operatorName={data.filteredOperatorName} />
       <HeatmapTable title="Mapa de Calor por Colaborador" description="Distribución horaria de cada colaborador — cantidad de bultos" icon={Users} data={data.collaboratorHeatmap} isCollaborator printTitle="Mapa de Calor por Colaborador" />
     </div>
   );
