@@ -6,8 +6,9 @@ import { DashboardTab } from "@/components/dashboard/dashboard-tab";
 import { TimeWindowTable } from "@/components/dashboard/time-window-table";
 import { HeaderActions } from "@/components/dashboard/header-actions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BarChart3, Clock, Table2, Cog } from "lucide-react";
+import { BarChart3, Clock, Table2, Cog, Target } from "lucide-react";
 import { SummaryTab } from "@/components/dashboard/summary-tab";
+import { CitacionTab } from "@/components/dashboard/citacion-tab";
 
 const API_PRODUCTION = "/api/production";
 
@@ -81,6 +82,9 @@ export default function Home() {
             <TabsTrigger value="resumen" className="gap-1.5">
               <Table2 className="h-3.5 w-3.5" /> Resumen
             </TabsTrigger>
+            <TabsTrigger value="citacion" className="gap-1.5">
+              <Target className="h-3.5 w-3.5" /> Citación
+            </TabsTrigger>
             <TabsTrigger value="clarkistas" className="gap-1.5">
               <Cog className="h-3.5 w-3.5" /> Clarkistas
             </TabsTrigger>
@@ -99,6 +103,9 @@ export default function Home() {
           </TabsContent>
           <TabsContent value="resumen" className="mt-6">
             <SummaryTab key={`res-${refreshKey}`} baseQuery={baseQuery} apiBase={API_PRODUCTION} />
+          </TabsContent>
+          <TabsContent value="citacion" className="mt-6">
+            <CitacionTab key={`cit-${refreshKey}`} baseQuery={baseQuery} />
           </TabsContent>
 
           {/* Clarkistas full section */}
