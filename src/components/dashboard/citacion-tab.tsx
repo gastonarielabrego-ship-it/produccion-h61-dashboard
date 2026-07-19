@@ -4,19 +4,22 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PrintButton } from "./print-button";
 import { Target } from "lucide-react";
+import React from "react";
 
-const THRESHOLDS = [85, 90, 95, 100];
+const THRESHOLDS = [85, 100, 120, 140, 160, 180, 200];
 
-function bhColor(value: number, threshold: number): string {
+function cellColor(value: number, threshold: number): string {
+  if (value <= 0) return "";
   if (value >= threshold) return "bg-emerald-500 text-white font-bold";
-  if (value >= threshold - 5) return "bg-amber-400 text-amber-950 font-semibold";
+  if (value >= threshold - 20) return "bg-amber-400 text-amber-950 font-semibold";
   return "bg-red-500 text-white font-bold";
 }
 
-function bhColorMuted(value: number, threshold: number): string {
-  if (value >= threshold) return "text-emerald-700 font-bold";
-  if (value >= threshold - 5) return "text-amber-600 font-semibold";
-  return "text-red-600 font-bold";
+function cellColorLight(value: number, threshold: number): string {
+  if (value <= 0) return "";
+  if (value >= threshold) return "bg-emerald-100 text-emerald-800 font-bold";
+  if (value >= threshold - 20) return "bg-amber-100 text-amber-800 font-semibold";
+  return "bg-red-100 text-red-800 font-bold";
 }
 
 function formatArgDate(d: number): string {
@@ -31,7 +34,7 @@ interface CitacionTabProps {
 export function CitacionTab({ baseQuery }: CitacionTabProps) {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState(false);
-  const [threshold, setThreshold] = useState(95);
+  const [threshold, setThreshold] = useState(100);
 
   const fetchData = useCallback(() => {
     setError(false);
@@ -44,7 +47,6 @@ export function CitacionTab({ baseQuery }: CitacionTabProps) {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Sort operators by overallBH descending
   const sortedOperators = useMemo(() => {
     if (!data) return [];
     return [...data.operators].sort((a: any, b: any) => b.overallBH - a.overallBH);
@@ -75,17 +77,16 @@ export function CitacionTab({ baseQuery }: CitacionTabProps) {
               <Target className="h-4 w-4" />
               Citación
             </CardTitle>
-            <CardDescription>Productividad neta por colaborador y día (B/H Neta)</CardDescription>
+            <CardDescription>Productividad neta por colaborador (B/H Neta)</CardDescription>
           </div>
-          {/* Threshold selector */}
           <div className="flex items-center gap-2 ml-2">
-            <span className="text-xs text-muted-foreground">B/H meta:</span>
+            <span className="text-xs text-muted-foreground">Meta B/H:</span>
             <div className="flex rounded-lg border overflow-hidden">
               {THRESHOLDS.map((t) => (
                 <button
                   key={t}
                   onClick={() => setThreshold(t)}
-                  className={`px-3 py-1.5 text-xs font-medium transition-colors border-r last:border-r-0 ${
+                  className={`px-2.5 py-1.5 text-xs font-medium transition-colors border-r last:border-r-0 ${
                     threshold === t
                       ? "bg-primary text-primary-foreground"
                       : "bg-background hover:bg-muted"
@@ -95,7 +96,6 @@ export function CitacionTab({ baseQuery }: CitacionTabProps) {
                 </button>
               ))}
             </div>
-            {/* Legend */}
             <div className="flex items-center gap-3 ml-2">
               <span className="flex items-center gap-1 text-[10px]">
                 <span className="inline-block w-3 h-3 rounded bg-emerald-500" />
@@ -103,11 +103,11 @@ export function CitacionTab({ baseQuery }: CitacionTabProps) {
               </span>
               <span className="flex items-center gap-1 text-[10px]">
                 <span className="inline-block w-3 h-3 rounded bg-amber-400" />
-                {threshold - 5}–{threshold - 1}
+                {threshold - 20}–{threshold - 1}
               </span>
               <span className="flex items-center gap-1 text-[10px]">
                 <span className="inline-block w-3 h-3 rounded bg-red-500" />
-                {"<"} {threshold - 5}
+                {"<"} {threshold - 20}
               </span>
             </div>
           </div>
@@ -116,71 +116,54 @@ export function CitacionTab({ baseQuery }: CitacionTabProps) {
       </CardHeader>
       <CardContent className="p-0">
         <div className="overflow-auto max-h-[75vh]">
-          <table className="w-full text-xs" style={{ minWidth: 600 + dates.length * 100 }}>
+          <table className="w-full text-xs" style={{ minWidth: 700 + dates.length * 52 }}>
             <thead className="sticky top-0 z-10">
-              {/* Header row 1: dates spanning 5 columns each */}
               <tr className="border-b bg-card">
-                <th rowSpan={2} className="text-[10px] font-semibold text-left p-1.5 sticky left-0 bg-card z-20 min-w-[160px] max-w-[220px]">
+                <th rowSpan={2} className="text-[10px] font-semibold text-left p-1.5 sticky left-0 bg-card z-20 min-w-[150px] max-w-[200px]">
                   Colaborador
                 </th>
+                <th rowSpan={2} className="text-[10px] font-semibold text-center p-1 min-w-[40px]">Días</th>
+                <th rowSpan={2} className="text-[10px] font-semibold text-center p-1 min-w-[52px]">Hs. Trab.</th>
+                <th rowSpan={2} className="text-[10px] font-semibold text-center p-1 text-red-500 min-w-[42px]">TM (hs)</th>
+                <th rowSpan={2} className="text-[10px] font-semibold text-center p-1 min-w-[60px]">Bultos</th>
+                <th rowSpan={2} className="text-[10px] font-bold text-center p-1 min-w-[60px]">B/H Neta</th>
                 {dates.map((d) => (
-                  <th key={d} colSpan={5} className="text-[10px] font-semibold text-center p-1 border-l bg-muted/40">
+                  <th key={d} className="text-[10px] font-semibold text-center p-1 border-l min-w-[52px]">
                     {formatArgDate(d)}
                   </th>
                 ))}
-                <th colSpan={5} className="text-[10px] font-bold text-center p-1 border-l sticky right-0 bg-card z-20 bg-emerald-50">
-                  TOTAL
-                </th>
-              </tr>
-              {/* Header row 2: sub-columns */}
-              <tr className="border-b bg-card">
-                {dates.map((d) => (
-                  <React.Fragment key={`sub-${d}`}>
-                    <th className="text-[9px] font-medium text-center p-0.5 border-l text-muted-foreground min-w-[52px]">Hs.B</th>
-                    <th className="text-[9px] font-medium text-center p-0.5 text-red-500 min-w-[42px]">TM</th>
-                    <th className="text-[9px] font-medium text-center p-0.5 text-muted-foreground min-w-[52px]">Hs.N</th>
-                    <th className="text-[9px] font-medium text-center p-0.5 text-muted-foreground min-w-[58px]">Bultos</th>
-                    <th className="text-[9px] font-bold text-center p-0.5 min-w-[58px]">B/H N</th>
-                  </React.Fragment>
-                ))}
-                <th className="text-[9px] font-medium text-center p-0.5 border-l sticky right-0 bg-emerald-50 min-w-[52px]">Hs.B</th>
-                <th className="text-[9px] font-medium text-center p-0.5 text-red-500 sticky right-0 bg-emerald-50 min-w-[42px]">TM</th>
-                <th className="text-[9px] font-medium text-center p-0.5 sticky right-0 bg-emerald-50 min-w-[52px]">Hs.N</th>
-                <th className="text-[9px] font-medium text-center p-0.5 sticky right-0 bg-emerald-50 min-w-[58px]">Bultos</th>
-                <th className="text-[9px] font-bold text-center p-0.5 sticky right-0 bg-emerald-50 z-20 min-w-[58px]">B/H N</th>
               </tr>
             </thead>
             <tbody>
-              {sortedOperators.map((op: any) => (
-                <tr key={op.operario} className="border-b hover:bg-muted/30">
-                  <td className="text-[11px] font-medium p-1.5 sticky left-0 bg-card z-10 max-w-[160px] truncate">
-                    {op.nombre}
-                  </td>
-                  {dates.map((d: number) => {
-                    const day = (op.days as any[]).find((dd: any) => dd.date === d);
-                    const bh = day?.bhNeta || 0;
-                    return (
-                      <React.Fragment key={`${op.operario}-${d}`}>
-                        <td className="text-[10px] text-center p-0.5 border-l">{day?.brutas || 0}</td>
-                        <td className="text-[10px] text-center p-0.5 text-red-600">{day?.tmHoras || 0}</td>
-                        <td className="text-[10px] text-center p-0.5">{day?.netas || 0}</td>
-                        <td className="text-[10px] text-center p-0.5 font-medium">{day?.bultos ? day.bultos.toLocaleString("es-AR") : ""}</td>
-                        <td className={`text-[10px] text-center p-0.5 ${bh > 0 ? bhColorMuted(bh, threshold) : "text-muted-foreground"}`}>
+              {sortedOperators.map((op: any) => {
+                const daysWorked = (op.days as any[]).filter((d: any) => d.brutas > 0).length;
+                return (
+                  <tr key={op.operario} className="border-b hover:bg-muted/30">
+                    <td className="text-[11px] font-medium p-1.5 sticky left-0 bg-card z-10 max-w-[150px] truncate">
+                      {op.nombre}
+                    </td>
+                    <td className="text-[11px] text-center p-1">{daysWorked}</td>
+                    <td className="text-[11px] text-center p-1">{op.totalBrutas}</td>
+                    <td className="text-[11px] text-center p-1 text-red-600">{op.totalTM}</td>
+                    <td className="text-[11px] text-center p-1 font-medium">{op.totalBultos.toLocaleString("es-AR")}</td>
+                    <td className={`text-[11px] text-center p-1 ${cellColor(op.overallBH, threshold)}`}>
+                      {op.overallBH}
+                    </td>
+                    {dates.map((d: number) => {
+                      const day = (op.days as any[]).find((dd: any) => dd.date === d);
+                      const bh = day?.bhNeta || 0;
+                      return (
+                        <td
+                          key={`${op.operario}-${d}`}
+                          className={`text-[10px] text-center p-1 border-l ${bh > 0 ? cellColorLight(bh, threshold) : ""}`}
+                        >
                           {bh > 0 ? bh : ""}
                         </td>
-                      </React.Fragment>
-                    );
-                  })}
-                  {/* Total row */}
-                  <td className="text-[10px] text-center p-0.5 border-l font-medium sticky right-0 bg-muted/20">{op.totalBrutas}</td>
-                  <td className="text-[10px] text-center p-0.5 text-red-600 font-medium sticky right-0 bg-muted/20">{op.totalTM}</td>
-                  <td className="text-[10px] text-center p-0.5 font-medium sticky right-0 bg-muted/20">{op.totalNetas}</td>
-                  <td className="text-[10px] text-center p-0.5 font-bold sticky right-0 bg-muted/20">{op.totalBultos.toLocaleString("es-AR")}</td>
-                  <td className={`text-[10px] text-center p-1 font-bold sticky right-0 z-10 ${bhColor(op.overallBH, threshold)}`}>
-                    {op.overallBH}
-                  </td>
-                </tr>
-              ))}
+                      );
+                    })}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -188,6 +171,3 @@ export function CitacionTab({ baseQuery }: CitacionTabProps) {
     </Card>
   );
 }
-
-// Need React for Fragment in the table
-import React from "react";
