@@ -6,19 +6,19 @@ import { PrintButton } from "./print-button";
 import { Target } from "lucide-react";
 import React from "react";
 
-const THRESHOLDS = [85, 100, 120, 140, 160, 180, 200];
+const THRESHOLDS = Array.from({ length: 24 }, (_, i) => 85 + i * 5); // 85,90,95,...,200
 
-function cellColor(value: number, threshold: number): string {
+function cellColor(value: number): string {
   if (value <= 0) return "";
-  if (value >= threshold) return "bg-emerald-500 text-white font-bold";
-  if (value >= threshold - 20) return "bg-amber-400 text-amber-950 font-semibold";
+  if (value >= 85) return "bg-emerald-500 text-white font-bold";
+  if (value >= 80) return "bg-amber-400 text-amber-950 font-semibold";
   return "bg-red-500 text-white font-bold";
 }
 
-function cellColorLight(value: number, threshold: number): string {
+function cellColorLight(value: number): string {
   if (value <= 0) return "";
-  if (value >= threshold) return "bg-emerald-100 text-emerald-800 font-bold";
-  if (value >= threshold - 20) return "bg-amber-100 text-amber-800 font-semibold";
+  if (value >= 85) return "bg-emerald-100 text-emerald-800 font-bold";
+  if (value >= 80) return "bg-amber-100 text-amber-800 font-semibold";
   return "bg-red-100 text-red-800 font-bold";
 }
 
@@ -34,7 +34,7 @@ interface CitacionTabProps {
 export function CitacionTab({ baseQuery }: CitacionTabProps) {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState(false);
-  const [threshold, setThreshold] = useState(100);
+  const [threshold, setThreshold] = useState(85);
 
   const fetchData = useCallback(() => {
     setError(false);
@@ -80,34 +80,28 @@ export function CitacionTab({ baseQuery }: CitacionTabProps) {
             <CardDescription>Productividad neta por colaborador (B/H Neta)</CardDescription>
           </div>
           <div className="flex items-center gap-2 ml-2">
-            <span className="text-xs text-muted-foreground">Meta B/H:</span>
-            <div className="flex rounded-lg border overflow-hidden">
+            <span className="text-xs text-muted-foreground">Meta:</span>
+            <select
+              value={threshold}
+              onChange={(e) => setThreshold(Number(e.target.value))}
+              className="h-7 rounded-md border bg-background px-2 text-xs font-medium"
+            >
               {THRESHOLDS.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setThreshold(t)}
-                  className={`px-2.5 py-1.5 text-xs font-medium transition-colors border-r last:border-r-0 ${
-                    threshold === t
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background hover:bg-muted"
-                  }`}
-                >
-                  {t}
-                </button>
+                <option key={t} value={t}>{t}</option>
               ))}
-            </div>
+            </select>
             <div className="flex items-center gap-3 ml-2">
               <span className="flex items-center gap-1 text-[10px]">
                 <span className="inline-block w-3 h-3 rounded bg-emerald-500" />
-                {">"}= {threshold}
+                {">"}= 85
               </span>
               <span className="flex items-center gap-1 text-[10px]">
                 <span className="inline-block w-3 h-3 rounded bg-amber-400" />
-                {threshold - 20}–{threshold - 1}
+                80–84
               </span>
               <span className="flex items-center gap-1 text-[10px]">
                 <span className="inline-block w-3 h-3 rounded bg-red-500" />
-                {"<"} {threshold - 20}
+                {"<"} 80
               </span>
             </div>
           </div>
@@ -146,7 +140,7 @@ export function CitacionTab({ baseQuery }: CitacionTabProps) {
                     <td className="text-[11px] text-center p-1">{op.totalBrutas}</td>
                     <td className="text-[11px] text-center p-1 text-red-600">{op.totalTM}</td>
                     <td className="text-[11px] text-center p-1 font-medium">{op.totalBultos.toLocaleString("es-AR")}</td>
-                    <td className={`text-[11px] text-center p-1 ${cellColor(op.overallBH, threshold)}`}>
+                    <td className={`text-[11px] text-center p-1 ${cellColor(op.overallBH)}`}>
                       {op.overallBH}
                     </td>
                     {dates.map((d: number) => {
@@ -155,7 +149,7 @@ export function CitacionTab({ baseQuery }: CitacionTabProps) {
                       return (
                         <td
                           key={`${op.operario}-${d}`}
-                          className={`text-[10px] text-center p-1 border-l ${bh > 0 ? cellColorLight(bh, threshold) : ""}`}
+                          className={`text-[10px] text-center p-1 border-l ${bh > 0 ? cellColorLight(bh) : ""}`}
                         >
                           {bh > 0 ? bh : ""}
                         </td>
