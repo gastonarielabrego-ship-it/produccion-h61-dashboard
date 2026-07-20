@@ -105,7 +105,7 @@ export default function Home() {
             <SummaryTab key={`res-${refreshKey}`} baseQuery={baseQuery} apiBase={API_PRODUCTION} />
           </TabsContent>
           <TabsContent value="citacion" className="mt-6">
-            <CitacionTab key={`cit-${refreshKey}`} baseQuery={baseQuery} />
+            <CitacionTab key={`cit-${refreshKey}`} baseQuery={baseQuery} showTipoFilter />
           </TabsContent>
 
           {/* Clarkistas full section */}

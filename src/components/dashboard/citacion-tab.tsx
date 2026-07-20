@@ -29,12 +29,21 @@ function formatArgDate(d: number): string {
 
 interface CitacionTabProps {
   baseQuery: string;
+  showTipoFilter?: boolean;
 }
 
-export function CitacionTab({ baseQuery }: CitacionTabProps) {
+const EFECTIVO_LIMIT = 10247;
+
+function getTipo(operario: string): string {
+  const num = parseInt(operario.replace(/\D/g, ""), 10);
+  return num > 0 && num < EFECTIVO_LIMIT ? "EFECTIVO" : "EVENTUAL";
+}
+
+export function CitacionTab({ baseQuery, showTipoFilter }: CitacionTabProps) {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState(false);
   const [threshold, setThreshold] = useState(85);
+  const [tipoFilter, setTipoFilter] = useState<string>("");
 
   const fetchData = useCallback(() => {
     setError(false);
@@ -52,9 +61,12 @@ export function CitacionTab({ baseQuery }: CitacionTabProps) {
     const lo = threshold - 4;
     const hi = threshold >= 200 ? Infinity : threshold + 4;
     return [...data.operators]
-      .filter((a: any) => a.overallBH >= lo && a.overallBH <= hi)
+      .filter((a: any) => {
+        if (tipoFilter && getTipo(a.operario) !== tipoFilter) return false;
+        return a.overallBH >= lo && a.overallBH <= hi;
+      })
       .sort((a: any, b: any) => b.overallBH - a.overallBH);
-  }, [data, threshold]);
+  }, [data, threshold, tipoFilter]);
 
   if (error) return (
     <Card><CardContent className="p-8 text-center">
@@ -83,6 +95,24 @@ export function CitacionTab({ baseQuery }: CitacionTabProps) {
             </CardTitle>
             <CardDescription>Productividad neta por colaborador (B/H Neta)</CardDescription>
           </div>
+          {showTipoFilter && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Tipo:</span>
+              <div className="flex rounded-md border overflow-hidden">
+                {["", "EFECTIVO", "EVENTUAL"].map((v) => (
+                  <button
+                    key={v || "all"}
+                    onClick={() => setTipoFilter(v)}
+                    className={`px-2.5 py-1.5 text-[10px] font-medium transition-colors border-r last:border-r-0 ${
+                      tipoFilter === v ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
+                    }`}
+                  >
+                    {v || "Todos"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex items-center gap-2 ml-2">
             <span className="text-xs text-muted-foreground">Rango:</span>
             <select
@@ -137,8 +167,11 @@ export function CitacionTab({ baseQuery }: CitacionTabProps) {
                 const daysWorked = (op.days as any[]).filter((d: any) => d.brutas > 0).length;
                 return (
                   <tr key={op.operario} className="border-b hover:bg-muted/30">
-                    <td className="text-[11px] font-medium p-1.5 sticky left-0 bg-card z-10 max-w-[150px] truncate">
-                      {op.nombre}
+                    <td className="text-[11px] font-medium p-1.5 sticky left-0 bg-card z-10">
+                      <span className="truncate block">{op.nombre}</span>
+                      <span className={`text-[8px] font-semibold ${getTipo(op.operario) === "EFECTIVO" ? "text-emerald-600" : "text-blue-600"}`}>
+                        ({getTipo(op.operario)})
+                      </span>
                     </td>
                     <td className="text-[11px] text-center p-1">{daysWorked}</td>
                     <td className="text-[11px] text-center p-1">{op.totalBrutas}</td>
