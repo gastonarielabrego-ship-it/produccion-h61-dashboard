@@ -28,13 +28,13 @@ export default function Home() {
 
   const refresh = useCallback(() => {
     reloadFilters();
-    setFilterState({ mes: "", dateFrom: "", dateTo: "", turno: "", circuito: [], actividad: "", funcion: "", operario: "" });
+    setFilterState({ mes: "", dateFrom: "", dateTo: "", turno: "", circuito: [], actividad: "", funcion: "", operario: "", tipo: "" });
     setRefreshKey((k) => k + 1);
   }, [reloadFilters]);
 
   useEffect(() => {
     refreshData();
-  }, [filterState.mes, filterState.dateFrom, filterState.dateTo, filterState.turno, filterState.circuito.length, filterState.actividad, filterState.funcion, filterState.operario, refreshData]);
+  }, [filterState.mes, filterState.dateFrom, filterState.dateTo, filterState.turno, filterState.circuito.length, filterState.actividad, filterState.funcion, filterState.operario, filterState.tipo, refreshData]);
 
   const baseQuery = buildQuery();
   const infoText = `${filters ? filters.dates.length : 0} días · ${filters ? filters.circuits.length : 0} circuitos`;
@@ -92,7 +92,7 @@ export default function Home() {
 
           {/* Preparación filter bar */}
           {!isClarkistas && (
-            <FilterBar filters={filters} filterState={filterState} setFilterState={setFilterState} title="Preparación" />
+            <FilterBar filters={filters} filterState={filterState} setFilterState={setFilterState} title="Preparación" showTipo />
           )}
 
           <TabsContent value="general" className="mt-6">
@@ -160,7 +160,7 @@ function ClarkistasDashboard({ refreshKey }: { refreshKey: number }) {
 
   useEffect(() => {
     cRefreshData();
-  }, [filterState.mes, filterState.dateFrom, filterState.dateTo, filterState.turno, filterState.circuito.length, filterState.actividad, filterState.funcion, filterState.operario, cRefreshData]);
+  }, [filterState.mes, filterState.dateFrom, filterState.dateTo, filterState.turno, filterState.circuito.length, filterState.actividad, filterState.funcion, filterState.operario, filterState.tipo, cRefreshData]);
 
   const cBaseQuery = buildQuery();
   const [cActiveTab, setCActiveTab] = useState("general");

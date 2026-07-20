@@ -30,6 +30,7 @@ export type FilterOptions = {
   actividad?: string;
   funcion?: string;
   operario?: string;
+  tipo?: string;
 };
 
 // ─── Singleton Client ───────────────────────────────────
@@ -117,6 +118,13 @@ function buildWhere(filters: FilterOptions): { sql: string; params: Record<strin
   if (filters.operario) {
     conditions.push("operario = $operario");
     params.operario = filters.operario;
+  }
+  if (filters.tipo) {
+    if (filters.tipo === "EFECTIVO") {
+      conditions.push("CAST(SUBSTR(operario, 2) AS INTEGER) < 10247");
+    } else if (filters.tipo === "EVENTUAL") {
+      conditions.push("CAST(SUBSTR(operario, 2) AS INTEGER) >= 10247");
+    }
   }
 
   const sql = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -215,6 +223,8 @@ export function parseFilters(request: Request): FilterOptions {
   if (actividad) filters.actividad = actividad;
   if (funcion) filters.funcion = funcion;
   if (operario) filters.operario = operario;
+  const tipo = url.searchParams.get("tipo");
+  if (tipo) filters.tipo = tipo;
   return filters;
 }
 

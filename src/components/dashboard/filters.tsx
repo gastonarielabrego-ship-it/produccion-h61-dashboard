@@ -35,6 +35,7 @@ interface FilterState {
   actividad: string;
   funcion: string;
   operario: string;
+  tipo: string;
 }
 
 export function useProductionFilters(apiBase = "/api/production") {
@@ -48,6 +49,7 @@ export function useProductionFilters(apiBase = "/api/production") {
     actividad: "",
     funcion: "",
     operario: "",
+    tipo: "",
   });
   const [filterVersion, setFilterVersion] = useState(0);
 
@@ -96,6 +98,7 @@ export function useProductionFilters(apiBase = "/api/production") {
     if (filterState.actividad) params.set("actividad", filterState.actividad);
     if (filterState.funcion) params.set("funcion", filterState.funcion);
     if (filterState.operario) params.set("operario", filterState.operario);
+    if (filterState.tipo) params.set("tipo", filterState.tipo);
     return params.toString();
   }, [filterState, sourceParam]);
 
@@ -233,11 +236,13 @@ export function FilterBar({
   filterState,
   setFilterState,
   title,
+  showTipo,
 }: {
   filters: Filters | null;
   filterState: FilterState;
   setFilterState: React.Dispatch<React.SetStateAction<FilterState>>;
   title?: string;
+  showTipo?: boolean;
 }) {
   if (!filters) {
     return (
@@ -441,6 +446,28 @@ export function FilterBar({
               ))}
             </SelectContent>
           </Select>
+
+          {/* Tipo Efectivo/Eventual */}
+          {showTipo && (
+            <Select
+              value={filterState.tipo}
+              onValueChange={(v) =>
+                setFilterState((prev) => ({
+                  ...prev,
+                  tipo: v === "__all__" ? "" : v,
+                }))
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">Todos</SelectItem>
+                <SelectItem value="EFECTIVO">Efectivo</SelectItem>
+                <SelectItem value="EVENTUAL">Eventual</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
         </div>
       </CardContent>
     </Card>
