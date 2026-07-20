@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/card";
 import { BarChart3, Users } from "lucide-react";
 import { PrintButton } from "./print-button";
+import { ExcelButton } from "./excel-button";
 
 const SHIFT_STROKES: Record<string, string> = {
   Mañana: "#059669",
@@ -102,7 +103,19 @@ export function CombinedHourlyChart({ data }: CombinedHourlyChartProps) {
             {data.grandTotal.toLocaleString("es-AR")} unidades · {totalMissions.toLocaleString("es-AR")} misiones
           </CardDescription>
         </div>
-        <PrintButton title="Producción y Misiones por Hora" />
+        <div className="flex items-center gap-1">
+            <ExcelButton
+              rows={data.hourlyData.map((d: any) => ({
+                Hora: d.hour,
+                Bultos: Number(d.bultos),
+                ...Object.fromEntries(data.shifts.map((s) => [s.label, Number(d[s.label])])),
+              }))}
+              filename="produccion-por-hora"
+              sheetName="Por Hora"
+              colWidths={[8, 12, ...data.shifts.map(() => 12)]}
+            />
+            <PrintButton title="Producción y Misiones por Hora" />
+          </div>
       </CardHeader>
       <CardContent>
         <div className="h-[480px]">

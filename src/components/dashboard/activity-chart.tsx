@@ -20,7 +20,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Activity, Users } from "lucide-react";
-import { PrintButton } from "@/components/dashboard/print-button";
+import { PrintButton } from "./print-button";
+import { ExcelButton } from "./excel-button";
 
 const DEFAULT_COLORS = ["#10b981", "#6366f1", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899", "#84cc16"];
 
@@ -81,7 +82,19 @@ export function ComboChart({ data }: ComboChartProps) {
             {data.totalBultos.toLocaleString("es-AR")} unidades · {data.totalMisiones} operarios peak
           </CardDescription>
         </div>
-        <PrintButton title="Preparación por Hora y Actividad" />
+        <div className="flex items-center gap-1">
+            <ExcelButton
+              rows={data.hourlyData.map((d: any) => {
+                const row: Record<string, any> = { Hora: d.hour, Operarios: Number(d.Operarios) };
+                data.activities.forEach((a: any) => { row[a.label] = Number(d[a.label]); });
+                return row;
+              })}
+              filename="preparacion-por-hora-actividad"
+              sheetName="Por Hora"
+              colWidths={[8, 12, ...data.activities.map(() => 14)]}
+            />
+            <PrintButton title="Preparación por Hora y Actividad" />
+          </div>
       </CardHeader>
       <CardContent>
         <div className="h-[450px]">

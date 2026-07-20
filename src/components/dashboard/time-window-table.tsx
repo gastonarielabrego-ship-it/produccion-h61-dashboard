@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Target, Sun, Moon, TrendingUp, User, Clock, Sunrise } from "lucide-react";
 import { OperatorDetail } from "./operator-detail";
 import { PrintButton } from "./print-button";
+import { ExcelButton } from "./excel-button";
 import { FranjaHourlyChart } from "./franja-hourly-chart";
 
 interface OperatorRow {
@@ -208,7 +209,20 @@ function FranjaSection({
             Franja {label}
           </CardTitle>
         </div>
-        <PrintButton title={`Franja ${label}`} />
+        <div className="flex items-center gap-1">
+          <ExcelButton
+            rows={operators.map((op, i) => ({
+              "#": i + 1,
+              Operario: op.operario,
+              Nombre: op.nombre,
+              Bultos: op.total,
+            }))}
+            filename={`ranking-franja-${label.replace(/[^\d]/g, "")}`}
+            sheetName={label}
+            colWidths={[6, 14, 30, 14]}
+          />
+          <PrintButton title={`Franja ${label}`} />
+        </div>
       </CardHeader>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 px-3 pb-2">
         {cards.map((card) => (

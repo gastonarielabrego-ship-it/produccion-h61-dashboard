@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/card";
 import { Layers } from "lucide-react";
 import { PrintButton } from "@/components/dashboard/print-button";
+import { ExcelButton } from "./excel-button";
 
 const FALLBACK_COLORS = ["#10b981", "#6366f1", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899", "#84cc16"];
 
@@ -58,7 +59,18 @@ export function ActivityBreakdown({ data }: ActivityBreakdownProps) {
             Total de unidades preparadas por tipo de actividad
           </CardDescription>
         </div>
-        <PrintButton title="Producción por Actividad" />
+        <div className="flex items-center gap-1">
+            <ExcelButton
+              rows={data.activities.map((a: any) => ({
+                Actividad: a.label,
+                Unidades: Number(a.total),
+              }))}
+              filename="produccion-por-actividad"
+              sheetName="Actividad"
+              colWidths={[30, 14]}
+            />
+            <PrintButton title="Producción por Actividad" />
+          </div>
       </CardHeader>
       <CardContent>
         <div style={{ height: `${chartHeight}px` }}>

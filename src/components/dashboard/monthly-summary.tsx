@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, Minus, BarChart3 } from "lucide-react";
 import { PrintButton } from "./print-button";
+import { ExcelButton } from "./excel-button";
 
 interface MonthlySummaryProps {
   baseQuery: string;
@@ -61,7 +62,44 @@ export function MonthlySummary({ baseQuery }: MonthlySummaryProps) {
           </CardTitle>
           <CardDescription>Acumulado por mes con variación respecto al mes anterior</CardDescription>
         </div>
-        <PrintButton title="Resumen Mensual" />
+        <div className="flex items-center gap-1">
+          <ExcelButton
+            rows={[
+              ...rows.map((r: any) => ({
+                Mes: r.label,
+                Dias: r.dias,
+                Misiones: r.misiones,
+                "Var. Misiones": r.cmpMisiones !== null ? `${r.cmpMisiones > 0 ? "+" : ""}${r.cmpMisiones}%` : "-",
+                Bultos: r.bultos,
+                "Var. Bultos": r.cmpBultos !== null ? `${r.cmpBultos > 0 ? "+" : ""}${r.cmpBultos}%` : "-",
+                "Hs. Brutas": r.horasBrutas,
+                "TM (hs)": r.tmHoras || 0,
+                "Hs. Netas": r.horasNetas,
+                "B/H Bruta": r.bhBruta,
+                "Var. B/H": r.cmpBH !== null ? `${r.cmpBH > 0 ? "+" : ""}${r.cmpBH}%` : "-",
+                "B/H Neta": r.bhNeta,
+              })),
+              {
+                Mes: "TOTAL",
+                Dias: totals.dias,
+                Misiones: totals.misiones,
+                "Var. Misiones": "-",
+                Bultos: totals.bultos,
+                "Var. Bultos": "-",
+                "Hs. Brutas": totals.horasBrutas,
+                "TM (hs)": Math.round(totals.tmHoras * 100) / 100,
+                "Hs. Netas": totals.horasNetas,
+                "B/H Bruta": totals.bhBruta,
+                "Var. B/H": "-",
+                "B/H Neta": totals.bhNeta,
+              },
+            ]}
+            filename="resumen-mensual"
+            sheetName="Mensual"
+            colWidths={[14, 8, 10, 12, 14, 12, 12, 10, 12, 12, 12, 12]}
+          />
+          <PrintButton title="Resumen Mensual" />
+        </div>
       </CardHeader>
       <CardContent className="p-0 overflow-x-auto">
         <table className="w-full text-sm">

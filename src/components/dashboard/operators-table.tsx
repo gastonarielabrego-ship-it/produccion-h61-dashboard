@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Trophy, TrendingDown, User, Clock } from "lucide-react";
 import { OperatorDetail } from "./operator-detail";
 import { PrintButton } from "./print-button";
+import { ExcelButton } from "./excel-button";
 
 interface OperatorRow {
   operario: string;
@@ -143,7 +144,21 @@ export function OperatorsTable({ data, filtersQuery }: OperatorsTableProps) {
                 Operarios con mayor producción total en el período seleccionado
               </CardDescription>
             </div>
-            <PrintButton title="Top 20 Más Productivos" />
+            <div className="flex items-center gap-1">
+              <ExcelButton
+                rows={data.operators.map((op, i) => ({
+                  "#": i + 1,
+                  Operario: op.operario,
+                  Nombre: op.nombre,
+                  "Hs. Conectado": op.horasConectado,
+                  Bultos: op.total,
+                }))}
+                filename="top-20-productivos"
+                sheetName="Top 20"
+                colWidths={[6, 14, 30, 14, 14]}
+              />
+              <PrintButton title="Top 20 Mas Productivos" />
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="h-[400px]">
@@ -175,7 +190,21 @@ export function OperatorsTable({ data, filtersQuery }: OperatorsTableProps) {
                 Operarios con menor producción total en el período seleccionado
               </CardDescription>
             </div>
-            <PrintButton title="Menos Productivos" />
+            <div className="flex items-center gap-1">
+              <ExcelButton
+                rows={data.bottomOperators.map((op, i) => ({
+                  "#": i + 1,
+                  Operario: op.operario,
+                  Nombre: op.nombre,
+                  "Hs. Conectado": op.horasConectado,
+                  Bultos: op.total,
+                }))}
+                filename="bottom-20-productivos"
+                sheetName="Bottom 20"
+                colWidths={[6, 14, 30, 14, 14]}
+              />
+              <PrintButton title="Menos Productivos" />
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="h-[400px]">

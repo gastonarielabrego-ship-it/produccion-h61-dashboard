@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PrintButton } from "./print-button";
+import { ExcelButton } from "./excel-button";
 import { Target } from "lucide-react";
 import React from "react";
 
@@ -142,7 +143,29 @@ export function CitacionTab({ baseQuery, showTipoFilter }: CitacionTabProps) {
             </div>
           </div>
         </div>
-        <PrintButton title="Citación" />
+        <div className="flex items-center gap-1">
+          <ExcelButton
+            rows={sortedOperators.map((op: any) => {
+              const row: Record<string, any> = {
+                Colaborador: `${op.nombre} (${getTipo(op.operario)})`,
+                Dias: (op.days as any[]).filter((d: any) => d.brutas > 0).length,
+                "Hs. Trab.": op.totalBrutas,
+                "TM (hs)": op.totalTM,
+                Bultos: op.totalBultos,
+                "B/H Neta": op.overallBH,
+              };
+              dates.forEach((d: number) => {
+                const day = (op.days as any[]).find((dd: any) => dd.date === d);
+                row[formatArgDate(d)] = day?.bhNeta || "";
+              });
+              return row;
+            })}
+            filename="citacion"
+            sheetName="Citacion"
+            colWidths={[35, 8, 10, 10, 12, 12, ...dates.map(() => 10)]}
+          />
+          <PrintButton title="Citacion" />
+        </div>
       </CardHeader>
       <CardContent className="p-0">
         <div className="overflow-auto max-h-[75vh]">

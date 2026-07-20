@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Flame, Users, BarChart3 } from "lucide-react";
 import { PrintButton } from "./print-button";
+import { ExcelButton } from "./excel-button";
 import { MonthlySummary } from "./monthly-summary";
 
 interface SummaryTabProps {
@@ -48,7 +49,38 @@ function DailyMetricsTable({ data, operatorName }: { data: any[]; operatorName?:
           <CardTitle className="flex items-center gap-2 text-base"><BarChart3 className="h-4 w-4" />Métricas Diarias</CardTitle>
           <CardDescription>Resumen por día con descuento de tiempos muertos</CardDescription>
         </div>
-        <PrintButton title="Métricas Diarias" />
+        <div className="flex items-center gap-1">
+          <ExcelButton
+            rows={[
+              ...data.map((row: any) => ({
+                Dia: formatArgDate(row.date),
+                [operatorName || "Misiones"]: operatorName || row.misiones,
+                Bultos: row.bultos,
+                "Hs. Brutas": row.horasProductivas,
+                "TM (hs)": row.tmHoras || 0,
+                "Hs. Netas": row.horasNetas,
+                Produccion: row.produccion,
+                "B/H Bruta": row.bultosPorHoraBruta,
+                "B/H Neta": row.bultosPorHoraNeta,
+              })),
+              {
+                Dia: "TOTAL",
+                [operatorName || "Misiones"]: operatorName || totals.misiones,
+                Bultos: totals.bultos,
+                "Hs. Brutas": totals.horasProductivas,
+                "TM (hs)": totals.tmHoras,
+                "Hs. Netas": totals.horasNetas,
+                Produccion: totals.produccion,
+                "B/H Bruta": totals.bultosPorHoraBruta,
+                "B/H Neta": totals.bultosPorHoraNeta,
+              },
+            ]}
+            filename="metricas-diarias"
+            sheetName="Diarias"
+            colWidths={[12, 14, 12, 12, 10, 12, 10, 12, 12]}
+          />
+          <PrintButton title="Métricas Diarias" />
+        </div>
       </CardHeader>
       <CardContent className="p-0 overflow-x-auto">
         <table className="w-full text-sm">
@@ -117,7 +149,26 @@ function HeatmapTable({ title, description, icon: Icon, data, isCollaborator, pr
           <CardTitle className="flex items-center gap-2 text-base"><Icon className="h-4 w-4" />{title}</CardTitle>
           <CardDescription>{description}</CardDescription>
         </div>
-        <PrintButton title={printTitle} />
+        <div className="flex items-center gap-1">
+          <ExcelButton
+            rows={data.map((row: any) => {
+              const r: Record<string, any> = {
+                [isCollaborator ? "Colaborador" : "Dia"]: isCollaborator
+                  ? `${row.nombre} (${row.operario})`
+                  : formatArgDate(Number(row.date)),
+              };
+              if (operatorName && !isCollaborator) r["Colaborador"] = operatorName;
+              let t = 0;
+              for (const h of HOURS) { const v = Number(row[String(h)]) || 0; r[String(h)] = v; t += v; }
+              r["Total"] = t;
+              return r;
+            })}
+            filename={isCollaborator ? "mapa-calor-colaborador" : "mapa-calor-dia"}
+            sheetName={isCollaborator ? "Colaborador" : "Dia"}
+            colWidths={[30, ...HOURS.map(() => 8), 10]}
+          />
+          <PrintButton title={printTitle} />
+        </div>
       </CardHeader>
       <CardContent className="p-0">
         <div className={`overflow-auto ${isCollaborator ? "max-h-[600px]" : ""}`}>
