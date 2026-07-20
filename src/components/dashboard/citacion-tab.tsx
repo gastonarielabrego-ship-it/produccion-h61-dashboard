@@ -50,7 +50,7 @@ export function CitacionTab({ baseQuery }: CitacionTabProps) {
   const sortedOperators = useMemo(() => {
     if (!data) return [];
     const lo = threshold - 4;
-    const hi = threshold + 4;
+    const hi = threshold >= 200 ? Infinity : threshold + 4;
     return [...data.operators]
       .filter((a: any) => a.overallBH >= lo && a.overallBH <= hi)
       .sort((a: any, b: any) => b.overallBH - a.overallBH);
@@ -91,7 +91,7 @@ export function CitacionTab({ baseQuery }: CitacionTabProps) {
               className="h-7 rounded-md border bg-background px-2 text-xs font-medium"
             >
               {THRESHOLDS.map((t) => (
-                <option key={t} value={t}>{t} ({t - 4}–{t + 4})</option>
+                <option key={t} value={t}>{t} ({t - 4}{t < 200 ? "-" + (t + 4) : "+"})</option>
               ))}
             </select>
             <div className="flex items-center gap-3 ml-2">
