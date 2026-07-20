@@ -49,8 +49,10 @@ export function CitacionTab({ baseQuery }: CitacionTabProps) {
 
   const sortedOperators = useMemo(() => {
     if (!data) return [];
+    const lo = threshold - 4;
+    const hi = threshold + 4;
     return [...data.operators]
-      .filter((a: any) => a.overallBH >= threshold)
+      .filter((a: any) => a.overallBH >= lo && a.overallBH <= hi)
       .sort((a: any, b: any) => b.overallBH - a.overallBH);
   }, [data, threshold]);
 
@@ -82,14 +84,14 @@ export function CitacionTab({ baseQuery }: CitacionTabProps) {
             <CardDescription>Productividad neta por colaborador (B/H Neta)</CardDescription>
           </div>
           <div className="flex items-center gap-2 ml-2">
-            <span className="text-xs text-muted-foreground">Meta:</span>
+            <span className="text-xs text-muted-foreground">Rango:</span>
             <select
               value={threshold}
               onChange={(e) => setThreshold(Number(e.target.value))}
               className="h-7 rounded-md border bg-background px-2 text-xs font-medium"
             >
               {THRESHOLDS.map((t) => (
-                <option key={t} value={t}>{t}</option>
+                <option key={t} value={t}>{t} ({t - 4}–{t + 4})</option>
               ))}
             </select>
             <div className="flex items-center gap-3 ml-2">
