@@ -49,8 +49,10 @@ export function CitacionTab({ baseQuery }: CitacionTabProps) {
 
   const sortedOperators = useMemo(() => {
     if (!data) return [];
-    return [...data.operators].sort((a: any, b: any) => b.overallBH - a.overallBH);
-  }, [data]);
+    return [...data.operators]
+      .filter((a: any) => a.overallBH >= threshold)
+      .sort((a: any, b: any) => b.overallBH - a.overallBH);
+  }, [data, threshold]);
 
   if (error) return (
     <Card><CardContent className="p-8 text-center">
