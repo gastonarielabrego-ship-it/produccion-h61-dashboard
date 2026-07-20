@@ -42,7 +42,7 @@ function getTipo(operario: string): string {
 export function CitacionTab({ baseQuery, showTipoFilter }: CitacionTabProps) {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState(false);
-  const [threshold, setThreshold] = useState(85);
+  const [threshold, setThreshold] = useState(0); // 0 = Todos
   const [tipoFilter, setTipoFilter] = useState<string>("");
 
   const fetchData = useCallback(() => {
@@ -58,8 +58,9 @@ export function CitacionTab({ baseQuery, showTipoFilter }: CitacionTabProps) {
 
   const sortedOperators = useMemo(() => {
     if (!data) return [];
-    const lo = threshold - 4;
-    const hi = threshold >= 200 ? Infinity : threshold + 4;
+    // threshold === 0 means "Todos" => no range filter
+    const lo = threshold === 0 ? 0 : threshold === 85 ? 0 : threshold - 4;
+    const hi = threshold === 0 ? Infinity : threshold >= 200 ? Infinity : threshold + 4;
     return [...data.operators]
       .filter((a: any) => {
         if (tipoFilter && getTipo(a.operario) !== tipoFilter) return false;
@@ -120,8 +121,9 @@ export function CitacionTab({ baseQuery, showTipoFilter }: CitacionTabProps) {
               onChange={(e) => setThreshold(Number(e.target.value))}
               className="h-7 rounded-md border bg-background px-2 text-xs font-medium"
             >
+              <option value={0}>Todos</option>
               {THRESHOLDS.map((t) => (
-                <option key={t} value={t}>{t} ({t - 4}{t < 200 ? "-" + (t + 4) : "+"})</option>
+                <option key={t} value={t}>{t} ({t === 85 ? "0" : t - 4}{t < 200 ? "-" + (t + 4) : "+"})</option>
               ))}
             </select>
             <div className="flex items-center gap-3 ml-2">
