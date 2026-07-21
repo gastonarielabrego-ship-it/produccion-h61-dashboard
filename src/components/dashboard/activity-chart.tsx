@@ -184,7 +184,14 @@ export function ComboChart({ data }: ComboChartProps) {
                 strokeWidth={2}
                 dot={{ r: 3, fill: "#0ea5e9" }}
                 activeDot={{ r: 5 }}
-              />
+              >
+                <LabelList
+                  dataKey="Operarios"
+                  position="top"
+                  style={{ fontSize: 8, fill: "#0ea5e9" }}
+                  formatter={(v: number) => v > 0 ? v : ""}
+                />
+              </Line>
             </ComposedChart>
           </ResponsiveContainer>
         </div>

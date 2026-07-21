@@ -221,7 +221,14 @@ export function CombinedHourlyChart({ data }: CombinedHourlyChartProps) {
                   strokeWidth={2.5}
                   dot={{ r: 3, fill: SHIFT_STROKES[label] || "#888" }}
                   activeDot={{ r: 5 }}
-                />
+                >
+                  <LabelList
+                    dataKey={label}
+                    position="top"
+                    style={{ fontSize: 8, fill: SHIFT_STROKES[label] || "#888" }}
+                    formatter={(v: number) => v > 0 ? v : ""}
+                  />
+                </Line>
               ))}
             </ComposedChart>
           </ResponsiveContainer>
