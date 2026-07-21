@@ -111,7 +111,7 @@ export function ActivityBreakdown({ data }: ActivityBreakdownProps) {
                   dataKey="total"
                   position="right"
                   formatter={(v: number) => v.toLocaleString("es-AR")}
-                  style={{ fontSize: 11, fill: "#525252" }}
+                  style={{ fontSize: 11, fill: "#374151", fontWeight: 600 }}
                 />
               </Bar>
             </BarChart>

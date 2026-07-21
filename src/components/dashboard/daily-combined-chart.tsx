@@ -120,7 +120,7 @@ export function DailyCombinedChart({ data }: DailyCombinedChartProps) {
       <CardContent>
         <div className="h-[480px]">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data.dailyData} margin={{ top: 35, right: 30, left: 0, bottom: 5 }}>
+            <ComposedChart data={data.dailyData} margin={{ top: 55, right: 80, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
 
               <XAxis
@@ -201,14 +201,14 @@ export function DailyCombinedChart({ data }: DailyCombinedChartProps) {
               >
                 <LabelList
                   dataKey="bultos"
-                  position="insideTop"
-                  style={{ fontSize: 9, fill: "#065f46", fontWeight: 600 }}
-                  formatter={(v: number) => v > 0 ? (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v) : ""}
+                  position="top"
+                  style={{ fontSize: 10, fill: "#065f46", fontWeight: 700 }}
+                  formatter={(v: number) => v > 0 ? (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)) : ""}
                 />
               </Bar>
 
               {/* Lines: misiones por turno */}
-              {shiftLabels.map((label) => (
+              {shiftLabels.map((label, idx) => (
                 <Line
                   key={label}
                   yAxisId="right"
@@ -217,15 +217,15 @@ export function DailyCombinedChart({ data }: DailyCombinedChartProps) {
                   name={label}
                   stroke={SHIFT_STROKES[label] || "#888"}
                   strokeWidth={2.5}
-                  dot={{ r: 3, fill: SHIFT_STROKES[label] || "#888" }}
-                  activeDot={{ r: 5 }}
+                  dot={{ r: 4, fill: "#fff", stroke: SHIFT_STROKES[label] || "#888", strokeWidth: 2 }}
+                  activeDot={{ r: 6 }}
                 >
                   <LabelList
                     dataKey={label}
                     position="top"
-                    style={{ fontSize: 8, fontWeight: 600, fill: SHIFT_STROKES[label] || "#888" }}
-                    offset={-2}
-                    formatter={(v: number) => v > 0 ? v : ""}
+                    style={{ fontSize: 10, fontWeight: 700, fill: SHIFT_STROKES[label] || "#888" }}
+                    offset={8 + idx * 14}
+                    formatter={(v: number) => v > 0 ? String(v) : ""}
                   />
                 </Line>
               ))}

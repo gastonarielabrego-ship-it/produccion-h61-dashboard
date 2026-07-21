@@ -59,7 +59,7 @@ export function FranjaHourlyChart({
   return (
     <div className="h-[200px] mt-1">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={filtered} margin={{ top: 25, right: 10, left: 0, bottom: 0 }}>
+        <LineChart data={filtered} margin={{ top: 30, right: 10, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
           <XAxis
             dataKey="hour"
@@ -83,23 +83,22 @@ export function FranjaHourlyChart({
             iconType="circle"
             iconSize={6}
           />
-          {shiftLabels.map((label) => (
+          {shiftLabels.map((label, idx) => (
             <Line
               key={label}
               type="monotone"
               dataKey={label}
               stroke={SHIFT_COLORS[label] || "#888"}
               strokeWidth={2}
-              dot={{ r: 3 }}
-              activeDot={{ r: 4 }}
+              dot={{ r: 3, fill: "#fff", stroke: SHIFT_COLORS[label] || "#888", strokeWidth: 1.5 }}
+              activeDot={{ r: 5 }}
             >
               <LabelList
                 dataKey={label}
                 position="top"
-                style={{ fontSize: 9, fontWeight: 600, fill: SHIFT_COLORS[label] || "#888" }}
-                angle={-35}
-                offset={5}
-                formatter={(v: number) => v > 0 ? v : ""}
+                style={{ fontSize: 10, fontWeight: 700, fill: SHIFT_COLORS[label] || "#888" }}
+                offset={6 + idx * 13}
+                formatter={(v: number) => v > 0 ? String(v) : ""}
               />
             </Line>
           ))}

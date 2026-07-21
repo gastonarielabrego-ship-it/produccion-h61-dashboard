@@ -100,7 +100,7 @@ export function ComboChart({ data }: ComboChartProps) {
       <CardContent>
         <div className="h-[450px]">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data.hourlyData} margin={{ top: 30, right: 60, left: 0, bottom: 5 }}>
+            <ComposedChart data={data.hourlyData} margin={{ top: 50, right: 70, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
               <XAxis
                 dataKey="hour"
@@ -171,9 +171,9 @@ export function ComboChart({ data }: ComboChartProps) {
                     labels.forEach((l) => { total += Number(entry.payload?.[l]) || 0; });
                     return total;
                   }}
-                  position="insideTop"
-                  style={{ fontSize: 9, fill: "#374151", fontWeight: 600 }}
-                  formatter={(v: number) => v > 0 ? (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v) : ""}
+                  position="top"
+                  style={{ fontSize: 10, fill: "#1f2937", fontWeight: 700 }}
+                  formatter={(v: number) => v > 0 ? (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)) : ""}
                 />
               </Bar>
               {/* Operators line */}
@@ -181,16 +181,16 @@ export function ComboChart({ data }: ComboChartProps) {
                 yAxisId="right"
                 dataKey="Operarios"
                 stroke="#0ea5e9"
-                strokeWidth={2}
-                dot={{ r: 3, fill: "#0ea5e9" }}
-                activeDot={{ r: 5 }}
+                strokeWidth={2.5}
+                dot={{ r: 4, fill: "#fff", stroke: "#0ea5e9", strokeWidth: 2 }}
+                activeDot={{ r: 6 }}
               >
                 <LabelList
                   dataKey="Operarios"
                   position="top"
-                  style={{ fontSize: 8, fontWeight: 600, fill: "#0ea5e9" }}
-                  offset={-2}
-                  formatter={(v: number) => v > 0 ? v : ""}
+                  style={{ fontSize: 10, fontWeight: 700, fill: "#0284c7" }}
+                  offset={10}
+                  formatter={(v: number) => v > 0 ? String(v) : ""}
                 />
               </Line>
             </ComposedChart>
