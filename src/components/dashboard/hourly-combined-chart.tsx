@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
   Legend,
   ReferenceLine,
+  LabelList,
 } from "recharts";
 import {
   Card,
@@ -199,7 +200,14 @@ export function CombinedHourlyChart({ data }: CombinedHourlyChartProps) {
                 strokeWidth={1}
                 radius={[3, 3, 0, 0]}
                 maxBarSize={36}
-              />
+              >
+                <LabelList
+                  dataKey="bultos"
+                  position="top"
+                  style={{ fontSize: 9, fill: "#10b981" }}
+                  formatter={(v: number) => v > 0 ? v.toLocaleString("es-AR") : ""}
+                />
+              </Bar>
 
               {/* Lines: misiones por turno */}
               {shiftLabels.map((label) => (

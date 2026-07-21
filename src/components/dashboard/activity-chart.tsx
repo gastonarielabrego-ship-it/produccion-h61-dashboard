@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
   Legend,
   ReferenceLine,
+  LabelList,
 } from "recharts";
 import {
   Card,
@@ -155,6 +156,26 @@ export function ComboChart({ data }: ComboChartProps) {
                   maxBarSize={40}
                 />
               ))}
+              {/* Total label on top of stacked bars */}
+              <Bar
+                yAxisId="left"
+                dataKey="__total_label__"
+                fill="transparent"
+                stackId="bultos"
+                maxBarSize={40}
+                isAnimationActive={false}
+              >
+                <LabelList
+                  valueAccessor={(entry: any) => {
+                    let total = 0;
+                    labels.forEach((l) => { total += Number(entry.payload?.[l]) || 0; });
+                    return total;
+                  }}
+                  position="top"
+                  style={{ fontSize: 9, fill: "#525252" }}
+                  formatter={(v: number) => v > 0 ? v.toLocaleString("es-AR") : ""}
+                />
+              </Bar>
               {/* Operators line */}
               <Line
                 yAxisId="right"

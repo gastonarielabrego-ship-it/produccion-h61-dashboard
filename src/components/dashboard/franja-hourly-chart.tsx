@@ -9,6 +9,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
+  LabelList,
 } from "recharts";
 
 const SHIFT_COLORS: Record<string, string> = {
@@ -91,7 +92,14 @@ export function FranjaHourlyChart({
               strokeWidth={2}
               dot={{ r: 3 }}
               activeDot={{ r: 4 }}
-            />
+            >
+              <LabelList
+                dataKey={label}
+                position="top"
+                style={{ fontSize: 9, fill: SHIFT_COLORS[label] || "#888" }}
+                formatter={(v: number) => v > 0 ? v : ""}
+              />
+            </Line>
           ))}
         </LineChart>
       </ResponsiveContainer>
