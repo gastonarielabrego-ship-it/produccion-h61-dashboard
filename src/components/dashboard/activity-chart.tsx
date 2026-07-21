@@ -100,7 +100,7 @@ export function ComboChart({ data }: ComboChartProps) {
       <CardContent>
         <div className="h-[450px]">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data.hourlyData} margin={{ top: 5, right: 60, left: 0, bottom: 5 }}>
+            <ComposedChart data={data.hourlyData} margin={{ top: 30, right: 60, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
               <XAxis
                 dataKey="hour"
@@ -171,9 +171,9 @@ export function ComboChart({ data }: ComboChartProps) {
                     labels.forEach((l) => { total += Number(entry.payload?.[l]) || 0; });
                     return total;
                   }}
-                  position="top"
-                  style={{ fontSize: 9, fill: "#525252" }}
-                  formatter={(v: number) => v > 0 ? v.toLocaleString("es-AR") : ""}
+                  position="insideTop"
+                  style={{ fontSize: 9, fill: "#374151", fontWeight: 600 }}
+                  formatter={(v: number) => v > 0 ? (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v) : ""}
                 />
               </Bar>
               {/* Operators line */}
@@ -188,7 +188,8 @@ export function ComboChart({ data }: ComboChartProps) {
                 <LabelList
                   dataKey="Operarios"
                   position="top"
-                  style={{ fontSize: 8, fill: "#0ea5e9" }}
+                  style={{ fontSize: 8, fontWeight: 600, fill: "#0ea5e9" }}
+                  offset={-2}
                   formatter={(v: number) => v > 0 ? v : ""}
                 />
               </Line>
