@@ -72,7 +72,7 @@ export function OperatorDetail({
     if (filtersQuery) parts.push(filtersQuery);
     if (hourFrom != null) parts.push(`hourFrom=${hourFrom}`);
     if (hourTo != null) parts.push(`hourTo=${hourTo}`);
-    fetch(`/api/production/operator-hourly?${parts.join("&")}`)
+    fetch(`/api/production/operator-hourly?${parts.join("&")}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((data) => {
         setDetail(data);

@@ -49,7 +49,7 @@ export function CitacionTab({ baseQuery, showTipoFilter }: CitacionTabProps) {
   const fetchData = useCallback(() => {
     setError(false);
     const base = baseQuery ? `?${baseQuery}` : "";
-    fetch(`/api/production/citacion${base}`)
+    fetch(`/api/production/citacion${base}`, { cache: "no-store" })
       .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
       .then(setData)
       .catch(() => setError(true));

@@ -221,7 +221,7 @@ export function SummaryTab({ baseQuery, apiBase = "/api/production" }: SummaryTa
   const fetchData = useCallback(() => {
     setError(false);
     const base = baseQuery ? `?${baseQuery}` : "";
-    fetch(`/api/production/summary-tables${base}`)
+    fetch(`/api/production/summary-tables${base}`, { cache: "no-store" })
       .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
       .then(setData)
       .catch(() => setError(true));

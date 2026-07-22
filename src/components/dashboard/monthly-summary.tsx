@@ -24,7 +24,7 @@ export function MonthlySummary({ baseQuery }: MonthlySummaryProps) {
   const fetchData = useCallback(() => {
     setError(false);
     const base = baseQuery ? `?${baseQuery}` : "";
-    fetch(`/api/production/monthly-summary${base}`)
+    fetch(`/api/production/monthly-summary${base}`, { cache: "no-store" })
       .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
       .then(setData)
       .catch(() => setError(true));

@@ -16,6 +16,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
+// Bypass browser HTTP cache on every data fetch
+function fetchNoCache(url: string) {
+  return fetch(url, { cache: "no-store" });
+}
+
 interface Filters {
   dates: number[];
   months: number[];
@@ -62,7 +67,7 @@ export function useProductionFilters(apiBase = "/api/production") {
     const url = sourceParam
       ? `/api/production/dates?source=${sourceParam}`
       : `${apiBase}/dates`;
-    fetch(url)
+    fetchNoCache(url)
       .then((r) => r.json())
       .then((data) => {
         if (data && !data.error) {

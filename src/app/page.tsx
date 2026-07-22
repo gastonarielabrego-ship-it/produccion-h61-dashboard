@@ -132,8 +132,8 @@ function TimeWindowWrapper({ baseQuery, refreshKey }: { baseQuery: string; refre
 
   useEffect(() => {
     const base = baseQuery ? `?${baseQuery}` : "";
-    fetch(`/api/production/time-window-operators${base}`).then((r) => r.json()).then(setData);
-    fetch(`/api/production/by-shift${base}`).then((r) => r.json()).then(setShiftHourly);
+    fetch(`/api/production/time-window-operators${base}`, { cache: "no-store" }).then((r) => r.json()).then(setData);
+    fetch(`/api/production/by-shift${base}`, { cache: "no-store" }).then((r) => r.json()).then(setShiftHourly);
   }, [baseQuery, refreshKey]);
 
   return <TimeWindowTable data={data} filtersQuery={baseQuery} shiftHourly={shiftHourly} />;

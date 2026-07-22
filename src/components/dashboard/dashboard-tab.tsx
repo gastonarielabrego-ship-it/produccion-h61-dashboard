@@ -6,6 +6,11 @@ import { CombinedHourlyChart } from "@/components/dashboard/hourly-combined-char
 import { DailyCombinedChart } from "@/components/dashboard/daily-combined-chart";
 import { ComboChart } from "@/components/dashboard/activity-chart";
 
+// Bypass browser HTTP cache on every data fetch
+function fetchNoCache(url: string) {
+  return fetch(url, { cache: "no-store" });
+}
+
 interface DashboardTabProps {
   baseQuery: string;
   apiBase?: string;
@@ -24,10 +29,10 @@ export function DashboardTab({ baseQuery, apiBase = "/api/production" }: Dashboa
     const base = baseQuery ? `?${baseQuery}` : "";
 
     Promise.all([
-      fetch(`${effectiveBase}/hourly-combined${base}`).then((r) => r.json()),
-      fetch(`${effectiveBase}/daily-combined${base}`).then((r) => r.json()),
-      fetch(`${effectiveBase}/summary${base}`).then((r) => r.json()),
-      fetch(`${effectiveBase}/by-shift${base}`).then((r) => r.json()),
+      fetchNoCache(`${effectiveBase}/hourly-combined${base}`).then((r) => r.json()),
+      fetchNoCache(`${effectiveBase}/daily-combined${base}`).then((r) => r.json()),
+      fetchNoCache(`${effectiveBase}/summary${base}`).then((r) => r.json()),
+      fetchNoCache(`${effectiveBase}/by-shift${base}`).then((r) => r.json()),
     ]).then(([combinedHourly, daily, summary, activity]) => {
       setCombinedHourlyData(combinedHourly);
       setDailyData(daily);
