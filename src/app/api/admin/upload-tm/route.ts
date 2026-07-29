@@ -3,152 +3,115 @@ import { NextResponse } from "next/server";
 
 export const maxDuration = 60;
 
-const TM_DDL = `
-CREATE TABLE IF NOT EXISTS tiempos_muertos (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  fecha       INTEGER NOT NULL,
-  turno       TEXT    NOT NULL,
-  operario    TEXT    NOT NULL,
-  nombre      TEXT    NOT NULL,
-  estado      TEXT,
-  motivo      INTEGER,
-  minutos     INTEGER NOT NULL DEFAULT 0,
-  observacion TEXT,
-  usuario_alta TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_tm_fecha ON tiempos_muertos(fecha);
-CREATE INDEX IF NOT EXISTS idx_tm_operario ON tiempos_muertos(operario);
-CREATE INDEX IF NOT EXISTS idx_tm_fecha_operario ON tiempos_muertos(fecha, operario);
-`;
+// ─── Chunked upload (same pattern) ───
 
-let _tableReady = false;
-async function ensureTable() {
-  if (_tableReady) return;
-  const client = getClient();
-  for (const stmt of TM_DDL.split(";").map((s) => s.trim()).filter(Boolean)) {
-    await client.execute(stmt);
-  }
-  _tableReady = true;
+const COLS = "fecha, turno, operario, nombre, estado, motivo, minutos, observacion, usuario_alta";
+const PH = "(?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+function getVal(row: (string | number | null | undefined)[], ci: number): number {
+  if (ci < 0 || ci >= row.length) return 0;
+  const v = row[ci];
+  return v === null || v === undefined ? 0 : Number(v) || 0;
 }
 
-export async function GET() {
-  try {
-    await ensureTable();
-    const client = getClient();
-    const result = await client.execute("SELECT COUNT(*) as cnt FROM tiempos_muertos");
-    return NextResponse.json({ ok: true, count: Number(result.rows[0]?.cnt ?? 0) });
-  } catch (error: any) {
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+function getStr(row: (string | number | null | undefined)[], ci: number): string {
+  if (ci < 0 || ci >= row.length) return "";
+  const v = row[ci];
+  return v === null || v === undefined ? "" : String(v).trim();
+}
+
+async function handleDelete(dates: number[]): Promise<{ message: string; deletedDates: number[] }> {
+  const client = getClient();
+  if (dates.length === 0) return { message: "Sin fechas para borrar", deletedDates: [] };
+
+  const ph = dates.map((_, i) => `$d${i}`).join(",");
+  const dp: Record<string, number> = {};
+  dates.forEach((d, i) => { dp[`d${i}`] = d; });
+
+  const result = await client.execute({
+    sql: `DELETE FROM tiempos_muertos WHERE fecha IN (${ph})`,
+    args: dp,
+  });
+
+  return { message: `${result.rowsAffected ?? "?"} registros previos eliminados`, deletedDates: dates };
+}
+
+async function handleInsert(rows: (string | number | null | undefined)[][]): Promise<{ inserted: number; elapsed: string }> {
+  const t0 = Date.now();
+
+  if (!rows || rows.length < 2) throw new Error("Datos insuficientes para insertar");
+
+  const header = rows[0].map((c) => String(c ?? "").toUpperCase().trim());
+  const colIdx: Record<string, number> = {};
+  header.forEach((h, i) => { colIdx[h] = i; });
+
+  const required = ["FECHA", "TURNO", "OPERARIO", "NOMBRE", "MINUTOS"];
+  const missing = required.filter((r) => !(r in colIdx));
+  if (missing.length > 0) {
+    throw new Error(`Faltan columnas: ${missing.join(", ")}. Encontradas: ${header.filter(Boolean).join(", ")}`);
   }
+
+  const allArgs: (string | number | null)[][] = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (getVal(row, colIdx["MINUTOS"]) <= 0) continue;
+
+    allArgs.push([
+      getVal(row, colIdx["FECHA"]),
+      getStr(row, colIdx["TURNO"]),
+      getStr(row, colIdx["OPERARIO"]),
+      getStr(row, colIdx["NOMBRE"]),
+      getStr(row, colIdx["ESTADO"]) || null,
+      getVal(row, colIdx["MOTIVO"]) || null,
+      getVal(row, colIdx["MINUTOS"]),
+      getStr(row, colIdx["OBSERVACION"]) || null,
+      getStr(row, colIdx["USUARIO_ALTA"]) || null,
+    ]);
+  }
+
+  if (allArgs.length === 0) throw new Error("No hay filas con minutos > 0 en este bloque");
+
+  const client = getClient();
+  const sql = `INSERT INTO tiempos_muertos (${COLS}) VALUES ${allArgs.map(() => PH).join(", ")}`;
+  await client.execute({ sql, args: allArgs.flat() });
+
+  return { inserted: allArgs.length, elapsed: `${((Date.now() - t0) / 1000).toFixed(1)}s` };
 }
 
 export async function POST(request: Request) {
   const t0 = Date.now();
   try {
-    // Tables already exist — skip ensureTable() to save round-trips on cold start
     const body = await request.json();
-    const rows: (string | number | null | undefined)[][] = body.rows;
+    const action = body.action;
 
-    if (!rows || rows.length < 2) {
-      return NextResponse.json({ error: "Datos insuficientes" }, { status: 400 });
+    if (action === "delete") {
+      const dates: number[] = body.dates || [];
+      const result = await handleDelete(dates);
+      return NextResponse.json({ ...result, elapsed: `${((Date.now() - t0) / 1000).toFixed(1)}s` });
     }
 
-    const header = rows[0].map((c) => String(c ?? "").toUpperCase().trim());
-    const colIdx: Record<string, number> = {};
-    header.forEach((h, i) => { colIdx[h] = i; });
-
-    const required = ["FECHA", "TURNO", "OPERARIO", "NOMBRE", "MINUTOS"];
-    const missing = required.filter((r) => !(r in colIdx));
-    if (missing.length > 0) {
-      return NextResponse.json({
-        error: `Faltan columnas: ${missing.join(", ")}. Encontradas: ${header.filter(Boolean).join(", ")}`
-      }, { status: 400 });
+    if (action === "insert") {
+      const result = await handleInsert(body.rows);
+      return NextResponse.json(result);
     }
 
-    const getVal = (row: (string | number | null | undefined)[], ci: number): number => {
-      if (ci < 0 || ci >= row.length) return 0;
-      const v = row[ci];
-      return v === null || v === undefined ? 0 : Number(v) || 0;
-    };
-    const getStr = (row: (string | number | null | undefined)[], ci: number): string => {
-      if (ci < 0 || ci >= row.length) return "";
-      const v = row[ci];
-      return v === null || v === undefined ? "" : String(v).trim();
-    };
-
-    const dataRows = rows.slice(1).filter((r) => getVal(r, colIdx["MINUTOS"]) > 0);
-
-    if (dataRows.length === 0) {
-      return NextResponse.json({ error: "No hay filas con minutos > 0" }, { status: 400 });
-    }
-
-    const dateSet = new Set<number>();
-    const allArgs: (string | number | null)[][] = [];
-
-    for (const row of dataRows) {
-      const fecha = getVal(row, colIdx["FECHA"]);
-      dateSet.add(fecha);
-      allArgs.push([
-        fecha,
-        getStr(row, colIdx["TURNO"]),
-        getStr(row, colIdx["OPERARIO"]),
-        getStr(row, colIdx["NOMBRE"]),
-        getStr(row, colIdx["ESTADO"]) || null,
-        getVal(row, colIdx["MOTIVO"]) || null,
-        getVal(row, colIdx["MINUTOS"]),
-        getStr(row, colIdx["OBSERVACION"]) || null,
-        getStr(row, colIdx["USUARIO_ALTA"]) || null,
-      ]);
-    }
-
-    const fileDates = [...dateSet].filter(Boolean);
-    const client = getClient();
-
-    await client.execute("BEGIN TRANSACTION");
-
-    if (fileDates.length > 0) {
-      const ph = fileDates.map((_, i) => `$d${i}`).join(",");
-      const dp: Record<string, number> = {};
-      fileDates.forEach((d, i) => { dp[`d${i}`] = d; });
-      await client.execute({
-        sql: `DELETE FROM tiempos_muertos WHERE fecha IN (${ph})`,
-        args: dp,
-      });
-    }
-
-    const cols = "fecha, turno, operario, nombre, estado, motivo, minutos, observacion, usuario_alta";
-    const ph = "(?, ?, ?, ?, ?, ?, ?, ?, ?)";
-
-    // Minimal round-trips: single giant INSERT
-    const MAX_BATCH = 500;
-    if (allArgs.length <= MAX_BATCH) {
-      const sql = `INSERT INTO tiempos_muertos (${cols}) VALUES ${allArgs.map(() => ph).join(", ")}`;
-      await client.execute({ sql, args: allArgs.flat() });
-    } else {
-      for (let i = 0; i < allArgs.length; i += MAX_BATCH) {
-        const batch = allArgs.slice(i, i + MAX_BATCH);
-        const sql = `INSERT INTO tiempos_muertos (${cols}) VALUES ${batch.map(() => ph).join(", ")}`;
-        await client.execute({ sql, args: batch.flat() });
-      }
-    }
-
-    await client.execute("COMMIT");
-
-    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-
-    return NextResponse.json({
-      message: `${allArgs.length.toLocaleString("es-AR")} tiempos muertos cargados en ${elapsed}s`,
-      inserted: allArgs.length,
-      dates: fileDates.sort(),
-      elapsed: `${elapsed}s`,
-    });
+    return NextResponse.json({ error: "Acción inválida. Usar: delete | insert" }, { status: 400 });
   } catch (error: any) {
-    try { await getClient().execute("ROLLBACK"); } catch {}
     console.error("Upload TM error:", error);
-    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     return NextResponse.json(
-      { error: error.message || "Error al procesar", elapsed: `${elapsed}s` },
+      { error: error.message || "Error al procesar", elapsed: `${((Date.now() - t0) / 1000).toFixed(1)}s` },
       { status: 500 }
     );
+  }
+}
+
+export async function GET() {
+  try {
+    const client = getClient();
+    const result = await client.execute("SELECT COUNT(*) as cnt FROM tiempos_muertos");
+    return NextResponse.json({ ok: true, count: Number(result.rows[0]?.cnt ?? 0) });
+  } catch (error: any) {
+    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
 }

@@ -12,9 +12,13 @@ interface HeaderActionsProps {
 
 type UploadingLabel = "prep" | "clark" | "tm";
 
+/** Configuration per upload type */
+const CHUNK_SIZE = 400; // rows per chunk — each INSERT stays well under 10s
+
 export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsProps) {
   const [uploading, setUploading] = useState<UploadingLabel | null>(null);
   const [uploadStatus, setUploadStatus] = useState("");
+  const [progress, setProgress] = useState({ current: 0, total: 0 }); // blocks
   const [elapsedSec, setElapsedSec] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -23,107 +27,139 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
   const tmInputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Live timer for upload progress
   const startTimer = useCallback(() => {
     setElapsedSec(0);
-    timerRef.current = setInterval(() => {
-      setElapsedSec((s) => s + 1);
-    }, 1000);
+    timerRef.current = setInterval(() => setElapsedSec((s) => s + 1), 1000);
   }, []);
 
   const stopTimer = useCallback(() => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
   }, []);
 
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => stopTimer();
-  }, [stopTimer]);
+  useEffect(() => () => stopTimer(), [stopTimer]);
 
   const showToast = (type: "success" | "error", message: string) => {
     setToast({ type, message });
     setTimeout(() => setToast(null), 10000);
   };
 
-  /** Send pre-parsed rows to API with auto-retry on network error */
-  const sendRowsToServer = async (
-    endpoint: string, rows: (string | number | null | undefined)[][]
-  ): Promise<Response> => {
-    const MAX_RETRIES = 2;
-    let lastError: Error | null = null;
-
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+  /** Send one API request with auto-retry */
+  const apiCall = async (endpoint: string, body: Record<string, unknown>): Promise<Response> => {
+    for (let attempt = 0; attempt <= 2; attempt++) {
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 45000);
-        const response = await fetch(endpoint, {
+        const timeout = setTimeout(() => controller.abort(), 30000);
+        const res = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ rows }),
+          body: JSON.stringify(body),
           signal: controller.signal,
         });
         clearTimeout(timeout);
-        return response;
+        return res;
       } catch (err: any) {
-        lastError = err;
-        if (attempt < MAX_RETRIES) {
-          // Wait 2s before retry
-          await new Promise((r) => setTimeout(r, 2000));
-          setUploadStatus(`Reintentando envío... (intento ${attempt + 2})`);
-        }
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 2000));
+        else throw err;
       }
     }
-    throw lastError || new Error("Error de conexión");
+    throw new Error("Error de conexión");
   };
 
-  /** Parse Excel client-side and send raw rows as JSON — avoids Vercel 10s timeout */
-  const handleSmartUpload = async (
+  /** Extract unique dates from data rows using column index */
+  const extractDates = (dataRows: (string | number | null | undefined)[][], fechaIdx: number): number[] => {
+    const dateSet = new Set<number>();
+    for (const row of dataRows) {
+      const v = row[fechaIdx];
+      const fecha = v === null || v === undefined ? 0 : Number(v) || 0;
+      if (fecha > 0) dateSet.add(fecha);
+    }
+    return [...dateSet];
+  };
+
+  /**
+   * CHUNKED UPLOAD STRATEGY:
+   * 1. Parse Excel client-side
+   * 2. Extract all unique dates → send DELETE request (fast)
+   * 3. Split rows into chunks of 400 → send each as INSERT request
+   * 4. Each request stays under 10s → no Vercel Hobby timeout
+   */
+  const handleChunkedUpload = async (
     file: File, endpoint: string, label: UploadingLabel, refreshFn?: () => void
   ) => {
     setUploading(label);
-    setUploadStatus(`Leyendo Excel... (${(file.size / 1024).toFixed(0)} KB)`);
     startTimer();
     try {
-      // 1) Parse Excel in the browser (no server time spent)
+      // Step 1: Parse Excel in browser
+      setUploadStatus(`Leyendo Excel... (${(file.size / 1024).toFixed(0)} KB)`);
       const buffer = await file.arrayBuffer();
       const wb = XLSX.read(buffer, { type: "array" });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows: (string | number | null | undefined)[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
+      const allRows: (string | number | null | undefined)[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-      if (rows.length < 2) {
+      if (allRows.length < 2) {
         showToast("error", "El archivo tiene datos insuficientes");
         return;
       }
 
-      const rowCount = rows.length - 1;
-      setUploadStatus(`Enviando ${rowCount.toLocaleString("es-AR")} filas al servidor...`);
+      const header = allRows[0];
+      const dataRows = allRows.slice(1);
+      const totalRows = dataRows.length;
 
-      // 2) Send parsed data as JSON — server only does DB operations (minimal round-trips)
-      const response = await sendRowsToServer(endpoint, rows);
-
-      const text = await response.text();
-      let data: any;
-      try { data = JSON.parse(text); } catch {
-        showToast("error", `Error del servidor: ${text.slice(0, 300)}`);
+      // Find FECHA column index
+      const headerUpper = header.map((c) => String(c ?? "").toUpperCase().trim());
+      const fechaIdx = headerUpper.indexOf("FECHA");
+      if (fechaIdx < 0) {
+        showToast("error", 'No se encontró columna "FECHA" en el archivo');
         return;
       }
 
-      if (response.ok) {
-        showToast("success", data.message);
-        setTimeout(() => refreshFn?.(), 1500);
-      } else {
-        showToast("error", data.error || `Error ${response.status}: ${text.slice(0, 300)}`);
+      // Step 2: DELETE old records
+      const allDates = extractDates(dataRows, fechaIdx);
+      setUploadStatus(`Eliminando datos previos (${allDates.length} fechas)...`);
+
+      const delRes = await apiCall(endpoint, { action: "delete", dates: allDates });
+      const delData = await delRes.json();
+      if (!delRes.ok) {
+        showToast("error", delData.error || "Error al eliminar datos previos");
+        return;
       }
+
+      // Step 3: INSERT in chunks
+      const totalChunks = Math.ceil(totalRows / CHUNK_SIZE);
+      setProgress({ current: 0, total: totalChunks });
+
+      let totalInserted = 0;
+      for (let c = 0; c < totalChunks; c++) {
+        const start = c * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, totalRows);
+        const chunkRows = [header, ...dataRows.slice(start, end)];
+
+        setUploadStatus(`Insertando bloque ${c + 1}/${totalChunks} (${start + 1}-${end} de ${totalRows} filas)...`);
+        setProgress({ current: c + 1, total: totalChunks });
+
+        const insRes = await apiCall(endpoint, { action: "insert", rows: chunkRows });
+        const insData = await insRes.json();
+
+        if (!insRes.ok) {
+          showToast("error", `Error en bloque ${c + 1}: ${insData.error}`);
+          return;
+        }
+
+        totalInserted += insData.inserted || 0;
+      }
+
+      // Done!
+      showToast("success", `${totalInserted.toLocaleString("es-AR")} registros cargados (${totalChunks} bloques) — ${allDates.length} fechas`);
+      setTimeout(() => refreshFn?.(), 1500);
+
     } catch (err: any) {
-      if (err.name === "AbortError") showToast("error", "Tiempo agotado (45s).");
+      if (err.name === "AbortError") showToast("error", "Tiempo agotado.");
       else showToast("error", `Error: ${err.message || "conexión fallida"}`);
     } finally {
       stopTimer();
       setUploading(null);
       setUploadStatus("");
+      setProgress({ current: 0, total: 0 });
     }
   };
 
@@ -144,17 +180,17 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) handleSmartUpload(file, "/api/admin/upload", "prep", onRefresh);
+    if (file) handleChunkedUpload(file, "/api/admin/upload", "prep", onRefresh);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
   const handleClarkFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) handleSmartUpload(file, "/api/admin/upload-clarkistas", "clark", onRefreshClarkistas);
+    if (file) handleChunkedUpload(file, "/api/admin/upload-clarkistas", "clark", onRefreshClarkistas);
     if (clarkInputRef.current) clarkInputRef.current.value = "";
   };
   const handleTMFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) handleSmartUpload(file, "/api/admin/upload-tm", "tm", onRefresh);
+    if (file) handleChunkedUpload(file, "/api/admin/upload-tm", "tm", onRefresh);
     if (tmInputRef.current) tmInputRef.current.value = "";
   };
 
@@ -164,6 +200,8 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
     const s = sec % 60;
     return `${m}:${String(s).padStart(2, "0")}`;
   };
+
+  const progressPct = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
 
   return (
     <>
@@ -187,11 +225,21 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
         {isDownloading ? "Generando..." : "Informe"}
       </Button>
       {uploading && uploadStatus && (
-        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[100] bg-background border rounded-lg px-4 py-2.5 shadow-lg flex items-center gap-3">
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[100] bg-background border rounded-lg px-4 py-2.5 shadow-lg flex items-center gap-3 min-w-[280px]">
           <Loader2 className="h-4 w-4 animate-spin text-emerald-600 shrink-0" />
-          <span className="text-sm text-foreground">{uploadStatus}</span>
+          <div className="flex-1 min-w-0">
+            <span className="text-sm text-foreground block truncate">{uploadStatus}</span>
+            {progress.total > 0 && (
+              <div className="flex items-center gap-2 mt-1">
+                <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div className="h-full bg-emerald-500 rounded-full transition-all duration-300" style={{ width: `${progressPct}%` }} />
+                </div>
+                <span className="text-[10px] text-muted-foreground font-mono">{progressPct}%</span>
+              </div>
+            )}
+          </div>
           {elapsedSec > 0 && (
-            <span className="text-xs text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
+            <span className="text-xs text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded shrink-0">
               {formatTime(elapsedSec)}
             </span>
           )}
