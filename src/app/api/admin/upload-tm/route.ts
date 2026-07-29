@@ -1,6 +1,5 @@
 import { getClient } from "@/lib/turso";
 import { NextResponse } from "next/server";
-import * as XLSX from "xlsx";
 
 export const maxDuration = 60;
 
@@ -22,11 +21,14 @@ CREATE INDEX IF NOT EXISTS idx_tm_operario ON tiempos_muertos(operario);
 CREATE INDEX IF NOT EXISTS idx_tm_fecha_operario ON tiempos_muertos(fecha, operario);
 `;
 
+let _tableReady = false;
 async function ensureTable() {
+  if (_tableReady) return;
   const client = getClient();
   for (const stmt of TM_DDL.split(";").map((s) => s.trim()).filter(Boolean)) {
     await client.execute(stmt);
   }
+  _tableReady = true;
 }
 
 export async function GET() {
@@ -34,32 +36,22 @@ export async function GET() {
     await ensureTable();
     const client = getClient();
     const result = await client.execute("SELECT COUNT(*) as cnt FROM tiempos_muertos");
-    const count = Number(result.rows[0]?.cnt ?? 0);
-    return NextResponse.json({ ok: true, count });
+    return NextResponse.json({ ok: true, count: Number(result.rows[0]?.cnt ?? 0) });
   } catch (error: any) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
+  const t0 = Date.now();
   try {
     await ensureTable();
 
-    const formData = await request.formData();
-    const file = formData.get("file") as File | null;
-    if (!file) {
-      return NextResponse.json({ error: "No se recibió el archivo" }, { status: 400 });
-    }
+    const body = await request.json();
+    const rows: (string | number | null | undefined)[][] = body.rows;
 
-    const buffer = await file.arrayBuffer();
-    const raw = new Uint8Array(buffer);
-
-    const wb = XLSX.read(raw, { type: "array" });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows: (string | number | null | undefined)[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
-
-    if (rows.length < 2) {
-      return NextResponse.json({ error: "El archivo está vacío" }, { status: 400 });
+    if (!rows || rows.length < 2) {
+      return NextResponse.json({ error: "Datos insuficientes" }, { status: 400 });
     }
 
     const header = rows[0].map((c) => String(c ?? "").toUpperCase().trim());
@@ -69,7 +61,9 @@ export async function POST(request: Request) {
     const required = ["FECHA", "TURNO", "OPERARIO", "NOMBRE", "MINUTOS"];
     const missing = required.filter((r) => !(r in colIdx));
     if (missing.length > 0) {
-      return NextResponse.json({ error: `Faltan columnas: ${missing.join(", ")}` }, { status: 400 });
+      return NextResponse.json({
+        error: `Faltan columnas: ${missing.join(", ")}. Encontradas: ${header.filter(Boolean).join(", ")}`
+      }, { status: 400 });
     }
 
     const getVal = (row: (string | number | null | undefined)[], ci: number): number => {
@@ -83,10 +77,35 @@ export async function POST(request: Request) {
       return v === null || v === undefined ? "" : String(v).trim();
     };
 
-    const dataRows = rows.slice(1);
-    const fileDates = [...new Set(dataRows.map((r) => getVal(r, colIdx["FECHA"])))].filter(Boolean);
+    const dataRows = rows.slice(1).filter((r) => getVal(r, colIdx["MINUTOS"]) > 0);
 
+    if (dataRows.length === 0) {
+      return NextResponse.json({ error: "No hay filas con minutos > 0" }, { status: 400 });
+    }
+
+    const dateSet = new Set<number>();
+    const allArgs: (string | number | null)[][] = [];
+
+    for (const row of dataRows) {
+      const fecha = getVal(row, colIdx["FECHA"]);
+      dateSet.add(fecha);
+      allArgs.push([
+        fecha,
+        getStr(row, colIdx["TURNO"]),
+        getStr(row, colIdx["OPERARIO"]),
+        getStr(row, colIdx["NOMBRE"]),
+        getStr(row, colIdx["ESTADO"]) || null,
+        getVal(row, colIdx["MOTIVO"]) || null,
+        getVal(row, colIdx["MINUTOS"]),
+        getStr(row, colIdx["OBSERVACION"]) || null,
+        getStr(row, colIdx["USUARIO_ALTA"]) || null,
+      ]);
+    }
+
+    const fileDates = [...dateSet].filter(Boolean);
     const client = getClient();
+
+    await client.execute("BEGIN TRANSACTION");
 
     if (fileDates.length > 0) {
       const ph = fileDates.map((_, i) => `$d${i}`).join(",");
@@ -99,46 +118,31 @@ export async function POST(request: Request) {
     }
 
     const cols = "fecha, turno, operario, nombre, estado, motivo, minutos, observacion, usuario_alta";
-    const placeholders = "(?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    const ph = "(?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-    const buildRowArgs = (row: (string | number | null | undefined)[]): (string | number | null)[] => {
-      const estadoRaw = getStr(row, colIdx["ESTADO"]);
-      const motivoRaw = getVal(row, colIdx["MOTIVO"]);
-      return [
-        getVal(row, colIdx["FECHA"]),
-        getStr(row, colIdx["TURNO"]),
-        getStr(row, colIdx["OPERARIO"]),
-        getStr(row, colIdx["NOMBRE"]),
-        estadoRaw || null,
-        motivoRaw || null,
-        getVal(row, colIdx["MINUTOS"]),
-        getStr(row, colIdx["OBSERVACION"]) || null,
-        getStr(row, colIdx["USUARIO_ALTA"]) || null,
-      ];
-    };
-
-    const validRows = dataRows.filter((r) => getVal(r, colIdx["MINUTOS"]) > 0);
-
-    const CHUNK = 200;
-    let totalInserted = 0;
-
-    for (let i = 0; i < validRows.length; i += CHUNK) {
-      const chunk = validRows.slice(i, i + CHUNK);
-      const valueGroups = chunk.map(() => placeholders).join(", ");
-      const sql = `INSERT INTO tiempos_muertos (${cols}) VALUES ${valueGroups}`;
-      const args = chunk.flatMap(buildRowArgs);
-      await client.execute({ sql, args });
-      totalInserted += chunk.length;
+    const BATCH = 200;
+    for (let i = 0; i < allArgs.length; i += BATCH) {
+      const batch = allArgs.slice(i, i + BATCH);
+      const sql = `INSERT INTO tiempos_muertos (${cols}) VALUES ${batch.map(() => ph).join(", ")}`;
+      await client.execute({ sql, args: batch.flat() });
     }
 
+    await client.execute("COMMIT");
+
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+
     return NextResponse.json({
-      message: `${totalInserted.toLocaleString("es-AR")} registros de tiempos muertos cargados correctamente`,
-      inserted: totalInserted,
+      message: `${allArgs.length.toLocaleString("es-AR")} tiempos muertos cargados en ${elapsed}s`,
+      inserted: allArgs.length,
+      dates: fileDates.sort(),
+      elapsed: `${elapsed}s`,
     });
   } catch (error: any) {
+    try { await getClient().execute("ROLLBACK"); } catch {}
     console.error("Upload TM error:", error);
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     return NextResponse.json(
-      { error: error.message || "Error al procesar el archivo" },
+      { error: error.message || "Error al procesar", elapsed: `${elapsed}s` },
       { status: 500 }
     );
   }
