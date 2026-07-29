@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Upload, FileDown, CheckCircle2, AlertCircle, Loader2, Timer } from "lucide-react";
+import * as XLSX from "xlsx";
 
 interface HeaderActionsProps {
   onRefresh?: () => void;
@@ -22,30 +23,60 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
 
   const showToast = (type: "success" | "error", message: string) => {
     setToast({ type, message });
-    setTimeout(() => setToast(null), 8000);
+    setTimeout(() => setToast(null), 10000);
   };
 
-  const handleUpload = async (
+  /** Parse Excel client-side and send raw rows as JSON — avoids Vercel 10s timeout */
+  const handleSmartUpload = async (
     file: File, endpoint: string, label: UploadingLabel, refreshFn?: () => void
   ) => {
     setUploading(label);
-    setUploadStatus(`Enviando... (${(file.size / 1024).toFixed(0)} KB)`);
+    setUploadStatus(`Leyendo Excel... (${(file.size / 1024).toFixed(0)} KB)`);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
+      // 1) Parse Excel in the browser (no server time)
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows: (string | number | null | undefined)[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+      if (rows.length < 2) {
+        showToast("error", "El archivo tiene datos insuficientes");
+        return;
+      }
+
+      setUploadStatus(`Enviando ${rows.length - 1} filas al servidor...`);
+
+      // 2) Send parsed data as JSON — server only needs to INSERT
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 180000);
-      const response = await fetch(endpoint, { method: "POST", body: formData, signal: controller.signal });
+      const timeout = setTimeout(() => controller.abort(), 30000);
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows }),
+        signal: controller.signal,
+      });
       clearTimeout(timeout);
+
       const text = await response.text();
       let data: any;
-      try { data = JSON.parse(text); } catch { showToast("error", `Error del servidor: ${text.slice(0, 200)}`); return; }
-      if (response.ok) { showToast("success", data.message); setTimeout(() => refreshFn?.(), 1500); }
-      else { showToast("error", data.error || `Error ${response.status}: ${text.slice(0, 200)}`); }
+      try { data = JSON.parse(text); } catch {
+        showToast("error", `Error del servidor: ${text.slice(0, 300)}`);
+        return;
+      }
+
+      if (response.ok) {
+        showToast("success", data.message);
+        setTimeout(() => refreshFn?.(), 1500);
+      } else {
+        showToast("error", data.error || `Error ${response.status}: ${text.slice(0, 300)}`);
+      }
     } catch (err: any) {
-      if (err.name === "AbortError") showToast("error", "Tiempo agotado (3 min).");
+      if (err.name === "AbortError") showToast("error", "Tiempo agotado (30s).");
       else showToast("error", `Error: ${err.message || "conexión fallida"}`);
-    } finally { setUploading(null); setUploadStatus(""); }
+    } finally {
+      setUploading(null);
+      setUploadStatus("");
+    }
   };
 
   const handleDownload = async () => {
@@ -65,17 +96,17 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) handleUpload(file, "/api/admin/upload", "prep", onRefresh);
+    if (file) handleSmartUpload(file, "/api/admin/upload", "prep", onRefresh);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
   const handleClarkFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) handleUpload(file, "/api/admin/upload-clarkistas", "clark", onRefreshClarkistas);
+    if (file) handleSmartUpload(file, "/api/admin/upload-clarkistas", "clark", onRefreshClarkistas);
     if (clarkInputRef.current) clarkInputRef.current.value = "";
   };
   const handleTMFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) handleUpload(file, "/api/admin/upload-tm", "tm", onRefresh);
+    if (file) handleSmartUpload(file, "/api/admin/upload-tm", "tm", onRefresh);
     if (tmInputRef.current) tmInputRef.current.value = "";
   };
 
@@ -107,7 +138,7 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
         </div>
       )}
       {toast && (
-        <div className={`fixed bottom-20 left-1/2 -translate-x-1/2 z-[100] max-w-md w-auto flex items-center gap-2.5 rounded-lg px-5 py-3.5 text-sm shadow-xl transition-all animate-in slide-in-from-bottom-4 fade-in duration-300 ${toast.type === "success" ? "bg-emerald-600 text-white" : "bg-red-600 text-white"}`}>
+        <div className={`fixed bottom-20 left-1/2 -translate-x-1/2 z-[100] max-w-lg w-auto flex items-center gap-2.5 rounded-lg px-5 py-3.5 text-sm shadow-xl transition-all animate-in slide-in-from-bottom-4 fade-in duration-300 ${toast.type === "success" ? "bg-emerald-600 text-white" : "bg-red-600 text-white"}`}>
           {toast.type === "success" ? <CheckCircle2 className="h-5 w-5 shrink-0" /> : <AlertCircle className="h-5 w-5 shrink-0" />}
           <span className="text-sm font-medium">{toast.message}</span>
         </div>

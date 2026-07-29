@@ -1,6 +1,5 @@
 import { getClient } from "@/lib/turso";
 import { NextResponse } from "next/server";
-import * as XLSX from "xlsx";
 
 export const maxDuration = 60;
 
@@ -50,11 +49,14 @@ CREATE INDEX IF NOT EXISTS idx_prod_operario ON production_records(operario);
 CREATE INDEX IF NOT EXISTS idx_prod_fecha_turno ON production_records(fecha, turno);
 `;
 
+let _tableReady = false;
 async function ensureTable() {
+  if (_tableReady) return;
   const client = getClient();
   for (const stmt of PRODUCTION_DDL.split(";").map((s) => s.trim()).filter(Boolean)) {
     await client.execute(stmt);
   }
+  _tableReady = true;
 }
 
 export async function GET() {
@@ -62,36 +64,26 @@ export async function GET() {
     await ensureTable();
     const client = getClient();
     const result = await client.execute("SELECT COUNT(*) as cnt FROM production_records");
-    const count = Number(result.rows[0]?.cnt ?? 0);
-    return NextResponse.json({ ok: true, count });
+    return NextResponse.json({ ok: true, count: Number(result.rows[0]?.cnt ?? 0) });
   } catch (error: any) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
 }
 
+// Excel is parsed client-side. Server receives ready-to-insert row arrays.
 export async function POST(request: Request) {
   const t0 = Date.now();
   try {
     await ensureTable();
 
-    const formData = await request.formData();
-    const file = formData.get("file") as File | null;
-    if (!file) {
-      return NextResponse.json({ error: "No se recibió el archivo" }, { status: 400 });
+    const body = await request.json();
+    const rows: (string | number | null | undefined)[][] = body.rows;
+
+    if (!rows || rows.length < 2) {
+      return NextResponse.json({ error: "Datos insuficientes" }, { status: 400 });
     }
 
-    const buffer = await file.arrayBuffer();
-    const raw = new Uint8Array(buffer);
-
-    const wb = XLSX.read(raw, { type: "array" });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows: (string | number | null | undefined)[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
-
-    if (rows.length < 2) {
-      return NextResponse.json({ error: "El archivo tiene datos insuficientes" }, { status: 400 });
-    }
-
-    // Header mapping — handle typos and variations
+    // Header mapping
     const header = rows[0].map((c) => String(c ?? "").toUpperCase().trim());
     const colIdx: Record<string, number> = {};
     header.forEach((h, i) => {
@@ -134,41 +126,21 @@ export async function POST(request: Request) {
     });
 
     if (dataRows.length === 0) {
-      return NextResponse.json({ error: "No se encontraron filas válidas (fecha y operario vacíos)" }, { status: 400 });
+      return NextResponse.json({ error: "No hay filas válidas (fecha y operario vacíos)" }, { status: 400 });
     }
 
-    const fileDates = [...new Set(dataRows.map((r) => getVal(r, colIdx["FECHA"])))].filter(Boolean);
+    // Extract unique dates
+    const dateSet = new Set<number>();
+    const allArgs: (string | number)[][] = [];
 
-    const client = getClient();
+    for (const row of dataRows) {
+      const fecha = getVal(row, colIdx["FECHA"]);
+      dateSet.add(fecha);
 
-    // Count before
-    const countBefore = await client.execute("SELECT COUNT(*) as cnt FROM production_records");
-    const beforeCount = Number(countBefore.rows[0]?.cnt ?? 0);
-
-    // Delete old records for dates in this file
-    let deletedCount = 0;
-    if (fileDates.length > 0) {
-      const ph = fileDates.map((_, i) => `$d${i}`).join(",");
-      const dp: Record<string, number> = {};
-      fileDates.forEach((d, i) => { dp[`d${i}`] = d; });
-      const delResult = await client.execute({
-        sql: `DELETE FROM production_records WHERE fecha IN (${ph})`,
-        args: dp,
-      });
-      deletedCount = delResult.rowsAffected ?? 0;
-    }
-
-    // ── KEY OPTIMIZATION: use a single transaction with batched statements ──
-    // This avoids multiple round-trips to Turso (crucial for Vercel's 10s timeout)
-    const cols = "funcion, funcion_desc, fecha, turno, turno_desc, operario, nombre, actividad, circuito, tiempo_mue, total, hora_00, hora_01, hora_02, hora_03, hora_04, hora_05, hora_06, hora_07, hora_08, hora_09, hora_10, hora_11, hora_12, hora_13, hora_14, hora_15, hora_16, hora_17, hora_18, hora_19, hora_20, hora_21, hora_22, hora_23";
-    const placeholders = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-
-    // Build ALL row args upfront
-    const allRowArgs = dataRows.map((row) => {
       const args: (string | number)[] = [
         getStr(row, colIdx["FUNCION"]),
         getStr(row, colIdx["FUNCION_DESC"]),
-        getVal(row, colIdx["FECHA"]),
+        fecha,
         getStr(row, colIdx["TURNO"]),
         getStr(row, colIdx["TURNO_DESC"]),
         getStr(row, colIdx["OPERARIO"]),
@@ -179,49 +151,54 @@ export async function POST(request: Request) {
         getVal(row, colIdx["TOTAL"]),
       ];
       for (let h = 0; h <= 23; h++) args.push(getVal(row, hourCols[h]));
-      return args;
-    });
+      allArgs.push(args);
+    }
 
-    // Execute in a single transaction — one round-trip for ALL inserts
+    const fileDates = [...dateSet].filter(Boolean);
+    const client = getClient();
+
+    // Single transaction: DELETE + INSERT
     await client.execute("BEGIN TRANSACTION");
 
-    const BATCH = 80; // Larger batches within the transaction
-    for (let i = 0; i < allRowArgs.length; i += BATCH) {
-      const batch = allRowArgs.slice(i, i + BATCH);
-      const valueGroups = batch.map(() => placeholders).join(", ");
-      const sql = `INSERT INTO production_records (${cols}) VALUES ${valueGroups}`;
-      const args = batch.flat();
-      await client.execute({ sql, args });
+    // Delete old records
+    if (fileDates.length > 0) {
+      const ph = fileDates.map((_, i) => `$d${i}`).join(",");
+      const dp: Record<string, number> = {};
+      fileDates.forEach((d, i) => { dp[`d${i}`] = d; });
+      await client.execute({
+        sql: `DELETE FROM production_records WHERE fecha IN (${ph})`,
+        args: dp,
+      });
+    }
+
+    // Batch INSERT within transaction
+    const cols = "funcion, funcion_desc, fecha, turno, turno_desc, operario, nombre, actividad, circuito, tiempo_mue, total, hora_00, hora_01, hora_02, hora_03, hora_04, hora_05, hora_06, hora_07, hora_08, hora_09, hora_10, hora_11, hora_12, hora_13, hora_14, hora_15, hora_16, hora_17, hora_18, hora_19, hora_20, hora_21, hora_22, hora_23";
+    const ph = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+    // Use large batches to minimize round-trips
+    const BATCH = 200;
+    for (let i = 0; i < allArgs.length; i += BATCH) {
+      const batch = allArgs.slice(i, i + BATCH);
+      const sql = `INSERT INTO production_records (${cols}) VALUES ${batch.map(() => ph).join(", ")}`;
+      await client.execute({ sql, args: batch.flat() });
     }
 
     await client.execute("COMMIT");
 
-    const totalInserted = allRowArgs.length;
-
-    // Verify: count after
-    const countAfter = await client.execute("SELECT COUNT(*) as cnt FROM production_records");
-    const afterCount = Number(countAfter.rows[0]?.cnt ?? 0);
-
     const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
 
     return NextResponse.json({
-      message: `${totalInserted.toLocaleString("es-AR")} registros cargados en ${elapsed}s — DB: ${afterCount}`,
-      inserted: totalInserted,
-      deleted: deletedCount,
-      dbTotal: afterCount,
+      message: `${allArgs.length.toLocaleString("es-AR")} registros cargados en ${elapsed}s — ${fileDates.length} fechas`,
+      inserted: allArgs.length,
       dates: fileDates.sort(),
       elapsed: `${elapsed}s`,
     });
   } catch (error: any) {
-    // Rollback on error
-    try {
-      const client = getClient();
-      await client.execute("ROLLBACK");
-    } catch {}
+    try { await getClient().execute("ROLLBACK"); } catch {}
     console.error("Upload production error:", error);
     const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     return NextResponse.json(
-      { error: error.message || "Error al procesar el archivo", elapsed: `${elapsed}s` },
+      { error: error.message || "Error al procesar", elapsed: `${elapsed}s` },
       { status: 500 }
     );
   }
