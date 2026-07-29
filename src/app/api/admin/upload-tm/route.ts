@@ -45,8 +45,7 @@ export async function GET() {
 export async function POST(request: Request) {
   const t0 = Date.now();
   try {
-    await ensureTable();
-
+    // Tables already exist — skip ensureTable() to save round-trips on cold start
     const body = await request.json();
     const rows: (string | number | null | undefined)[][] = body.rows;
 
