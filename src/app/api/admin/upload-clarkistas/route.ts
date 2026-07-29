@@ -53,7 +53,7 @@ CREATE INDEX IF NOT EXISTS idx_clark_fecha_turno ON clarkistas_records(fecha, tu
 
 async function ensureTable() {
   const client = getClient();
-  for (const stmt of CLARKISTAS_DDL.split(";").map(s => s.trim()).filter(Boolean)) {
+  for (const stmt of CLARKISTAS_DDL.split(";").map((s) => s.trim()).filter(Boolean)) {
     await client.execute(stmt);
   }
 }
@@ -71,6 +71,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const t0 = Date.now();
+  let log: string[] = [];
+
   try {
     await ensureTable();
 
@@ -80,6 +83,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No se recibió el archivo" }, { status: 400 });
     }
 
+    log.push(`Archivo: ${file.name}, ${(file.size / 1024).toFixed(0)} KB`);
+
     const buffer = await file.arrayBuffer();
     const raw = new Uint8Array(buffer);
 
@@ -87,15 +92,17 @@ export async function POST(request: Request) {
     const ws = wb.Sheets[wb.SheetNames[0]];
     const rows: (string | number | null | undefined)[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
+    log.push(`Hoja "${wb.SheetNames[0]}": ${rows.length} filas leídas`);
+
     if (rows.length < 2) {
-      return NextResponse.json({ error: "El archivo está vacío" }, { status: 400 });
+      return NextResponse.json({ error: "El archivo tiene datos insuficientes" }, { status: 400 });
     }
 
-    // Header mapping — handle typos and variations from source
+    // Header mapping — handle typos and variations
     const header = rows[0].map((c) => String(c ?? "").toUpperCase().trim());
     const colIdx: Record<string, number> = {};
     header.forEach((h, i) => {
-      if (h === "NOIMBRE" || h === "NMBRE" || h === "NOMBRE") colIdx["NOMBRE"] = i;
+      if (h === "NOIMBRE" || h === "NMBRE") colIdx["NOMBRE"] = i;
       else if (h === "FUNCION_DESC" || h === "FUNCION DESCRIPCION" || h === "FUNCIONDESC") colIdx["FUNCION_DESC"] = i;
       else if (h === "TURNO_DESC" || h === "TURNO DESCRIPCION" || h === "TURNODESC") colIdx["TURNO_DESC"] = i;
       else if (h === "TIEMPO_MUE" || h === "TIEMPO_MUESTRA" || h === "T_MUE") colIdx["TIEMPO_MUE"] = i;
@@ -106,7 +113,7 @@ export async function POST(request: Request) {
     const missing = required.filter((r) => !(r in colIdx));
     if (missing.length > 0) {
       return NextResponse.json({ 
-        error: `Faltan columnas requeridas: ${missing.join(", ")}. Columnas encontradas: ${header.filter(Boolean).join(", ")}`
+        error: `Faltan columnas: ${missing.join(", ")}. Encontradas: ${header.filter(Boolean).join(", ")}`
       }, { status: 400 });
     }
 
@@ -126,32 +133,53 @@ export async function POST(request: Request) {
       return v === null || v === undefined ? "" : String(v).trim();
     };
 
-    const dataRows = rows.slice(1);
-    const fileDates = [...new Set(dataRows.map(r => getVal(r, colIdx["FECHA"])))].filter(Boolean);
+    // Skip empty/invalid rows
+    const dataRows = rows.slice(1).filter((r) => {
+      const fecha = getVal(r, colIdx["FECHA"]);
+      const operario = getStr(r, colIdx["OPERARIO"]);
+      return fecha > 0 && operario.length > 0;
+    });
+
+    log.push(`${dataRows.length} filas válidas`);
+
+    if (dataRows.length === 0) {
+      return NextResponse.json({ error: "No se encontraron filas válidas" }, { status: 400 });
+    }
+
+    const fileDates = [...new Set(dataRows.map((r) => getVal(r, colIdx["FECHA"])))].filter(Boolean);
 
     const client = getClient();
 
+    // Count before
+    const countBefore = await client.execute("SELECT COUNT(*) as cnt FROM clarkistas_records");
+    const beforeCount = Number(countBefore.rows[0]?.cnt ?? 0);
+
     // Delete old records for the dates in this file
+    let deletedCount = 0;
     if (fileDates.length > 0) {
       const ph = fileDates.map((_, i) => `$d${i}`).join(",");
       const dp: Record<string, number> = {};
       fileDates.forEach((d, i) => { dp[`d${i}`] = d; });
-      await client.execute({
+      const delResult = await client.execute({
         sql: `DELETE FROM clarkistas_records WHERE fecha IN (${ph})`,
         args: dp,
       });
+      deletedCount = delResult.rowsAffected ?? 0;
+      log.push(`Eliminados ${deletedCount} registros previos`);
     }
 
-    const cols = "funcion, funcion_desc, fecha, turno, turno_desc, operario, nombre, actividad, circuito, tiempo_mue, total, hora_00, hora_01, hora_02, hora_03, hora_04, hora_05, hora_06, hora_07, hora_08, hora_09, hora_10, hora_11, hora_12, hora_13, hora_14, hora_15, hora_16, hora_17, hora_18, hora_19, hora_20, hora_21, hora_22, hora_23";
-    const placeholders = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    const cols = "funcion, funcion_desc, fecha, turno, turno_desc, tarea, operario, nombre, actividad, circuito, tiempo_mue, total, hora_00, hora_01, hora_02, hora_03, hora_04, hora_05, hora_06, hora_07, hora_08, hora_09, hora_10, hora_11, hora_12, hora_13, hora_14, hora_15, hora_16, hora_17, hora_18, hora_19, hora_20, hora_21, hora_22, hora_23";
+    const placeholders = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-    const buildRowArgs = (row: (string | number | null | undefined)[]): (string | number)[] => {
-      const args: (string | number)[] = [
+    const buildRowArgs = (row: (string | number | null | undefined)[]): (string | number | null)[] => {
+      const tareaCol = colIdx["TAREA"];
+      const args: (string | number | null)[] = [
         getStr(row, colIdx["FUNCION"]),
         getStr(row, colIdx["FUNCION_DESC"]),
         getVal(row, colIdx["FECHA"]),
         getStr(row, colIdx["TURNO"]),
         getStr(row, colIdx["TURNO_DESC"]),
+        tareaCol !== undefined ? (getStr(row, tareaCol) || null) : null,
         getStr(row, colIdx["OPERARIO"]),
         getStr(row, colIdx["NOMBRE"]),
         getVal(row, colIdx["ACTIVIDAD"]),
@@ -163,26 +191,62 @@ export async function POST(request: Request) {
       return args;
     };
 
-    const CHUNK = 150;
+    // Insert in smaller chunks with fallback
+    const CHUNK = 50;
     let totalInserted = 0;
+    let chunksDone = 0;
+    const totalChunks = Math.ceil(dataRows.length / CHUNK);
 
     for (let i = 0; i < dataRows.length; i += CHUNK) {
       const chunk = dataRows.slice(i, i + CHUNK);
       const valueGroups = chunk.map(() => placeholders).join(", ");
       const sql = `INSERT INTO clarkistas_records (${cols}) VALUES ${valueGroups}`;
       const args = chunk.flatMap(buildRowArgs);
-      await client.execute({ sql, args });
-      totalInserted += chunk.length;
+      try {
+        await client.execute({ sql, args });
+        totalInserted += chunk.length;
+      } catch (chunkErr: any) {
+        log.push(`Chunk ${chunksDone + 1} falló, insertando de a uno...`);
+        for (const row of chunk) {
+          try {
+            const rowArgs = buildRowArgs(row);
+            await client.execute({
+              sql: `INSERT INTO clarkistas_records (${cols}) VALUES ${placeholders}`,
+              args: rowArgs,
+            });
+            totalInserted++;
+          } catch (rowErr: any) {
+            log.push(`Fila error: ${rowErr.message}`);
+          }
+        }
+      }
+      chunksDone++;
     }
 
+    // Verify
+    const countAfter = await client.execute("SELECT COUNT(*) as cnt FROM clarkistas_records");
+    const afterCount = Number(countAfter.rows[0]?.cnt ?? 0);
+
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+
     return NextResponse.json({
-      message: `${totalInserted.toLocaleString("es-AR")} registros clarkistas cargados correctamente`,
+      message: `${totalInserted.toLocaleString("es-AR")} registros clarkistas cargados (${elapsed}s)`,
       inserted: totalInserted,
+      deleted: deletedCount,
+      dbTotal: afterCount,
+      dates: fileDates.sort(),
+      elapsed: `${elapsed}s`,
+      log: log,
     });
   } catch (error: any) {
     console.error("Upload clarkistas error:", error);
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     return NextResponse.json(
-      { error: error.message || "Error al procesar el archivo" },
+      { 
+        error: `${error.message || "Error al procesar"}`,
+        elapsed: `${elapsed}s`,
+        log: log,
+      },
       { status: 500 }
     );
   }

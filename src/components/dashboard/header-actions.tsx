@@ -22,7 +22,7 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
 
   const showToast = (type: "success" | "error", message: string) => {
     setToast({ type, message });
-    setTimeout(() => setToast(null), 5000);
+    setTimeout(() => setToast(null), 8000);
   };
 
   const handleUpload = async (
@@ -40,7 +40,7 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
       const text = await response.text();
       let data: any;
       try { data = JSON.parse(text); } catch { showToast("error", `Error del servidor: ${text.slice(0, 200)}`); return; }
-      if (response.ok) { showToast("success", data.message); setTimeout(() => refreshFn?.(), 600); }
+      if (response.ok) { showToast("success", data.message); setTimeout(() => refreshFn?.(), 1500); }
       else { showToast("error", data.error || `Error ${response.status}: ${text.slice(0, 200)}`); }
     } catch (err: any) {
       if (err.name === "AbortError") showToast("error", "Tiempo agotado (3 min).");
