@@ -120,11 +120,17 @@ export async function POST(request: Request) {
     const cols = "fecha, turno, operario, nombre, estado, motivo, minutos, observacion, usuario_alta";
     const ph = "(?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-    const BATCH = 200;
-    for (let i = 0; i < allArgs.length; i += BATCH) {
-      const batch = allArgs.slice(i, i + BATCH);
-      const sql = `INSERT INTO tiempos_muertos (${cols}) VALUES ${batch.map(() => ph).join(", ")}`;
-      await client.execute({ sql, args: batch.flat() });
+    // Minimal round-trips: single giant INSERT
+    const MAX_BATCH = 500;
+    if (allArgs.length <= MAX_BATCH) {
+      const sql = `INSERT INTO tiempos_muertos (${cols}) VALUES ${allArgs.map(() => ph).join(", ")}`;
+      await client.execute({ sql, args: allArgs.flat() });
+    } else {
+      for (let i = 0; i < allArgs.length; i += MAX_BATCH) {
+        const batch = allArgs.slice(i, i + MAX_BATCH);
+        const sql = `INSERT INTO tiempos_muertos (${cols}) VALUES ${batch.map(() => ph).join(", ")}`;
+        await client.execute({ sql, args: batch.flat() });
+      }
     }
 
     await client.execute("COMMIT");

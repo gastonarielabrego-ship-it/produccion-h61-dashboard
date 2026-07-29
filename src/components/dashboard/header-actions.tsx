@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Upload, FileDown, CheckCircle2, AlertCircle, Loader2, Timer } from "lucide-react";
 import * as XLSX from "xlsx";
@@ -15,15 +15,68 @@ type UploadingLabel = "prep" | "clark" | "tm";
 export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsProps) {
   const [uploading, setUploading] = useState<UploadingLabel | null>(null);
   const [uploadStatus, setUploadStatus] = useState("");
+  const [elapsedSec, setElapsedSec] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const clarkInputRef = useRef<HTMLInputElement>(null);
   const tmInputRef = useRef<HTMLInputElement>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Live timer for upload progress
+  const startTimer = useCallback(() => {
+    setElapsedSec(0);
+    timerRef.current = setInterval(() => {
+      setElapsedSec((s) => s + 1);
+    }, 1000);
+  }, []);
+
+  const stopTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => stopTimer();
+  }, [stopTimer]);
 
   const showToast = (type: "success" | "error", message: string) => {
     setToast({ type, message });
     setTimeout(() => setToast(null), 10000);
+  };
+
+  /** Send pre-parsed rows to API with auto-retry on network error */
+  const sendRowsToServer = async (
+    endpoint: string, rows: (string | number | null | undefined)[][]
+  ): Promise<Response> => {
+    const MAX_RETRIES = 2;
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 45000);
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rows }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        return response;
+      } catch (err: any) {
+        lastError = err;
+        if (attempt < MAX_RETRIES) {
+          // Wait 2s before retry
+          await new Promise((r) => setTimeout(r, 2000));
+          setUploadStatus(`Reintentando envío... (intento ${attempt + 2})`);
+        }
+      }
+    }
+    throw lastError || new Error("Error de conexión");
   };
 
   /** Parse Excel client-side and send raw rows as JSON — avoids Vercel 10s timeout */
@@ -32,8 +85,9 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
   ) => {
     setUploading(label);
     setUploadStatus(`Leyendo Excel... (${(file.size / 1024).toFixed(0)} KB)`);
+    startTimer();
     try {
-      // 1) Parse Excel in the browser (no server time)
+      // 1) Parse Excel in the browser (no server time spent)
       const buffer = await file.arrayBuffer();
       const wb = XLSX.read(buffer, { type: "array" });
       const ws = wb.Sheets[wb.SheetNames[0]];
@@ -44,18 +98,11 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
         return;
       }
 
-      setUploadStatus(`Enviando ${rows.length - 1} filas al servidor...`);
+      const rowCount = rows.length - 1;
+      setUploadStatus(`Enviando ${rowCount.toLocaleString("es-AR")} filas al servidor...`);
 
-      // 2) Send parsed data as JSON — server only needs to INSERT
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 30000);
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
+      // 2) Send parsed data as JSON — server only does DB operations (minimal round-trips)
+      const response = await sendRowsToServer(endpoint, rows);
 
       const text = await response.text();
       let data: any;
@@ -71,9 +118,10 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
         showToast("error", data.error || `Error ${response.status}: ${text.slice(0, 300)}`);
       }
     } catch (err: any) {
-      if (err.name === "AbortError") showToast("error", "Tiempo agotado (30s).");
+      if (err.name === "AbortError") showToast("error", "Tiempo agotado (45s).");
       else showToast("error", `Error: ${err.message || "conexión fallida"}`);
     } finally {
+      stopTimer();
       setUploading(null);
       setUploadStatus("");
     }
@@ -110,6 +158,13 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
     if (tmInputRef.current) tmInputRef.current.value = "";
   };
 
+  const formatTime = (sec: number) => {
+    if (sec < 60) return `${sec}s`;
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${String(s).padStart(2, "0")}`;
+  };
+
   return (
     <>
       <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleFileChange} className="hidden" />
@@ -135,6 +190,11 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[100] bg-background border rounded-lg px-4 py-2.5 shadow-lg flex items-center gap-3">
           <Loader2 className="h-4 w-4 animate-spin text-emerald-600 shrink-0" />
           <span className="text-sm text-foreground">{uploadStatus}</span>
+          {elapsedSec > 0 && (
+            <span className="text-xs text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
+              {formatTime(elapsedSec)}
+            </span>
+          )}
         </div>
       )}
       {toast && (

@@ -71,6 +71,7 @@ export async function GET() {
   }
 }
 
+// Ultra-optimized: same minimal round-trip strategy as production upload
 export async function POST(request: Request) {
   const t0 = Date.now();
   try {
@@ -158,7 +159,7 @@ export async function POST(request: Request) {
     const fileDates = [...dateSet].filter(Boolean);
     const client = getClient();
 
-    // Single transaction
+    // MINIMAL ROUND-TRIPS strategy
     await client.execute("BEGIN TRANSACTION");
 
     if (fileDates.length > 0) {
@@ -174,11 +175,16 @@ export async function POST(request: Request) {
     const cols = "funcion, funcion_desc, fecha, turno, turno_desc, tarea, operario, nombre, actividad, circuito, tiempo_mue, total, hora_00, hora_01, hora_02, hora_03, hora_04, hora_05, hora_06, hora_07, hora_08, hora_09, hora_10, hora_11, hora_12, hora_13, hora_14, hora_15, hora_16, hora_17, hora_18, hora_19, hora_20, hora_21, hora_22, hora_23";
     const ph = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-    const BATCH = 200;
-    for (let i = 0; i < allArgs.length; i += BATCH) {
-      const batch = allArgs.slice(i, i + BATCH);
-      const sql = `INSERT INTO clarkistas_records (${cols}) VALUES ${batch.map(() => ph).join(", ")}`;
-      await client.execute({ sql, args: batch.flat() });
+    const MAX_BATCH = 500;
+    if (allArgs.length <= MAX_BATCH) {
+      const sql = `INSERT INTO clarkistas_records (${cols}) VALUES ${allArgs.map(() => ph).join(", ")}`;
+      await client.execute({ sql, args: allArgs.flat() });
+    } else {
+      for (let i = 0; i < allArgs.length; i += MAX_BATCH) {
+        const batch = allArgs.slice(i, i + MAX_BATCH);
+        const sql = `INSERT INTO clarkistas_records (${cols}) VALUES ${batch.map(() => ph).join(", ")}`;
+        await client.execute({ sql, args: batch.flat() });
+      }
     }
 
     await client.execute("COMMIT");
