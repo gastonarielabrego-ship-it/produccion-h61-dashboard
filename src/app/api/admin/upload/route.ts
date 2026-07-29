@@ -90,18 +90,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "El archivo está vacío" }, { status: 400 });
     }
 
-    // Header mapping — handle typos from source ("NOIMBRE" -> "NOMBRE")
+    // Header mapping — handle typos and variations from source
     const header = rows[0].map((c) => String(c ?? "").toUpperCase().trim());
     const colIdx: Record<string, number> = {};
     header.forEach((h, i) => {
-      if (h === "NOIMBRE") colIdx["NOMBRE"] = i;
+      // Normalize common typos
+      if (h === "NOIMBRE" || h === "NMBRE" || h === "NOMBRE") colIdx["NOMBRE"] = i;
+      else if (h === "FUNCION_DESC" || h === "FUNCION DESCRIPCION" || h === "FUNCIONDESC") colIdx["FUNCION_DESC"] = i;
+      else if (h === "TURNO_DESC" || h === "TURNO DESCRIPCION" || h === "TURNODESC") colIdx["TURNO_DESC"] = i;
+      else if (h === "TIEMPO_MUE" || h === "TIEMPO_MUESTRA" || h === "T_MUE") colIdx["TIEMPO_MUE"] = i;
       else colIdx[h] = i;
     });
 
     const required = ["FUNCION","FUNCION_DESC","FECHA","TURNO","TURNO_DESC","OPERARIO","NOMBRE","ACTIVIDAD","CIRCUITO","TIEMPO_MUE","TOTAL"];
     const missing = required.filter((r) => !(r in colIdx));
     if (missing.length > 0) {
-      return NextResponse.json({ error: `Faltan columnas: ${missing.join(", ")}` }, { status: 400 });
+      return NextResponse.json({ 
+        error: `Faltan columnas requeridas: ${missing.join(", ")}. Columnas encontradas: ${header.filter(Boolean).join(", ")}`
+      }, { status: 400 });
     }
 
     const hourCols: number[] = [];

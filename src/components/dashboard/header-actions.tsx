@@ -29,21 +29,21 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
     file: File, endpoint: string, label: UploadingLabel, refreshFn?: () => void
   ) => {
     setUploading(label);
-    setUploadStatus(`Enviando...`);
+    setUploadStatus(`Enviando... (${(file.size / 1024).toFixed(0)} KB)`);
     try {
       const formData = new FormData();
       formData.append("file", file);
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 120000);
+      const timeout = setTimeout(() => controller.abort(), 180000);
       const response = await fetch(endpoint, { method: "POST", body: formData, signal: controller.signal });
       clearTimeout(timeout);
       const text = await response.text();
       let data: any;
-      try { data = JSON.parse(text); } catch { showToast("error", "Error del servidor."); return; }
+      try { data = JSON.parse(text); } catch { showToast("error", `Error del servidor: ${text.slice(0, 200)}`); return; }
       if (response.ok) { showToast("success", data.message); setTimeout(() => refreshFn?.(), 600); }
-      else { showToast("error", data.error || "Error al cargar"); }
+      else { showToast("error", data.error || `Error ${response.status}: ${text.slice(0, 200)}`); }
     } catch (err: any) {
-      if (err.name === "AbortError") showToast("error", "Tiempo agotado.");
+      if (err.name === "AbortError") showToast("error", "Tiempo agotado (3 min).");
       else showToast("error", `Error: ${err.message || "conexión fallida"}`);
     } finally { setUploading(null); setUploadStatus(""); }
   };
