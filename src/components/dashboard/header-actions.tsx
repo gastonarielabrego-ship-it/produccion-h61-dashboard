@@ -12,13 +12,13 @@ interface HeaderActionsProps {
 
 type UploadingLabel = "prep" | "clark" | "tm";
 
-/** Configuration per upload type */
-const CHUNK_SIZE = 400; // rows per chunk — each INSERT stays well under 10s
+/** Rows per chunk — each INSERT = 1 SQL statement, must finish under Vercel 10s */
+const CHUNK_SIZE = 200;
 
 export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsProps) {
   const [uploading, setUploading] = useState<UploadingLabel | null>(null);
   const [uploadStatus, setUploadStatus] = useState("");
-  const [progress, setProgress] = useState({ current: 0, total: 0 }); // blocks
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [elapsedSec, setElapsedSec] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -40,32 +40,51 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
 
   const showToast = (type: "success" | "error", message: string) => {
     setToast({ type, message });
-    setTimeout(() => setToast(null), 10000);
+    setTimeout(() => setToast(null), 15000);
   };
 
-  /** Send one API request with auto-retry */
-  const apiCall = async (endpoint: string, body: Record<string, unknown>): Promise<Response> => {
-    for (let attempt = 0; attempt <= 2; attempt++) {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 30000);
-        const res = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-          signal: controller.signal,
-        });
-        clearTimeout(timeout);
-        return res;
-      } catch (err: any) {
-        if (attempt < 2) await new Promise((r) => setTimeout(r, 2000));
-        else throw err;
-      }
+  /**
+   * WARMUP: Send a lightweight GET to the endpoint FIRST.
+   * This "wakes up" the Vercel serverless function so the subsequent
+   * POST requests don't suffer cold start (~3-5s saved).
+   */
+  const warmup = async (endpoint: string): Promise<boolean> => {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      const res = await fetch(endpoint, { method: "GET", signal: controller.signal });
+      clearTimeout(timeout);
+      return res.ok;
+    } catch {
+      return false; // warmup failed, but we continue anyway
     }
-    throw new Error("Error de conexión");
   };
 
-  /** Extract unique dates from data rows using column index */
+  /** Send one POST API request — NO retry, fail fast to show real error */
+  const apiPost = async (endpoint: string, body: Record<string, unknown>): Promise<{ ok: boolean; data: any }> => {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 20000);
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      const text = await res.text();
+      let data: any;
+      try { data = JSON.parse(text); } catch { data = { error: text.slice(0, 200) }; }
+
+      return { ok: res.ok, data };
+    } catch (err: any) {
+      if (err.name === "AbortError") return { ok: false, data: { error: "Timeout 20s — Vercel cortó la petición" } };
+      return { ok: false, data: { error: err.message || "Error de red" } };
+    }
+  };
+
+  /** Extract unique dates from data rows */
   const extractDates = (dataRows: (string | number | null | undefined)[][], fechaIdx: number): number[] => {
     const dateSet = new Set<number>();
     for (const row of dataRows) {
@@ -78,10 +97,11 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
 
   /**
    * CHUNKED UPLOAD STRATEGY:
-   * 1. Parse Excel client-side
-   * 2. Extract all unique dates → send DELETE request (fast)
-   * 3. Split rows into chunks of 400 → send each as INSERT request
-   * 4. Each request stays under 10s → no Vercel Hobby timeout
+   * 0. WARMUP — GET request to wake the serverless function
+   * 1. Parse Excel in browser
+   * 2. DELETE old records for the dates in the file
+   * 3. INSERT rows in chunks of 200 — each is a separate HTTP request
+   * Each individual request stays under 10s → bypass Vercel Hobby limit
    */
   const handleChunkedUpload = async (
     file: File, endpoint: string, label: UploadingLabel, refreshFn?: () => void
@@ -89,6 +109,10 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
     setUploading(label);
     startTimer();
     try {
+      // Step 0: WARMUP — wake the serverless function
+      setUploadStatus("Preparando servidor...");
+      await warmup(endpoint);
+
       // Step 1: Parse Excel in browser
       setUploadStatus(`Leyendo Excel... (${(file.size / 1024).toFixed(0)} KB)`);
       const buffer = await file.arrayBuffer();
@@ -113,14 +137,13 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
         return;
       }
 
-      // Step 2: DELETE old records
+      // Step 2: DELETE old records for dates in file
       const allDates = extractDates(dataRows, fechaIdx);
-      setUploadStatus(`Eliminando datos previos (${allDates.length} fechas)...`);
+      setUploadStatus(`Paso 1/2: Eliminando datos previos (${allDates.length} fechas)...`);
 
-      const delRes = await apiCall(endpoint, { action: "delete", dates: allDates });
-      const delData = await delRes.json();
-      if (!delRes.ok) {
-        showToast("error", delData.error || "Error al eliminar datos previos");
+      const delResult = await apiPost(endpoint, { action: "delete", dates: allDates });
+      if (!delResult.ok) {
+        showToast("error", `Error al eliminar: ${delResult.data.error}`);
         return;
       }
 
@@ -134,27 +157,25 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
         const end = Math.min(start + CHUNK_SIZE, totalRows);
         const chunkRows = [header, ...dataRows.slice(start, end)];
 
-        setUploadStatus(`Insertando bloque ${c + 1}/${totalChunks} (${start + 1}-${end} de ${totalRows} filas)...`);
+        setUploadStatus(`Paso 2/2: Bloque ${c + 1}/${totalChunks} (filas ${start + 1}-${end} de ${totalRows})...`);
         setProgress({ current: c + 1, total: totalChunks });
 
-        const insRes = await apiCall(endpoint, { action: "insert", rows: chunkRows });
-        const insData = await insRes.json();
+        const insResult = await apiPost(endpoint, { action: "insert", rows: chunkRows });
 
-        if (!insRes.ok) {
-          showToast("error", `Error en bloque ${c + 1}: ${insData.error}`);
+        if (!insResult.ok) {
+          showToast("error", `Bloque ${c + 1} falló: ${insResult.data.error}. Se insertaron ${totalInserted.toLocaleString("es-AR")} filas antes del error.`);
           return;
         }
 
-        totalInserted += insData.inserted || 0;
+        totalInserted += insResult.data.inserted || 0;
       }
 
-      // Done!
-      showToast("success", `${totalInserted.toLocaleString("es-AR")} registros cargados (${totalChunks} bloques) — ${allDates.length} fechas`);
-      setTimeout(() => refreshFn?.(), 1500);
+      // Success!
+      showToast("success", `${totalInserted.toLocaleString("es-AR")} registros cargados en ${totalChunks} bloques — ${allDates.length} fechas actualizadas`);
+      setTimeout(() => refreshFn?.(), 2000);
 
     } catch (err: any) {
-      if (err.name === "AbortError") showToast("error", "Tiempo agotado.");
-      else showToast("error", `Error: ${err.message || "conexión fallida"}`);
+      showToast("error", `Error: ${err.message || "inesperado"}`);
     } finally {
       stopTimer();
       setUploading(null);
@@ -225,7 +246,7 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
         {isDownloading ? "Generando..." : "Informe"}
       </Button>
       {uploading && uploadStatus && (
-        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[100] bg-background border rounded-lg px-4 py-2.5 shadow-lg flex items-center gap-3 min-w-[280px]">
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[100] bg-background border rounded-lg px-4 py-2.5 shadow-lg flex items-center gap-3 min-w-[300px]">
           <Loader2 className="h-4 w-4 animate-spin text-emerald-600 shrink-0" />
           <div className="flex-1 min-w-0">
             <span className="text-sm text-foreground block truncate">{uploadStatus}</span>
