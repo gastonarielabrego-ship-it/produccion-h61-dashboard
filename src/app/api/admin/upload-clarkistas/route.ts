@@ -72,8 +72,6 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const t0 = Date.now();
-  let log: string[] = [];
-
   try {
     await ensureTable();
 
@@ -83,8 +81,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No se recibió el archivo" }, { status: 400 });
     }
 
-    log.push(`Archivo: ${file.name}, ${(file.size / 1024).toFixed(0)} KB`);
-
     const buffer = await file.arrayBuffer();
     const raw = new Uint8Array(buffer);
 
@@ -92,13 +88,11 @@ export async function POST(request: Request) {
     const ws = wb.Sheets[wb.SheetNames[0]];
     const rows: (string | number | null | undefined)[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-    log.push(`Hoja "${wb.SheetNames[0]}": ${rows.length} filas leídas`);
-
     if (rows.length < 2) {
       return NextResponse.json({ error: "El archivo tiene datos insuficientes" }, { status: 400 });
     }
 
-    // Header mapping — handle typos and variations
+    // Header mapping
     const header = rows[0].map((c) => String(c ?? "").toUpperCase().trim());
     const colIdx: Record<string, number> = {};
     header.forEach((h, i) => {
@@ -112,7 +106,7 @@ export async function POST(request: Request) {
     const required = ["FUNCION","FUNCION_DESC","FECHA","TURNO","TURNO_DESC","OPERARIO","NOMBRE","ACTIVIDAD","CIRCUITO","TIEMPO_MUE","TOTAL"];
     const missing = required.filter((r) => !(r in colIdx));
     if (missing.length > 0) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: `Faltan columnas: ${missing.join(", ")}. Encontradas: ${header.filter(Boolean).join(", ")}`
       }, { status: 400 });
     }
@@ -133,28 +127,25 @@ export async function POST(request: Request) {
       return v === null || v === undefined ? "" : String(v).trim();
     };
 
-    // Skip empty/invalid rows
+    // Filter valid rows
     const dataRows = rows.slice(1).filter((r) => {
       const fecha = getVal(r, colIdx["FECHA"]);
       const operario = getStr(r, colIdx["OPERARIO"]);
       return fecha > 0 && operario.length > 0;
     });
 
-    log.push(`${dataRows.length} filas válidas`);
-
     if (dataRows.length === 0) {
       return NextResponse.json({ error: "No se encontraron filas válidas" }, { status: 400 });
     }
 
     const fileDates = [...new Set(dataRows.map((r) => getVal(r, colIdx["FECHA"])))].filter(Boolean);
-
     const client = getClient();
 
     // Count before
     const countBefore = await client.execute("SELECT COUNT(*) as cnt FROM clarkistas_records");
     const beforeCount = Number(countBefore.rows[0]?.cnt ?? 0);
 
-    // Delete old records for the dates in this file
+    // Delete old records
     let deletedCount = 0;
     if (fileDates.length > 0) {
       const ph = fileDates.map((_, i) => `$d${i}`).join(",");
@@ -165,14 +156,15 @@ export async function POST(request: Request) {
         args: dp,
       });
       deletedCount = delResult.rowsAffected ?? 0;
-      log.push(`Eliminados ${deletedCount} registros previos`);
     }
 
+    // Single transaction for all inserts
     const cols = "funcion, funcion_desc, fecha, turno, turno_desc, tarea, operario, nombre, actividad, circuito, tiempo_mue, total, hora_00, hora_01, hora_02, hora_03, hora_04, hora_05, hora_06, hora_07, hora_08, hora_09, hora_10, hora_11, hora_12, hora_13, hora_14, hora_15, hora_16, hora_17, hora_18, hora_19, hora_20, hora_21, hora_22, hora_23";
     const placeholders = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-    const buildRowArgs = (row: (string | number | null | undefined)[]): (string | number | null)[] => {
-      const tareaCol = colIdx["TAREA"];
+    const tareaCol = colIdx["TAREA"];
+
+    const allRowArgs = dataRows.map((row): (string | number | null)[] => {
       const args: (string | number | null)[] = [
         getStr(row, colIdx["FUNCION"]),
         getStr(row, colIdx["FUNCION_DESC"]),
@@ -189,64 +181,42 @@ export async function POST(request: Request) {
       ];
       for (let h = 0; h <= 23; h++) args.push(getVal(row, hourCols[h]));
       return args;
-    };
+    });
 
-    // Insert in smaller chunks with fallback
-    const CHUNK = 50;
-    let totalInserted = 0;
-    let chunksDone = 0;
-    const totalChunks = Math.ceil(dataRows.length / CHUNK);
+    await client.execute("BEGIN TRANSACTION");
 
-    for (let i = 0; i < dataRows.length; i += CHUNK) {
-      const chunk = dataRows.slice(i, i + CHUNK);
-      const valueGroups = chunk.map(() => placeholders).join(", ");
+    const BATCH = 80;
+    for (let i = 0; i < allRowArgs.length; i += BATCH) {
+      const batch = allRowArgs.slice(i, i + BATCH);
+      const valueGroups = batch.map(() => placeholders).join(", ");
       const sql = `INSERT INTO clarkistas_records (${cols}) VALUES ${valueGroups}`;
-      const args = chunk.flatMap(buildRowArgs);
-      try {
-        await client.execute({ sql, args });
-        totalInserted += chunk.length;
-      } catch (chunkErr: any) {
-        log.push(`Chunk ${chunksDone + 1} falló, insertando de a uno...`);
-        for (const row of chunk) {
-          try {
-            const rowArgs = buildRowArgs(row);
-            await client.execute({
-              sql: `INSERT INTO clarkistas_records (${cols}) VALUES ${placeholders}`,
-              args: rowArgs,
-            });
-            totalInserted++;
-          } catch (rowErr: any) {
-            log.push(`Fila error: ${rowErr.message}`);
-          }
-        }
-      }
-      chunksDone++;
+      const args = batch.flat();
+      await client.execute({ sql, args });
     }
 
-    // Verify
+    await client.execute("COMMIT");
+
+    const totalInserted = allRowArgs.length;
+
     const countAfter = await client.execute("SELECT COUNT(*) as cnt FROM clarkistas_records");
     const afterCount = Number(countAfter.rows[0]?.cnt ?? 0);
 
     const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
 
     return NextResponse.json({
-      message: `${totalInserted.toLocaleString("es-AR")} registros clarkistas cargados (${elapsed}s)`,
+      message: `${totalInserted.toLocaleString("es-AR")} registros clarkistas cargados en ${elapsed}s — DB: ${afterCount}`,
       inserted: totalInserted,
       deleted: deletedCount,
       dbTotal: afterCount,
       dates: fileDates.sort(),
       elapsed: `${elapsed}s`,
-      log: log,
     });
   } catch (error: any) {
+    try { await getClient().execute("ROLLBACK"); } catch {}
     console.error("Upload clarkistas error:", error);
     const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     return NextResponse.json(
-      { 
-        error: `${error.message || "Error al procesar"}`,
-        elapsed: `${elapsed}s`,
-        log: log,
-      },
+      { error: error.message || "Error al procesar", elapsed: `${elapsed}s` },
       { status: 500 }
     );
   }
