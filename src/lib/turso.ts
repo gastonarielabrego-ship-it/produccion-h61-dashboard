@@ -184,10 +184,7 @@ async function ensureClarkTable() {
 // ─── Public API (drop-in replacement for google-sheets.ts) ─
 
 export async function getAllRecords(filters?: FilterOptions, tableName = "production_records"): Promise<ProductionRecord[]> {
-  // Auto-create clarkistas table on first access
-  if (tableName === "clarkistas_records") {
-    await ensureClarkTable();
-  }
+  // Tables already exist — skip ensureTable to avoid cold-start timeout
   const client = getClient();
   const { sql, params } = buildWhere(filters ?? {});
 
@@ -275,7 +272,6 @@ async function ensureTMTable() {
 export async function getTMByDateOperario(
   filters?: FilterOptions
 ): Promise<Record<string, number>> {
-  await ensureTMTable();
   const client = getClient();
   const conditions: string[] = [];
   const params: Record<string, string | number> = {};
@@ -300,7 +296,6 @@ export async function getTMByDateOperario(
 export async function getTMByDate(
   filters?: FilterOptions
 ): Promise<Record<number, number>> {
-  await ensureTMTable();
   const client = getClient();
   const conditions: string[] = [];
   const params: Record<string, string | number> = {};

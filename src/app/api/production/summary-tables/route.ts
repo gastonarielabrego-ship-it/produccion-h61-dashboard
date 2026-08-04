@@ -7,6 +7,8 @@ import {
 } from "@/lib/turso";
 import { NextResponse } from "next/server";
 
+const MONTH_NAMES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+
 export async function GET(request: Request) {
   try {
     const filters = parseFilters(request);
@@ -17,20 +19,36 @@ export async function GET(request: Request) {
       getTMByDateOperario(filters),
     ]);
 
-    // Per-day aggregation using unique (operario, hour) pairs for person-hours
-    const dayMap: Record<number, { misionesSet: Set<string>; bultos: number; activeSlots: Set<string> }> = {};
+    // ── Per-day aggregation ──
+    const dayMap: Record<number, { misionesSet: Set<string>; bultos: number; activeSlots: Set<string>; days: Set<number> }> = {};
+    const monthMap: Record<number, { misionesSet: Set<string>; bultos: number; activeSlots: Set<string>; days: Set<number> }> = {};
+
     for (const r of records) {
-      if (!dayMap[r.date]) dayMap[r.date] = { misionesSet: new Set(), bultos: 0, activeSlots: new Set() };
+      // Day level
+      if (!dayMap[r.date]) dayMap[r.date] = { misionesSet: new Set(), bultos: 0, activeSlots: new Set<string>(), days: new Set() };
       const d = dayMap[r.date];
       d.misionesSet.add(r.operario);
       d.bultos += r.total;
+      d.days.add(r.date);
       for (const hd of r.hourlyData) {
         if (hd.quantity > 0) d.activeSlots.add(`${r.operario}:${hd.hour}`);
+      }
+
+      // Month level (YYYYMM)
+      const monthKey = Math.floor(r.date / 100);
+      if (!monthMap[monthKey]) monthMap[monthKey] = { misionesSet: new Set(), bultos: 0, activeSlots: new Set<string>(), days: new Set() };
+      const m = monthMap[monthKey];
+      m.misionesSet.add(r.operario);
+      m.bultos += r.total;
+      m.days.add(r.date);
+      for (const hd of r.hourlyData) {
+        if (hd.quantity > 0) m.activeSlots.add(`${r.operario}:${hd.hour}`);
       }
     }
 
     const sortedDates = Object.keys(dayMap).map(Number).sort((a, b) => a - b);
 
+    // ── Daily metrics ──
     const dailyMetrics = sortedDates.map((date) => {
       const d = dayMap[date];
       const misiones = d.misionesSet.size;
@@ -50,7 +68,45 @@ export async function GET(request: Request) {
       return { date, misiones, bultos, horasProductivas, tmHoras, horasNetas, produccion, bultosPorHoraBruta, bultosPorHoraNeta };
     });
 
-    // Day heatmap: total bultos per (date, hour)
+    // ── Monthly summary (merged here — avoids 2nd API call) ──
+    const sortedMonths = Object.keys(monthMap).map(Number).sort((a, b) => a - b);
+    const monthlyData = sortedMonths.map((month, idx) => {
+      const m = monthMap[month];
+      const misiones = m.misionesSet.size;
+      const bultos = m.bultos;
+      const horasBrutas = m.activeSlots.size;
+      const dias = m.days.size;
+
+      let tmMinutos = 0;
+      for (const d of m.days) {
+        if (filters.operario) {
+          tmMinutos += tmByDateOp[`${d}:${filters.operario}`] || 0;
+        } else {
+          tmMinutos += tmByDate[d] || 0;
+        }
+      }
+      const tmHoras = Math.round((tmMinutos / 60) * 100) / 100;
+      const horasNetas = Math.round((horasBrutas - tmHoras) * 100) / 100;
+
+      const produccion = misiones > 0 ? Math.round((bultos / misiones) * 10) / 10 : 0;
+      const bhBruta = horasBrutas > 0 ? Math.round((bultos / horasBrutas) * 10) / 10 : 0;
+      const bhNeta = horasNetas > 0 ? Math.round((bultos / horasNetas) * 10) / 10 : 0;
+
+      const prev = idx > 0 ? monthlyData[idx - 1] : null;
+      const cmpBultos = prev ? Math.round(((bultos - prev.bultos) / prev.bultos) * 10000) / 100 : null;
+      const cmpBH = prev ? Math.round(((bhBruta - prev.bhBruta) / prev.bhBruta) * 10000) / 100 : null;
+      const cmpMisiones = prev ? Math.round(((misiones - prev.misiones) / prev.misiones) * 10000) / 100 : null;
+
+      return {
+        month,
+        label: `${MONTH_NAMES[month % 100]} ${String(month).slice(0, 4)}`,
+        dias, misiones, bultos, horasBrutas, tmHoras, horasNetas,
+        produccion, bhBruta, bhNeta,
+        cmpBultos, cmpBH, cmpMisiones,
+      };
+    });
+
+    // ── Day heatmap ──
     const dayHourMap: Record<string, number> = {};
     for (const r of records) {
       for (const hd of r.hourlyData) {
@@ -63,7 +119,7 @@ export async function GET(request: Request) {
       return row;
     });
 
-    // Collaborator heatmap: total bultos per (operario, hour)
+    // ── Collaborator heatmap ──
     const opTotalMap: Record<string, number> = {};
     const opNameMap: Record<string, string> = {};
     for (const r of records) {
@@ -84,10 +140,15 @@ export async function GET(request: Request) {
       return row;
     });
 
-    // If filtered by operario, return their name for the UI
     const filteredOperatorName = filters.operario && records.length > 0 ? records[0].nombre : null;
 
-    return NextResponse.json({ dailyMetrics, dayHeatmap, collaboratorHeatmap, filteredOperatorName });
+    return NextResponse.json({
+      dailyMetrics,
+      monthlyData,
+      dayHeatmap,
+      collaboratorHeatmap,
+      filteredOperatorName,
+    });
   } catch (error) {
     console.error("Error fetching summary tables:", error);
     return NextResponse.json({ error: "Error fetching summary tables" }, { status: 500 });

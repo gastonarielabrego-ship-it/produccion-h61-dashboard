@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, Minus, BarChart3 } from "lucide-react";
 import { PrintButton } from "./print-button";
 import { ExcelButton } from "./excel-button";
 
 interface MonthlySummaryProps {
-  baseQuery: string;
+  monthlyData: any[];
 }
 
 function ChangeIndicator({ value }: { value: number | null }) {
@@ -17,30 +16,10 @@ function ChangeIndicator({ value }: { value: number | null }) {
   return <span className="text-red-500 flex items-center gap-0.5"><TrendingDown className="h-3 w-3" />{value}%</span>;
 }
 
-export function MonthlySummary({ baseQuery }: MonthlySummaryProps) {
-  const [data, setData] = useState<any>(null);
-  const [error, setError] = useState(false);
+export function MonthlySummary({ monthlyData }: MonthlySummaryProps) {
+  if (!monthlyData || monthlyData.length <= 1) return null;
 
-  const fetchData = useCallback(() => {
-    setError(false);
-    const base = baseQuery ? `?${baseQuery}` : "";
-    fetch(`/api/production/monthly-summary${base}`, { cache: "no-store" })
-      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
-      .then(setData)
-      .catch(() => setError(true));
-  }, [baseQuery]);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
-
-  if (error) return (
-    <Card><CardContent className="p-8 text-center">
-      <p className="text-sm text-muted-foreground">Error al cargar resumen mensual.</p>
-      <button onClick={fetchData} className="mt-2 text-xs text-primary underline">Reintentar</button>
-    </CardContent></Card>
-  );
-  if (!data || !data.monthlyData || data.monthlyData.length <= 1) return null;
-
-  const rows = data.monthlyData;
+  const rows = monthlyData;
 
   // Totals
   const totals = rows.reduce((acc: any, r: any) => {

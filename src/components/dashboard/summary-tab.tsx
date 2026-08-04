@@ -221,6 +221,7 @@ export function SummaryTab({ baseQuery, apiBase = "/api/production" }: SummaryTa
   const fetchData = useCallback(() => {
     setError(false);
     const base = baseQuery ? `?${baseQuery}` : "";
+    // Single API call — monthlyData is now included in the response
     fetch(`/api/production/summary-tables${base}`, { cache: "no-store" })
       .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
       .then(setData)
@@ -230,12 +231,12 @@ export function SummaryTab({ baseQuery, apiBase = "/api/production" }: SummaryTa
 
   if (error) return (
     <Card><CardContent className="p-8 text-center">
-      <p className="text-sm text-muted-foreground">Error al cargar los datos.</p>
+      <p className="text-sm text-muted-foreground">Error al cargar los datos del resumen.</p>
       <button onClick={fetchData} className="mt-2 text-xs text-primary underline">Reintentar</button>
     </CardContent></Card>
   );
   if (!data) return (
-    <div className="space-y-6">{[1, 2, 3].map((i) => (
+    <div className="space-y-6">{[1, 2, 3, 4].map((i) => (
       <Card key={i}><CardContent className="p-4 h-[200px] flex items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
       </CardContent></Card>
@@ -244,7 +245,8 @@ export function SummaryTab({ baseQuery, apiBase = "/api/production" }: SummaryTa
 
   return (
     <div className="space-y-6">
-      <MonthlySummary baseQuery={baseQuery} />
+      {/* MonthlySummary now receives data as prop — no separate API call */}
+      <MonthlySummary monthlyData={data.monthlyData || []} />
       <DailyMetricsTable data={data.dailyMetrics} operatorName={data.filteredOperatorName} />
       <HeatmapTable title="Mapa de Calor por Día" description="Horas más y menos productivas por día — cantidad de bultos" icon={Flame} data={data.dayHeatmap} printTitle="Mapa de Calor por Día" operatorName={data.filteredOperatorName} />
       <HeatmapTable title="Mapa de Calor por Colaborador" description="Distribución horaria de cada colaborador — cantidad de bultos" icon={Users} data={data.collaboratorHeatmap} isCollaborator printTitle="Mapa de Calor por Colaborador" />
