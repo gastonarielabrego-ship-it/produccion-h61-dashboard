@@ -110,6 +110,98 @@ export function useProductionFilters(apiBase = "/api/production") {
   return { filters, filterState, setFilterState, buildQuery, reloadFilters };
 }
 
+/** Searchable single-select component for colaborador */
+function OperarioCombobox({
+  operators,
+  selected,
+  onChange,
+}: {
+  operators: { value: string; label: string }[];
+  selected: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const selectedLabel = selected
+    ? operators.find((o) => o.value === selected)?.label || ""
+    : "";
+
+  // Filter by name or operario code
+  const filtered = operators.filter((o) => {
+    const q = search.toLowerCase();
+    return o.label.toLowerCase().includes(q) || o.value.includes(q);
+  });
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="h-9 w-full justify-between text-sm font-normal"
+        >
+          <span className="flex items-center gap-1.5 truncate">
+            <User className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            {selectedLabel ? (
+              <span className="truncate">{selectedLabel}</span>
+            ) : (
+              <span className="text-muted-foreground">Todos los colaboradores</span>
+            )}
+            </span>
+            <ChevronsUpDown className="ml-1 h-3.5 w-3.5 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        {/* Search */}
+        <div className="flex items-center border-b px-3 py-2">
+          <input
+            ref={inputRef}
+            placeholder="Buscar por nombre o legajo..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          />
+        </div>
+        {/* Options list */}
+        <ScrollArea className="max-h-60">
+          <div className="p-1">
+            {/* All option */}
+            <button
+              className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm w-full cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
+              onClick={() => { onChange(""); setOpen(false); setSearch(""); }}
+            >
+              <span className="flex items-center gap-2 flex-1">
+                <User className="h-3 w-3 text-muted-foreground" />
+                <span className="text-muted-foreground">Todos los colaboradores</span>
+              </span>
+            </button>
+            {filtered.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Sin resultados
+              </p>
+            ) : (
+              filtered.map((o) => (
+                <button
+                  key={o.value}
+                  className={`flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm w-full cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors ${o.value === selected ? "bg-accent" : ""}`}
+                  onClick={() => { onChange(o.value); setOpen(false); setSearch(""); }}
+                >
+                  <User className="h-3 w-3 text-muted-foreground shrink-0" />
+                  <span className="flex-1 truncate text-left">{o.label}</span>
+                  <span className="text-[10px] text-muted-foreground shrink-0">{o.value}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </ScrollArea>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 /** Multi-select component for circuito */
 function CircuitoMultiSelect({
   circuits,
@@ -426,31 +518,14 @@ export function FilterBar({
             }
           />
 
-          {/* Colaborador */}
-          <Select
-            value={filterState.operario}
-            onValueChange={(v) =>
-              setFilterState((prev) => ({
-                ...prev,
-                operario: v === "__all__" ? "" : v,
-              }))
+          {/* Colaborador — searchable combobox */}
+          <OperarioCombobox
+            operators={filters.operators}
+            selected={filterState.operario}
+            onChange={(value) =>
+              setFilterState((prev) => ({ ...prev, operario: value }))
             }
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Todos los colaboradores" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">Todos los colaboradores</SelectItem>
-              {filters.operators.map((o) => (
-                <SelectItem key={o.value} value={o.value}>
-                  <span className="flex items-center gap-2">
-                    <User className="h-3 w-3" />
-                    {o.label}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          />
 
           {/* Tipo Efectivo/Eventual */}
           {showTipo && (

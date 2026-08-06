@@ -13,6 +13,9 @@ export async function GET(request: Request) {
   try {
     const filters = parseFilters(request);
     const tableName = getSourceTable(request);
+
+    // Fetch records and TM data — ensureTMTable uses a promise lock so
+    // the two TM functions won't double-fire on cold start
     const [records, tmByDate, tmByDateOp] = await Promise.all([
       getAllRecords(filters, tableName),
       getTMByDate(filters),
