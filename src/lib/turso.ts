@@ -137,54 +137,19 @@ let _clarkTableEnsured = false;
 async function ensureClarkTable() {
   if (_clarkTableEnsured) return;
   const client = getClient();
-  await client.execute(`
-    CREATE TABLE IF NOT EXISTS clarkistas_records (
-      id          INTEGER PRIMARY KEY AUTOINCREMENT,
-      funcion     TEXT    NOT NULL,
-      funcion_desc TEXT   NOT NULL,
-      fecha       INTEGER NOT NULL,
-      turno       TEXT    NOT NULL,
-      turno_desc  TEXT    NOT NULL,
-      tarea       TEXT,
-      operario    TEXT    NOT NULL,
-      nombre      TEXT    NOT NULL,
-      actividad   INTEGER NOT NULL DEFAULT 0,
-      circuito    TEXT    NOT NULL,
-      tiempo_mue  INTEGER NOT NULL DEFAULT 0,
-      hora_00     INTEGER NOT NULL DEFAULT 0,
-      hora_01     INTEGER NOT NULL DEFAULT 0,
-      hora_02     INTEGER NOT NULL DEFAULT 0,
-      hora_03     INTEGER NOT NULL DEFAULT 0,
-      hora_04     INTEGER NOT NULL DEFAULT 0,
-      hora_05     INTEGER NOT NULL DEFAULT 0,
-      hora_06     INTEGER NOT NULL DEFAULT 0,
-      hora_07     INTEGER NOT NULL DEFAULT 0,
-      hora_08     INTEGER NOT NULL DEFAULT 0,
-      hora_09     INTEGER NOT NULL DEFAULT 0,
-      hora_10     INTEGER NOT NULL DEFAULT 0,
-      hora_11     INTEGER NOT NULL DEFAULT 0,
-      hora_12     INTEGER NOT NULL DEFAULT 0,
-      hora_13     INTEGER NOT NULL DEFAULT 0,
-      hora_14     INTEGER NOT NULL DEFAULT 0,
-      hora_15     INTEGER NOT NULL DEFAULT 0,
-      hora_16     INTEGER NOT NULL DEFAULT 0,
-      hora_17     INTEGER NOT NULL DEFAULT 0,
-      hora_18     INTEGER NOT NULL DEFAULT 0,
-      hora_19     INTEGER NOT NULL DEFAULT 0,
-      hora_20     INTEGER NOT NULL DEFAULT 0,
-      hora_21     INTEGER NOT NULL DEFAULT 0,
-      hora_22     INTEGER NOT NULL DEFAULT 0,
-      hora_23     INTEGER NOT NULL DEFAULT 0,
-      total       INTEGER NOT NULL DEFAULT 0
-    )
-  `);
+  // Single round-trip via batch
+  await client.batch([
+    { sql: `CREATE TABLE IF NOT EXISTS clarkistas_records (id INTEGER PRIMARY KEY AUTOINCREMENT, funcion TEXT NOT NULL, funcion_desc TEXT NOT NULL, fecha INTEGER NOT NULL, turno TEXT NOT NULL, turno_desc TEXT NOT NULL, tarea TEXT, operario TEXT NOT NULL, nombre TEXT NOT NULL, actividad INTEGER NOT NULL DEFAULT 0, circuito TEXT NOT NULL, tiempo_mue INTEGER NOT NULL DEFAULT 0, hora_00 INTEGER NOT NULL DEFAULT 0, hora_01 INTEGER NOT NULL DEFAULT 0, hora_02 INTEGER NOT NULL DEFAULT 0, hora_03 INTEGER NOT NULL DEFAULT 0, hora_04 INTEGER NOT NULL DEFAULT 0, hora_05 INTEGER NOT NULL DEFAULT 0, hora_06 INTEGER NOT NULL DEFAULT 0, hora_07 INTEGER NOT NULL DEFAULT 0, hora_08 INTEGER NOT NULL DEFAULT 0, hora_09 INTEGER NOT NULL DEFAULT 0, hora_10 INTEGER NOT NULL DEFAULT 0, hora_11 INTEGER NOT NULL DEFAULT 0, hora_12 INTEGER NOT NULL DEFAULT 0, hora_13 INTEGER NOT NULL DEFAULT 0, hora_14 INTEGER NOT NULL DEFAULT 0, hora_15 INTEGER NOT NULL DEFAULT 0, hora_16 INTEGER NOT NULL DEFAULT 0, hora_17 INTEGER NOT NULL DEFAULT 0, hora_18 INTEGER NOT NULL DEFAULT 0, hora_19 INTEGER NOT NULL DEFAULT 0, hora_20 INTEGER NOT NULL DEFAULT 0, hora_21 INTEGER NOT NULL DEFAULT 0, hora_22 INTEGER NOT NULL DEFAULT 0, hora_23 INTEGER NOT NULL DEFAULT 0, total INTEGER NOT NULL DEFAULT 0)` },
+  ]);
   _clarkTableEnsured = true;
 }
 
 // ─── Public API (drop-in replacement for google-sheets.ts) ─
 
 export async function getAllRecords(filters?: FilterOptions, tableName = "production_records"): Promise<ProductionRecord[]> {
-  // Tables already exist — skip ensureTable to avoid cold-start timeout
+  if (tableName === "clarkistas_records") {
+    await ensureClarkTable();
+  }
   const client = getClient();
   const { sql, params } = buildWhere(filters ?? {});
 
@@ -250,28 +215,19 @@ let _tmTableEnsured = false;
 async function ensureTMTable() {
   if (_tmTableEnsured) return;
   const client = getClient();
-  await client.execute(`
-    CREATE TABLE IF NOT EXISTS tiempos_muertos (
-      id          INTEGER PRIMARY KEY AUTOINCREMENT,
-      fecha       INTEGER NOT NULL,
-      turno       TEXT    NOT NULL,
-      operario    TEXT    NOT NULL,
-      nombre      TEXT    NOT NULL,
-      estado      TEXT,
-      motivo      INTEGER,
-      minutos     INTEGER NOT NULL DEFAULT 0,
-      observacion TEXT,
-      usuario_alta TEXT
-    )
-  `);
-  await client.execute(`CREATE INDEX IF NOT EXISTS idx_tm_fecha ON tiempos_muertos(fecha)`);
-  await client.execute(`CREATE INDEX IF NOT EXISTS idx_tm_fecha_operario ON tiempos_muertos(fecha, operario)`);
+  // Single round-trip: all statements in one batch
+  await client.batch([
+    { sql: `CREATE TABLE IF NOT EXISTS tiempos_muertos (id INTEGER PRIMARY KEY AUTOINCREMENT, fecha INTEGER NOT NULL, turno TEXT NOT NULL, operario TEXT NOT NULL, nombre TEXT NOT NULL, estado TEXT, motivo INTEGER, minutos INTEGER NOT NULL DEFAULT 0, observacion TEXT, usuario_alta TEXT)` },
+    { sql: `CREATE INDEX IF NOT EXISTS idx_tm_fecha ON tiempos_muertos(fecha)` },
+    { sql: `CREATE INDEX IF NOT EXISTS idx_tm_fecha_operario ON tiempos_muertos(fecha, operario)` },
+  ]);
   _tmTableEnsured = true;
 }
 
 export async function getTMByDateOperario(
   filters?: FilterOptions
 ): Promise<Record<string, number>> {
+  await ensureTMTable();
   const client = getClient();
   const conditions: string[] = [];
   const params: Record<string, string | number> = {};
@@ -296,6 +252,7 @@ export async function getTMByDateOperario(
 export async function getTMByDate(
   filters?: FilterOptions
 ): Promise<Record<number, number>> {
+  await ensureTMTable();
   const client = getClient();
   const conditions: string[] = [];
   const params: Record<string, string | number> = {};
