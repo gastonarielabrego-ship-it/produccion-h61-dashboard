@@ -33,3 +33,21 @@ Stage Summary:
 - ensureTMTable/ensureClarkTable ahora usan promise lock: `_tmEnsurePromise` / `_clarkEnsurePromise` evitan double-fire en Promise.all
 - Colaborador filter ahora permite buscar por nombre o número de legajo
 - Archivos modificados: `src/lib/turso.ts` (promise locks), `src/components/dashboard/filters.tsx` (OperarioCombobox)
+---
+Task ID: 3
+Agent: main
+Task: Fix missing /api/admin/upload route — data not updating after upload
+
+Work Log:
+- User reported new data not updating after upload
+- Investigation: header-actions.tsx sends production uploads to `/api/admin/upload` but that route was missing (deleted by external commit)
+- Only `/api/admin/upload-clarkistas` and `/api/admin/upload-tm` existed
+- Restored `/api/admin/upload/route.ts` from git history (commit 2e523c7)
+- Rewrote with Turbopack-safe patterns (classic for loops, named functions)
+- Route handles chunked upload: DELETE old dates + INSERT in 200-row chunks
+- Also has GET health check endpoint
+- Built and deployed to production
+
+Stage Summary:
+- Restored missing `/api/admin/upload` route for production data uploads
+- Deployed to https://produccion-h61-dashboard.vercel.app
