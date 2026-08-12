@@ -32,28 +32,8 @@ export function HorasExtrasTab({ baseQuery }: HorasExtrasTabProps) {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  if (error) return (
-    <Card><CardContent className="p-8 text-center">
-      <p className="text-sm text-muted-foreground">Error al cargar los datos de horas extras.</p>
-      <button onClick={fetchData} className="mt-2 text-xs text-primary underline">Reintentar</button>
-    </CardContent></Card>
-  );
-  if (!data) return (
-    <div className="space-y-6">{[1, 2].map((i) => (
-      <Card key={i}><CardContent className="p-4 h-[200px] flex items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </CardContent></Card>
-    ))}</div>
-  );
-
-  const monthly = data.monthlyData || [];
-  if (monthly.length < 2) return (
-    <Card><CardContent className="p-8 text-center">
-      <p className="text-sm text-muted-foreground">Se necesitan al menos 2 meses de datos para el comparativo.</p>
-    </CardContent></Card>
-  );
-
-  // Totals row
+  // Totals row — hooks MUST be called unconditionally (before any early return)
+  const monthly = data ? (data.monthlyData || []) : [];
   const totals = useMemo(() => {
     let dias = 0, misiones = 0, bultos = 0, hb = 0, he = 0, opHE = 0;
     for (let i = 0; i < monthly.length; i++) {
@@ -68,6 +48,26 @@ export function HorasExtrasTab({ baseQuery }: HorasExtrasTabProps) {
     const hePromedio = dias > 0 ? Math.round((he / dias) * 10) / 10 : 0;
     return { dias, misiones, bultos, hb, he, opHE, hePromedio };
   }, [monthly]);
+
+  if (error) return (
+    <Card><CardContent className="p-8 text-center">
+      <p className="text-sm text-muted-foreground">Error al cargar los datos de horas extras.</p>
+      <button onClick={fetchData} className="mt-2 text-xs text-primary underline">Reintentar</button>
+    </CardContent></Card>
+  );
+  if (!data) return (
+    <div className="space-y-6">{[1, 2].map((i) => (
+      <Card key={i}><CardContent className="p-4 h-[200px] flex items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </CardContent></Card>
+    ))}</div>
+  );
+
+  if (monthly.length < 2) return (
+    <Card><CardContent className="p-8 text-center">
+      <p className="text-sm text-muted-foreground">Se necesitan al menos 2 meses de datos para el comparativo.</p>
+    </CardContent></Card>
+  );
 
   return (
     <div className="space-y-6">
