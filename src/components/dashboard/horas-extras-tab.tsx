@@ -51,7 +51,7 @@ export function HorasExtrasTab({ baseQuery }: HorasExtrasTabProps) {
   // All hooks MUST be called unconditionally (before any early return)
   const monthly = data ? (data.monthlyData || []) : [];
   const daily = data ? (data.dailyMetrics || []) : [];
-  const heByTurno = data ? (data.heByTurno || []) : [];
+  const heByFranja = data ? (data.heByFranja || []) : [];
 
   const totals = useMemo(() => {
     let dias = 0, misiones = 0, hb = 0, he = 0, opHE = 0;
@@ -79,17 +79,16 @@ export function HorasExtrasTab({ baseQuery }: HorasExtrasTabProps) {
     return { misiones: tMisiones, hb: tHb, he: Math.round(tHE * 100) / 100, opHE: tOpHE, dias: daily.length };
   }, [daily]);
 
-  const turnoTotals = useMemo(() => {
-    let tHb = 0, tHE = 0, tMisiones = 0, tOpHE = 0;
-    for (let i = 0; i < heByTurno.length; i++) {
-      const r = heByTurno[i];
-      tHb += r.horasBrutas;
+  const franjaTotals = useMemo(() => {
+    let tHE = 0, tOpHE = 0, tDias = 0;
+    for (let i = 0; i < heByFranja.length; i++) {
+      const r = heByFranja[i];
       tHE += r.horasExtras || 0;
-      tMisiones += r.misiones;
       tOpHE += r.misionesConHE;
+      tDias += r.dias;
     }
-    return { hb: tHb, he: Math.round(tHE * 100) / 100, misiones: tMisiones, opHE: tOpHE };
-  }, [heByTurno]);
+    return { he: Math.round(tHE * 100) / 100, opHE: tOpHE, dias: tDias };
+  }, [heByFranja]);
 
   if (error) return (
     <Card><CardContent className="p-8 text-center">
@@ -288,64 +287,56 @@ export function HorasExtrasTab({ baseQuery }: HorasExtrasTabProps) {
         </CardContent>
       </Card>
 
-      {/* Breakdown by Turno */}
+      {/* Breakdown by Franja Horaria */}
       <Card>
         <CardHeader className="flex flex-row items-start justify-between space-y-0">
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <AlarmClock className="h-4 w-4" />
-              Horas Extras — Desglose por Horario (Turno)
+              Horas Extras — Desglose por Franja Horaria
             </CardTitle>
             <CardDescription>
-              Distribucion de horas extras por turno: horario en el que se generaron las HE.
+              Las horas extras se atribuyen a la franja horaria donde se generaron (despues de las 8 HS normales).
             </CardDescription>
           </div>
           <div className="flex items-center gap-1">
             <ExcelButton
-              rows={heByTurno.map((r: any) => ({
-                Turno: r.turnoDesc,
-                "Hs. Brutas": r.horasBrutas,
+              rows={heByFranja.map((r: any) => ({
+                Franja: r.label,
                 "Hs. Extras": r.horasExtras || 0,
-                "Misiones tot.": r.misiones,
-                "Misiones c/HE": r.misionesConHE,
+                "Op. c/HE": r.misionesConHE,
                 Dias: r.dias,
               }))}
-              filename="horas-extras-turno"
-              sheetName="HE por Turno"
-              colWidths={[16, 12, 12, 14, 14, 8]}
+              filename="horas-extras-franja"
+              sheetName="HE por Franja"
+              colWidths={[16, 12, 12, 8]}
             />
-            <PrintButton title="HE por Turno" />
+            <PrintButton title="HE por Franja" />
           </div>
         </CardHeader>
         <CardContent className="p-0 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b">
-                <th className="text-xs font-semibold text-left p-2 sticky left-0 bg-card min-w-[140px]">Turno</th>
-                <th className="text-xs font-semibold text-center p-2 min-w-[80px]">Hs. Brutas</th>
-                <th className="text-xs font-semibold text-center p-2 min-w-[80px] text-amber-600">Hs. Extras</th>
-                <th className="text-xs font-semibold text-center p-2 min-w-[90px]">Misiones tot.</th>
-                <th className="text-xs font-semibold text-center p-2 min-w-[90px]">Misiones c/HE</th>
-                <th className="text-xs font-semibold text-center p-2 min-w-[60px]">Dias</th>
+                <th className="text-xs font-semibold text-left p-2 sticky left-0 bg-card min-w-[140px]">Franja Horaria</th>
+                <th className="text-xs font-semibold text-center p-2 min-w-[100px] text-amber-600">Hs. Extras</th>
+                <th className="text-xs font-semibold text-center p-2 min-w-[100px]">Op. con HE</th>
+                <th className="text-xs font-semibold text-center p-2 min-w-[70px]">Dias</th>
               </tr>
             </thead>
             <tbody>
-              {heByTurno.map((row: any) => (
-                <tr key={row.turno} className="border-b hover:bg-muted/50">
-                  <td className="text-xs font-medium p-2 sticky left-0 bg-card">{row.turnoDesc}</td>
-                  <td className="text-xs text-center p-2">{row.horasBrutas.toLocaleString("es-AR")}</td>
+              {heByFranja.map((row: any) => (
+                <tr key={row.franja} className="border-b hover:bg-muted/50">
+                  <td className="text-xs font-medium p-2 sticky left-0 bg-card">{row.label}</td>
                   <td className="text-xs text-center p-2 font-medium text-amber-600">{(row.horasExtras || 0).toLocaleString("es-AR", { maximumFractionDigits: 1 })}</td>
-                  <td className="text-xs text-center p-2">{row.misiones.toLocaleString("es-AR")}</td>
                   <td className="text-xs text-center p-2">{(row.misionesConHE || 0).toLocaleString("es-AR")}</td>
                   <td className="text-xs text-center p-2">{row.dias}</td>
                 </tr>
               ))}
               <tr className="border-t-2 font-bold bg-muted/30">
                 <td className="text-xs font-bold p-2 sticky left-0 bg-muted/30">TOTAL</td>
-                <td className="text-xs text-center font-bold p-2 bg-muted/30">{turnoTotals.hb.toLocaleString("es-AR")}</td>
-                <td className="text-xs text-center font-bold p-2 text-amber-600 bg-muted/30">{turnoTotals.he}</td>
-                <td className="text-xs text-center font-bold p-2 bg-muted/30">{turnoTotals.misiones.toLocaleString("es-AR")}</td>
-                <td className="text-xs text-center font-bold p-2 bg-muted/30">{turnoTotals.opHE.toLocaleString("es-AR")}</td>
+                <td className="text-xs text-center font-bold p-2 text-amber-600 bg-muted/30">{franjaTotals.he}</td>
+                <td className="text-xs text-center font-bold p-2 bg-muted/30">{franjaTotals.opHE.toLocaleString("es-AR")}</td>
                 <td className="text-xs text-center font-bold p-2 bg-muted/30">—</td>
               </tr>
             </tbody>
