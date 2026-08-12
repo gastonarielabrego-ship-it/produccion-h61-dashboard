@@ -70,8 +70,10 @@ export async function GET(request: Request) {
 
     // ── Per-day aggregation ──
     // opHours stores all hours with qty > 0 per (date, operario)
+    // turnoMap stores hours per (date, turno) for HE by shift
     const dayMap: Record<number, { missions: Set<string>; bultos: number; opHours: Record<string, number[]> }> = {};
     const monthMap: Record<number, { missions: Set<string>; bultos: number; days: Set<number> }> = {};
+    const turnoDateMap: Record<string, Record<string, number[]>> = {}; // key: "date:turno" → { operario: [hours] }
 
     for (let i = 0; i < records.length; i++) {
       const r = records[i];
@@ -101,6 +103,18 @@ export async function GET(request: Request) {
         }
       }
 
+      // Turno-based hours (for HE by shift breakdown)
+      const turnoKey = dt + ":" + r.turno;
+      if (recHours.length > 0) {
+        if (!turnoDateMap[turnoKey]) turnoDateMap[turnoKey] = {};
+        if (!turnoDateMap[turnoKey][op]) {
+          turnoDateMap[turnoKey][op] = recHours;
+        } else {
+          const existing = turnoDateMap[turnoKey][op];
+          for (let j = 0; j < recHours.length; j++) existing.push(recHours[j]);
+        }
+      }
+
       // Month
       const mk = Math.floor(dt / 100);
       if (!monthMap[mk]) monthMap[mk] = { missions: new Set(), bultos: 0, days: new Set() };
@@ -113,7 +127,7 @@ export async function GET(request: Request) {
     const sortedDates = Object.keys(dayMap).map(Number).sort(function(a, b) { return a - b; });
     const sortedMonths = Object.keys(monthMap).map(Number).sort(function(a, b) { return a - b; });
 
-    // ── Daily metrics ──
+    // ── Daily metrics (with horas extras) ──
     const dailyMetrics = [];
     for (let i = 0; i < sortedDates.length; i++) {
       const date = sortedDates[i];
@@ -121,9 +135,16 @@ export async function GET(request: Request) {
       const misiones = d.missions.size;
       const bultos = d.bultos;
       let hb = 0;
+      let heDia = 0;
+      let opConHEDia = 0;
       const opKeys = Object.keys(d.opHours);
       for (let k = 0; k < opKeys.length; k++) {
-        hb += calcHorasBrutas(d.opHours[opKeys[k]]);
+        const span = calcHorasBrutas(d.opHours[opKeys[k]]);
+        hb += span;
+        if (span > 8) {
+          heDia += (span - 8);
+          opConHEDia++;
+        }
       }
       const tmMin = filters.operario ? (tmByDateOpAll[(date + ":" + filters.operario)] || 0) : (tmByDateAll[date] || 0);
       const tmH = Math.round((tmMin / 60) * 100) / 100;
@@ -131,7 +152,7 @@ export async function GET(request: Request) {
       const prod = misiones > 0 ? Math.round((bultos / misiones) * 10) / 10 : 0;
       const bhB = hb > 0 ? Math.round((bultos / hb) * 10) / 10 : 0;
       const bhN = hn > 0 ? Math.round((bultos / hn) * 10) / 10 : 0;
-      dailyMetrics.push({ date, misiones, bultos, horasProductivas: hb, tmHoras: tmH, horasNetas: hn, produccion: prod, bultosPorHoraBruta: bhB, bultosPorHoraNeta: bhN });
+      dailyMetrics.push({ date, misiones, bultos, horasProductivas: hb, tmHoras: tmH, horasNetas: hn, produccion: prod, bultosPorHoraBruta: bhB, bultosPorHoraNeta: bhN, horasExtras: Math.round(heDia * 100) / 100, misionesConHE: opConHEDia });
     }
 
     // ── Monthly summary + Horas Extras ──
@@ -274,11 +295,71 @@ export async function GET(request: Request) {
       collaboratorHeatmap.push(row);
     }
 
+    // ── HE by Turno (shift breakdown) ──
+    // Aggregate HE per turno across all dates
+    const turnoHEMap: Record<string, { he: number; misiones: number; dias: Set<number>; hb: number }> = {};
+    // Also collect turno_desc from records
+    const turnoDescMap: Record<string, string> = {};
+    for (let i = 0; i < records.length; i++) {
+      turnoDescMap[records[i].turno] = records[i].turnoDesc;
+    }
+    const turnoKeys = Object.keys(turnoDateMap);
+    for (let i = 0; i < turnoKeys.length; i++) {
+      const tk = turnoKeys[i];
+      const parts = tk.split(":");
+      const dtNum = Number(parts[0]);
+      const turno = parts.slice(1).join(":");
+      const ops = turnoDateMap[tk];
+      const opK = Object.keys(ops);
+      for (let j = 0; j < opK.length; j++) {
+        const span = calcHorasBrutas(ops[opK[j]]);
+        if (!turnoHEMap[turno]) turnoHEMap[turno] = { he: 0, misiones: 0, dias: new Set(), hb: 0 };
+        turnoHEMap[turno].hb += span;
+        turnoHEMap[turno].dias.add(dtNum);
+        turnoHEMap[turno].misiones++;
+        if (span > 8) {
+          turnoHEMap[turno].he += (span - 8);
+        }
+      }
+    }
+    const heByTurno = [];
+    const turnoEntries = Object.keys(turnoHEMap);
+    for (let i = 0; i < turnoEntries.length; i++) {
+      const t = turnoEntries[i];
+      const info = turnoHEMap[t];
+      heByTurno.push({
+        turno: t,
+        turnoDesc: turnoDescMap[t] || t,
+        horasBrutas: info.hb,
+        horasExtras: Math.round(info.he * 100) / 100,
+        misiones: info.misiones,
+        misionesConHE: 0,
+        dias: info.dias.size,
+      });
+    }
+    // Recount misionesConHE per turno
+    for (let i = 0; i < turnoKeys.length; i++) {
+      const tk = turnoKeys[i];
+      const parts = tk.split(":");
+      const turno = parts.slice(1).join(":");
+      const ops = turnoDateMap[tk];
+      const opK = Object.keys(ops);
+      for (let j = 0; j < opK.length; j++) {
+        const span = calcHorasBrutas(ops[opK[j]]);
+        if (span > 8) {
+          for (let k = 0; k < heByTurno.length; k++) {
+            if (heByTurno[k].turno === turno) { heByTurno[k].misionesConHE++; break; }
+          }
+        }
+      }
+    }
+
     const filteredOperatorName = filters.operario && records.length > 0 ? records[0].nombre : null;
 
     return NextResponse.json({
       dailyMetrics,
       monthlyData,
+      heByTurno,
       dayHeatmap,
       collaboratorHeatmap,
       filteredOperatorName,
