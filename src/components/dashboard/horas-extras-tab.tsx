@@ -51,7 +51,7 @@ export function HorasExtrasTab({ baseQuery }: HorasExtrasTabProps) {
   // All hooks MUST be called unconditionally (before any early return)
   const monthly = data ? (data.monthlyData || []) : [];
   const daily = data ? (data.dailyMetrics || []) : [];
-  const heByFranja = data ? (data.heByFranja || []) : [];
+  const heByTurno = data ? (data.heByTurno || []) : [];
 
   const totals = useMemo(() => {
     let dias = 0, misiones = 0, hb = 0, he = 0, opHE = 0;
@@ -79,16 +79,16 @@ export function HorasExtrasTab({ baseQuery }: HorasExtrasTabProps) {
     return { misiones: tMisiones, hb: tHb, he: Math.round(tHE * 100) / 100, opHE: tOpHE, dias: daily.length };
   }, [daily]);
 
-  const franjaTotals = useMemo(() => {
-    let tHE = 0, tOpHE = 0, tDias = 0;
-    for (let i = 0; i < heByFranja.length; i++) {
-      const r = heByFranja[i];
+  const turnoTotals = useMemo(() => {
+    let tHb = 0, tHE = 0, tOpHE = 0;
+    for (let i = 0; i < heByTurno.length; i++) {
+      const r = heByTurno[i];
+      tHb += r.horasBrutas || 0;
       tHE += r.horasExtras || 0;
-      tOpHE += r.misionesConHE;
-      tDias += r.dias;
+      tOpHE += r.misionesConHE || 0;
     }
-    return { he: Math.round(tHE * 100) / 100, opHE: tOpHE, dias: tDias };
-  }, [heByFranja]);
+    return { hb: Math.round(tHb * 100) / 100, he: Math.round(tHE * 100) / 100, opHE: tOpHE };
+  }, [heByTurno]);
 
   if (error) return (
     <Card><CardContent className="p-8 text-center">
@@ -301,15 +301,16 @@ export function HorasExtrasTab({ baseQuery }: HorasExtrasTabProps) {
           </div>
           <div className="flex items-center gap-1">
             <ExcelButton
-              rows={heByFranja.map((r: any) => ({
-                Turno: r.label,
+              rows={heByTurno.map((r: any) => ({
+                Turno: r.turnoDesc,
+                "Hs. Brutas": r.horasBrutas || 0,
                 "Hs. Extras": r.horasExtras || 0,
-                "Op. c/HE": r.misionesConHE,
+                "Op. c/HE": r.misionesConHE || 0,
                 Dias: r.dias,
               }))}
               filename="horas-extras-turno"
               sheetName="HE por Turno"
-              colWidths={[16, 12, 12, 8]}
+              colWidths={[16, 12, 12, 12, 8]}
             />
             <PrintButton title="HE por Turno" />
           </div>
@@ -319,15 +320,17 @@ export function HorasExtrasTab({ baseQuery }: HorasExtrasTabProps) {
             <thead>
               <tr className="border-b">
                 <th className="text-xs font-semibold text-left p-2 sticky left-0 bg-card min-w-[140px]">Turno</th>
-                <th className="text-xs font-semibold text-center p-2 min-w-[100px] text-amber-600">Hs. Extras</th>
-                <th className="text-xs font-semibold text-center p-2 min-w-[100px]">Op. con HE</th>
-                <th className="text-xs font-semibold text-center p-2 min-w-[70px]">Dias</th>
+                <th className="text-xs font-semibold text-center p-2 min-w-[80px]">Hs. Brutas</th>
+                <th className="text-xs font-semibold text-center p-2 min-w-[80px] text-amber-600">Hs. Extras</th>
+                <th className="text-xs font-semibold text-center p-2 min-w-[90px]">Op. c/HE</th>
+                <th className="text-xs font-semibold text-center p-2 min-w-[60px]">Dias</th>
               </tr>
             </thead>
             <tbody>
-              {heByFranja.map((row: any) => (
-                <tr key={row.franja} className="border-b hover:bg-muted/50">
-                  <td className="text-xs font-medium p-2 sticky left-0 bg-card">{row.label}</td>
+              {heByTurno.map((row: any) => (
+                <tr key={row.turno} className="border-b hover:bg-muted/50">
+                  <td className="text-xs font-medium p-2 sticky left-0 bg-card">{row.turnoDesc}</td>
+                  <td className="text-xs text-center p-2">{(row.horasBrutas || 0).toLocaleString("es-AR")}</td>
                   <td className="text-xs text-center p-2 font-medium text-amber-600">{(row.horasExtras || 0).toLocaleString("es-AR", { maximumFractionDigits: 1 })}</td>
                   <td className="text-xs text-center p-2">{(row.misionesConHE || 0).toLocaleString("es-AR")}</td>
                   <td className="text-xs text-center p-2">{row.dias}</td>
@@ -335,8 +338,9 @@ export function HorasExtrasTab({ baseQuery }: HorasExtrasTabProps) {
               ))}
               <tr className="border-t-2 font-bold bg-muted/30">
                 <td className="text-xs font-bold p-2 sticky left-0 bg-muted/30">TOTAL</td>
-                <td className="text-xs text-center font-bold p-2 text-amber-600 bg-muted/30">{franjaTotals.he}</td>
-                <td className="text-xs text-center font-bold p-2 bg-muted/30">{franjaTotals.opHE.toLocaleString("es-AR")}</td>
+                <td className="text-xs text-center font-bold p-2 bg-muted/30">{turnoTotals.hb.toLocaleString("es-AR")}</td>
+                <td className="text-xs text-center font-bold p-2 text-amber-600 bg-muted/30">{turnoTotals.he}</td>
+                <td className="text-xs text-center font-bold p-2 bg-muted/30">{turnoTotals.opHE.toLocaleString("es-AR")}</td>
                 <td className="text-xs text-center font-bold p-2 bg-muted/30">—</td>
               </tr>
             </tbody>

@@ -62,20 +62,7 @@ function calcHorasBrutas(hoursArr: number[]): number {
   return calcShiftDetails(hoursArr).span;
 }
 
-// ── Franjas horarias definition ──
-const FRANJAS = [
-  { id: "06-10", label: "06:00 - 10:00", minH: 6, maxH: 10 },
-  { id: "10-14", label: "10:00 - 14:00", minH: 10, maxH: 14 },
-  { id: "18-22", label: "18:00 - 22:00", minH: 18, maxH: 22 },
-];
-
-function getFranjaForHour(h: number): string | null {
-  const wh = ((h % 24) + 24) % 24; // wrap to 0-23
-  for (let i = 0; i < FRANJAS.length; i++) {
-    if (wh >= FRANJAS[i].minH && wh < FRANJAS[i].maxH) return FRANJAS[i].id;
-  }
-  return null;
-}
+// ── No more franjas — use real turno from records ──
 
 export async function GET(request: Request) {
   try {
@@ -301,57 +288,67 @@ export async function GET(request: Request) {
       collaboratorHeatmap.push(row);
     }
 
-    // ── HE by Franja Horaria ──
-    // Assign ALL extra hours to the franja based on shift START hour.
-    // This way every HE is attributed and totals match exactly.
-    const heFranjaMap: Record<string, { he: number; misionesConHE: number; dias: Set<number> }> = {};
-    for (let i = 0; i < FRANJAS.length; i++) {
-      heFranjaMap[FRANJAS[i].id] = { he: 0, misionesConHE: 0, dias: new Set() };
+    // ── HE by Turno (real turno from DB) ──
+    // For each (date, operario) that has HE, attribute it to the turno from records.
+    // Build: (date:operario) → main turno (the one with most records)
+    const opDateTurno: Record<string, string> = {};
+    const opDateTurnoCount: Record<string, Record<string, number>> = {};
+    const turnoDescMap: Record<string, string> = {};
+    for (let i = 0; i < records.length; i++) {
+      const r = records[i];
+      turnoDescMap[r.turno] = r.turnoDesc;
+      const key = r.date + ":" + r.operario;
+      if (!opDateTurnoCount[key]) opDateTurnoCount[key] = {};
+      opDateTurnoCount[key][r.turno] = (opDateTurnoCount[key][r.turno] || 0) + 1;
     }
-    heFranjaMap["otros"] = { he: 0, misionesConHE: 0, dias: new Set() };
+    // Determine main turno per (date, operario)
+    const opDateKeys = Object.keys(opDateTurnoCount);
+    for (let i = 0; i < opDateKeys.length; i++) {
+      const key = opDateKeys[i];
+      const counts = opDateTurnoCount[key];
+      let bestTurno = "";
+      let bestCount = 0;
+      const cKeys = Object.keys(counts);
+      for (let j = 0; j < cKeys.length; j++) {
+        if (counts[cKeys[j]] > bestCount) {
+          bestCount = counts[cKeys[j]];
+          bestTurno = cKeys[j];
+        }
+      }
+      opDateTurno[key] = bestTurno;
+    }
 
+    // Now attribute HE from each (date, operario) to its turno
+    const heByTurnoMap: Record<string, { he: number; misionesConHE: number; dias: Set<number>; hb: number }> = {};
     for (let i = 0; i < sortedDates.length; i++) {
       const date = sortedDates[i];
       const dd = dayMap[date];
       const dk = Object.keys(dd.opHours);
       for (let j = 0; j < dk.length; j++) {
-        const details = calcShiftDetails(dd.opHours[dk[j]]);
-        if (details.span > 8) {
-          const he = details.span - 8;
-          // Determine franja from shift start hour (wrapped to 0-23)
-          const startWrapped = ((details.startHour % 24) + 24) % 24;
-          const franjaId = getFranjaForHour(startWrapped) || "otros";
-          if (!heFranjaMap[franjaId]) heFranjaMap[franjaId] = { he: 0, misionesConHE: 0, dias: new Set() };
-          heFranjaMap[franjaId].he += he;
-          heFranjaMap[franjaId].misionesConHE++;
-          heFranjaMap[franjaId].dias.add(date);
-        }
+        const span = calcHorasBrutas(dd.opHours[dk[j]]);
+        const he = span > 8 ? (span - 8) : 0;
+        const key = date + ":" + dk[j];
+        const turno = opDateTurno[key] || "";
+        if (!heByTurnoMap[turno]) heByTurnoMap[turno] = { he: 0, misionesConHE: 0, dias: new Set(), hb: 0 };
+        heByTurnoMap[turno].hb += span;
+        heByTurnoMap[turno].he += he;
+        heByTurnoMap[turno].dias.add(date);
+        if (he > 0) heByTurnoMap[turno].misionesConHE++;
       }
     }
 
-    const heByFranja = [];
-    for (let i = 0; i < FRANJAS.length; i++) {
-      const f = FRANJAS[i];
-      const info = heFranjaMap[f.id];
-      if (info.he > 0 || info.misionesConHE > 0) {
-        heByFranja.push({
-          franja: f.id,
-          label: f.label,
-          horasExtras: Math.round(info.he * 100) / 100,
-          misionesConHE: info.misionesConHE,
-          dias: info.dias.size,
-        });
-      }
-    }
-    // Only add "otros" if there are hours outside the 3 main franjas
-    const otrosInfo = heFranjaMap["otros"];
-    if (otrosInfo.he > 0 || otrosInfo.misionesConHE > 0) {
-      heByFranja.push({
-        franja: "otros",
-        label: "Otros horarios",
-        horasExtras: Math.round(otrosInfo.he * 100) / 100,
-        misionesConHE: otrosInfo.misionesConHE,
-        dias: otrosInfo.dias.size,
+    const heByTurno = [];
+    const turnoEntries = Object.keys(heByTurnoMap);
+    for (let i = 0; i < turnoEntries.length; i++) {
+      const t = turnoEntries[i];
+      const info = heByTurnoMap[t];
+      heByTurno.push({
+        turno: t,
+        turnoDesc: turnoDescMap[t] || t,
+        horasBrutas: info.hb,
+        horasExtras: Math.round(info.he * 100) / 100,
+        misionesConHE: info.misionesConHE,
+        dias: info.dias.size,
       });
     }
 
@@ -360,7 +357,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       dailyMetrics,
       monthlyData,
-      heByFranja,
+      heByTurno,
       dayHeatmap,
       collaboratorHeatmap,
       filteredOperatorName,
