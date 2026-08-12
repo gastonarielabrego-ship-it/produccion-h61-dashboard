@@ -6,9 +6,10 @@ import { DashboardTab } from "@/components/dashboard/dashboard-tab";
 import { TimeWindowTable } from "@/components/dashboard/time-window-table";
 import { HeaderActions } from "@/components/dashboard/header-actions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BarChart3, Clock, Table2, Cog, Target, Timer } from "lucide-react";
+import { BarChart3, Clock, Table2, Cog, Target, Timer, AlertTriangle } from "lucide-react";
 import { SummaryTab } from "@/components/dashboard/summary-tab";
 import { CitacionTab } from "@/components/dashboard/citacion-tab";
+import { ErroresTab } from "@/components/dashboard/errores-tab";
 import { HorasExtrasTab } from "@/components/dashboard/horas-extras-tab";
 
 const API_PRODUCTION = "/api/production";
@@ -92,6 +93,9 @@ export default function Home() {
             <TabsTrigger value="clarkistas" className="gap-1.5">
               <Cog className="h-3.5 w-3.5" /> Clarkistas
             </TabsTrigger>
+            <TabsTrigger value="errores" className="gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5" /> Errores
+            </TabsTrigger>
           </TabsList>
 
           {/* Preparación filter bar */}
@@ -118,6 +122,11 @@ export default function Home() {
           {/* Clarkistas full section */}
           <TabsContent value="clarkistas" className="mt-6">
             <ClarkistasDashboard refreshKey={clarkRefreshKey} />
+          </TabsContent>
+
+          {/* Errores */}
+          <TabsContent value="errores" className="mt-6">
+            <ErroresTab />
           </TabsContent>
         </Tabs>
       </main>
