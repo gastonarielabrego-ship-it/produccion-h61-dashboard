@@ -287,38 +287,38 @@ export function HorasExtrasTab({ baseQuery }: HorasExtrasTabProps) {
         </CardContent>
       </Card>
 
-      {/* Breakdown by Franja Horaria */}
+      {/* Breakdown by Turno */}
       <Card>
         <CardHeader className="flex flex-row items-start justify-between space-y-0">
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <AlarmClock className="h-4 w-4" />
-              Horas Extras — Desglose por Franja Horaria
+              Horas Extras — Desglose por Turno
             </CardTitle>
             <CardDescription>
-              Las horas extras se atribuyen a la franja horaria donde se generaron (despues de las 8 HS normales).
+              Las horas extras se atribuyen al turno segun la hora de inicio (despues de las 8 HS normales).
             </CardDescription>
           </div>
           <div className="flex items-center gap-1">
             <ExcelButton
               rows={heByFranja.map((r: any) => ({
-                Franja: r.label,
+                Turno: r.label,
                 "Hs. Extras": r.horasExtras || 0,
                 "Op. c/HE": r.misionesConHE,
                 Dias: r.dias,
               }))}
-              filename="horas-extras-franja"
-              sheetName="HE por Franja"
+              filename="horas-extras-turno"
+              sheetName="HE por Turno"
               colWidths={[16, 12, 12, 8]}
             />
-            <PrintButton title="HE por Franja" />
+            <PrintButton title="HE por Turno" />
           </div>
         </CardHeader>
         <CardContent className="p-0 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b">
-                <th className="text-xs font-semibold text-left p-2 sticky left-0 bg-card min-w-[140px]">Franja Horaria</th>
+                <th className="text-xs font-semibold text-left p-2 sticky left-0 bg-card min-w-[140px]">Turno</th>
                 <th className="text-xs font-semibold text-center p-2 min-w-[100px] text-amber-600">Hs. Extras</th>
                 <th className="text-xs font-semibold text-center p-2 min-w-[100px]">Op. con HE</th>
                 <th className="text-xs font-semibold text-center p-2 min-w-[70px]">Dias</th>
