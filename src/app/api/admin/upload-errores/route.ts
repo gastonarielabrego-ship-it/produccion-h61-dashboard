@@ -24,7 +24,7 @@ function ensureErroresTable() {
   ]);
 }
 
-const PH = "(?,?,?,?,?,?,?,?,?,?)";
+const PH = "(?,?,?,?,?,?,?,?,?)";
 
 function dateToInt(d: string | number | null | undefined): number {
   if (!d) return 0;
