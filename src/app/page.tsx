@@ -6,9 +6,10 @@ import { DashboardTab } from "@/components/dashboard/dashboard-tab";
 import { TimeWindowTable } from "@/components/dashboard/time-window-table";
 import { HeaderActions } from "@/components/dashboard/header-actions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BarChart3, Clock, Table2, Cog, Target } from "lucide-react";
+import { BarChart3, Clock, Table2, Cog, Target, Timer } from "lucide-react";
 import { SummaryTab } from "@/components/dashboard/summary-tab";
 import { CitacionTab } from "@/components/dashboard/citacion-tab";
+import { HorasExtrasTab } from "@/components/dashboard/horas-extras-tab";
 
 const API_PRODUCTION = "/api/production";
 
@@ -85,6 +86,9 @@ export default function Home() {
             <TabsTrigger value="citacion" className="gap-1.5">
               <Target className="h-3.5 w-3.5" /> Citación
             </TabsTrigger>
+            <TabsTrigger value="horas-extras" className="gap-1.5">
+              <Timer className="h-3.5 w-3.5" /> Hs. Extras
+            </TabsTrigger>
             <TabsTrigger value="clarkistas" className="gap-1.5">
               <Cog className="h-3.5 w-3.5" /> Clarkistas
             </TabsTrigger>
@@ -106,6 +110,9 @@ export default function Home() {
           </TabsContent>
           <TabsContent value="citacion" className="mt-6">
             <CitacionTab key={`cit-${refreshKey}`} baseQuery={baseQuery} showTipoFilter />
+          </TabsContent>
+          <TabsContent value="horas-extras" className="mt-6">
+            <HorasExtrasTab key={`he-${refreshKey}`} baseQuery={baseQuery} />
           </TabsContent>
 
           {/* Clarkistas full section */}

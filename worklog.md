@@ -51,3 +51,22 @@ Work Log:
 Stage Summary:
 - Restored missing `/api/admin/upload` route for production data uploads
 - Deployed to https://produccion-h61-dashboard.vercel.app
+
+---
+Task ID: 4
+Agent: main
+Task: Create new "Horas Extras" tab with monthly comparison
+
+Work Log:
+- Created `/api/admin/upload/route.ts` (was deleted by external commit, needed for data uploads)
+- Updated `summary-tables/route.ts` with: calcHorasBrutas (midnight wrap-around fix), horas extras calculation per operator per day (>8hs = extras)
+- Added to monthlyData: horasExtras, misionesConHE, cmpHE (per-day rate comparison, skip if <7 days)
+- Created `horas-extras-tab.tsx` with: 4 KPI cards (total HE, HE/día promedio, misiones con HE, costo estimado), monthly comparison table with variation %
+- Added "Hs. Extras" tab to page.tsx between Citación and Clarkistas
+- Uses same filter bar as other Preparación tabs
+- Built and deployed to production
+
+Stage Summary:
+- New "Hs. Extras" tab deployed with monthly overtime comparison
+- Restored /api/admin/upload route for data uploads
+- All previous fixes preserved (midnight wrap-around, TM calculation)
