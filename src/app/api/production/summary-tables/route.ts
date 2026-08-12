@@ -302,12 +302,13 @@ export async function GET(request: Request) {
     }
 
     // ── HE by Franja Horaria ──
-    // For each operator per day: if span > 8, attribute extra hours to franjas
-    // Extra window = startHour+8 to endHour (unwrapped), then wrap back to 0-23
+    // Assign ALL extra hours to the franja based on shift START hour.
+    // This way every HE is attributed and totals match exactly.
     const heFranjaMap: Record<string, { he: number; misionesConHE: number; dias: Set<number> }> = {};
     for (let i = 0; i < FRANJAS.length; i++) {
       heFranjaMap[FRANJAS[i].id] = { he: 0, misionesConHE: 0, dias: new Set() };
     }
+    heFranjaMap["otros"] = { he: 0, misionesConHE: 0, dias: new Set() };
 
     for (let i = 0; i < sortedDates.length; i++) {
       const date = sortedDates[i];
@@ -316,28 +317,14 @@ export async function GET(request: Request) {
       for (let j = 0; j < dk.length; j++) {
         const details = calcShiftDetails(dd.opHours[dk[j]]);
         if (details.span > 8) {
-          const extraStart = details.startHour + 8;
-          const extraEnd = details.endHour;
-          // For each hour in the extra window, attribute to franja
-          for (let h = extraStart; h <= extraEnd; h++) {
-            const franjaId = getFranjaForHour(h);
-            if (franjaId && heFranjaMap[franjaId]) {
-              heFranjaMap[franjaId].he++;
-            }
-          }
-          // Count misionesConHE: at least 1 extra hour falls in this franja
-          const opFranjas: Record<string, boolean> = {};
-          for (let h = extraStart; h <= extraEnd; h++) {
-            const franjaId = getFranjaForHour(h);
-            if (franjaId && heFranjaMap[franjaId]) {
-              opFranjas[franjaId] = true;
-            }
-          }
-          const opFranjaKeys = Object.keys(opFranjas);
-          for (let f = 0; f < opFranjaKeys.length; f++) {
-            heFranjaMap[opFranjaKeys[f]].misionesConHE++;
-            heFranjaMap[opFranjaKeys[f]].dias.add(date);
-          }
+          const he = details.span - 8;
+          // Determine franja from shift start hour (wrapped to 0-23)
+          const startWrapped = ((details.startHour % 24) + 24) % 24;
+          const franjaId = getFranjaForHour(startWrapped) || "otros";
+          if (!heFranjaMap[franjaId]) heFranjaMap[franjaId] = { he: 0, misionesConHE: 0, dias: new Set() };
+          heFranjaMap[franjaId].he += he;
+          heFranjaMap[franjaId].misionesConHE++;
+          heFranjaMap[franjaId].dias.add(date);
         }
       }
     }
@@ -346,12 +333,25 @@ export async function GET(request: Request) {
     for (let i = 0; i < FRANJAS.length; i++) {
       const f = FRANJAS[i];
       const info = heFranjaMap[f.id];
+      if (info.he > 0 || info.misionesConHE > 0) {
+        heByFranja.push({
+          franja: f.id,
+          label: f.label,
+          horasExtras: Math.round(info.he * 100) / 100,
+          misionesConHE: info.misionesConHE,
+          dias: info.dias.size,
+        });
+      }
+    }
+    // Only add "otros" if there are hours outside the 3 main franjas
+    const otrosInfo = heFranjaMap["otros"];
+    if (otrosInfo.he > 0 || otrosInfo.misionesConHE > 0) {
       heByFranja.push({
-        franja: f.id,
-        label: f.label,
-        horasExtras: Math.round(info.he * 100) / 100,
-        misionesConHE: info.misionesConHE,
-        dias: info.dias.size,
+        franja: "otros",
+        label: "Otros horarios",
+        horasExtras: Math.round(otrosInfo.he * 100) / 100,
+        misionesConHE: otrosInfo.misionesConHE,
+        dias: otrosInfo.dias.size,
       });
     }
 
