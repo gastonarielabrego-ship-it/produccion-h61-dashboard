@@ -229,7 +229,108 @@ export async function GET(request: Request) {
       });
     }
 
-    // ── 5. Available dates and months for filters ──
+    // ── 5. By Empresa (GLD / GL) ──
+    const empresaResult = await client.execute({
+      sql: `SELECT empresa,
+        SUM(hs_extras_50) as total_50,
+        SUM(hs_extras_100) as total_100,
+        SUM(hs_noct_100) as total_noct,
+        COUNT(*) as registros,
+        COUNT(DISTINCT nombre) as personal
+        FROM horas_extras_records ${where}
+        GROUP BY empresa
+        ORDER BY empresa`,
+      args: params,
+    });
+
+    // Aggregate into GLD vs GL
+    let gld50 = 0, gld100 = 0, gldNoct = 0, gldRegs = 0, gldPers = 0;
+    let gl50 = 0, gl100 = 0, glNoct = 0, glRegs = 0, glPers = 0;
+
+    for (let i = 0; i < empresaResult.rows.length; i++) {
+      const r = empresaResult.rows[i];
+      const emp = String(r.empresa ?? "").toUpperCase();
+      const m50 = Number(r.total_50 ?? 0);
+      const m100 = Number(r.total_100 ?? 0);
+      const mNoct = Number(r.total_noct ?? 0);
+      const regs = Number(r.registros ?? 0);
+      const pers = Number(r.personal ?? 0);
+
+      if (emp.indexOf("G.L.D") >= 0) {
+        gld50 += roundMinutesToHours(m50); gld100 += roundMinutesToHours(m100); gldNoct += roundMinutesToHours(mNoct);
+        gldRegs += regs; gldPers += pers;
+      } else {
+        gl50 += roundMinutesToHours(m50); gl100 += roundMinutesToHours(m100); glNoct += roundMinutesToHours(mNoct);
+        glRegs += regs; glPers += pers;
+      }
+    }
+
+    const byEmpresa = [
+      { tipo: "GLD", he50: gld50, he100: gld100, noct100: gldNoct, totalHE: gld50 + gld100 + gldNoct, registros: gldRegs, personal: gldPers },
+      { tipo: "GL", he50: gl50, he100: gl100, noct100: glNoct, totalHE: gl50 + gl100 + glNoct, registros: glRegs, personal: glPers },
+    ];
+
+    // ── 6. Ranking by personal with empresa ──
+    // Re-run ranking including empresa
+    const rankingEmpResult = await client.execute({
+      sql: `SELECT nombre, sector, empresa,
+        SUM(hs_extras_50) as total_50,
+        SUM(hs_extras_100) as total_100,
+        SUM(hs_noct_100) as total_noct,
+        COUNT(*) as dias
+        FROM horas_extras_records ${where}
+        GROUP BY nombre, sector, empresa
+        ORDER BY nombre`,
+      args: params,
+    });
+
+    // Reset ranking with empresa info
+    ranking.length = 0;
+    grandTotalHE = 0;
+    grandTotalMins = 0;
+    grandTotal50 = 0;
+    grandTotal100 = 0;
+    grandTotalNoct = 0;
+
+    for (let i = 0; i < rankingEmpResult.rows.length; i++) {
+      const r = rankingEmpResult.rows[i];
+      const mins50 = Number(r.total_50 ?? 0);
+      const mins100 = Number(r.total_100 ?? 0);
+      const minsNoct = Number(r.total_noct ?? 0);
+      const totalMins = mins50 + mins100 + minsNoct;
+
+      const h50 = roundMinutesToHours(mins50);
+      const h100 = roundMinutesToHours(mins100);
+      const hNoct = roundMinutesToHours(minsNoct);
+      const totalHE = h50 + h100 + hNoct;
+
+      const emp = String(r.empresa ?? "").toUpperCase();
+      let empLabel = "GL";
+      if (emp.indexOf("G.L.D") >= 0) empLabel = "GLD";
+
+      ranking.push({
+        nombre: String(r.nombre ?? ""),
+        sector: String(r.sector ?? ""),
+        empresa: empLabel,
+        he50: h50,
+        he100: h100,
+        noct100: hNoct,
+        totalHE: totalHE,
+        dias: Number(r.dias ?? 0),
+        mins: totalMins,
+      });
+
+      grandTotalHE += totalHE;
+      grandTotalMins += totalMins;
+      grandTotal50 += h50;
+      grandTotal100 += h100;
+      grandTotalNoct += hNoct;
+    }
+
+    ranking.sort(function(a, b) { return b.totalHE - a.totalHE; });
+    if (ranking.length > 50) ranking.length = 50;
+
+    // ── 7. Available dates and months for filters ──
     const datesResult = await client.execute({
       sql: "SELECT DISTINCT fecha FROM horas_extras_records ORDER BY fecha",
     });
@@ -246,6 +347,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       ranking,
       distribution,
+      byEmpresa,
       daily,
       monthly,
       totals: {

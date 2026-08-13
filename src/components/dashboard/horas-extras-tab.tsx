@@ -67,6 +67,7 @@ export function HorasExtrasTab() {
   // All hooks before returns
   const ranking = data ? (data.ranking || []) : [];
   const distribution = data ? (data.distribution || []) : [];
+  const byEmpresa = data ? (data.byEmpresa || []) : [];
   const daily = data ? (data.daily || []) : [];
   const monthly = data ? (data.monthly || []) : [];
   const totals = data ? (data.totals || { totalHE: 0, he50: 0, he100: 0, noct100: 0, totalMins: 0 }) : { totalHE: 0, he50: 0, he100: 0, noct100: 0, totalMins: 0 };
@@ -332,6 +333,7 @@ export function HorasExtrasTab() {
                 return {
                   "#": i + 1,
                   Personal: r.nombre,
+                  Empresa: r.empresa,
                   Sector: r.sector,
                   "HE 50%": r.he50,
                   "HE 100%": r.he100,
@@ -342,7 +344,7 @@ export function HorasExtrasTab() {
               })}
               filename="horas-extras-ranking"
               sheetName="Ranking HE"
-              colWidths={[6, 30, 18, 8, 10, 10, 10, 8]}
+              colWidths={[6, 30, 8, 18, 8, 10, 10, 10, 8]}
             />
             <PrintButton title="Ranking Horas Extras" />
           </div>
@@ -353,6 +355,7 @@ export function HorasExtrasTab() {
               <tr className="border-b bg-card">
                 <th className="text-xs font-semibold text-center p-2 w-[40px]">#</th>
                 <th className="text-xs font-semibold text-left p-2 sticky left-0 bg-card min-w-[200px]">Personal</th>
+                <th className="text-xs font-semibold text-center p-2 min-w-[50px]">Empresa</th>
                 <th className="text-xs font-semibold text-left p-2 min-w-[120px]">Sector</th>
                 <th className="text-xs font-semibold text-center p-2">HE 50%</th>
                 <th className="text-xs font-semibold text-center p-2">HE 100%</th>
@@ -367,6 +370,11 @@ export function HorasExtrasTab() {
                   <tr key={row.nombre} className="border-b hover:bg-muted/50">
                     <td className="text-xs text-center p-2 text-muted-foreground">{idx + 1}</td>
                     <td className="text-xs font-medium p-2 sticky left-0 bg-card">{row.nombre}</td>
+                    <td className="text-xs text-center p-2">
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${row.empresa === "GLD" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"}`}>
+                        {row.empresa}
+                      </span>
+                    </td>
                     <td className="text-xs text-left p-2 text-muted-foreground">{row.sector}</td>
                     <td className="text-xs text-center p-2">{row.he50}</td>
                     <td className="text-xs text-center p-2">{row.he100}</td>
@@ -429,6 +437,80 @@ export function HorasExtrasTab() {
                 return (
                   <tr key={row.tipo} className="border-b hover:bg-muted/50">
                     <td className="text-xs font-medium p-2 sticky left-0 bg-card">{row.tipo}</td>
+                    <td className="text-xs text-center p-2">{row.he50}</td>
+                    <td className="text-xs text-center p-2">{row.he100}</td>
+                    <td className="text-xs text-center p-2">{row.noct100}</td>
+                    <td className="text-xs text-center p-2 font-medium text-amber-600">{row.totalHE}</td>
+                    <td className="text-xs text-center p-2">{row.registros.toLocaleString("es-AR")}</td>
+                    <td className="text-xs text-center p-2">{row.personal}</td>
+                  </tr>
+                );
+              })}
+              <tr className="border-t-2 font-bold bg-muted/30">
+                <td className="text-xs font-bold p-2 sticky left-0 bg-muted/30">TOTAL</td>
+                <td className="text-xs text-center font-bold p-2 bg-muted/30">{totals.he50}</td>
+                <td className="text-xs text-center font-bold p-2 bg-muted/30">{totals.he100}</td>
+                <td className="text-xs text-center font-bold p-2 bg-muted/30">{totals.noct100}</td>
+                <td className="text-xs text-center font-bold p-2 text-amber-600 bg-muted/30">{totals.totalHE}</td>
+                <td className="text-xs text-center font-bold p-2 bg-muted/30">—</td>
+                <td className="text-xs text-center font-bold p-2 bg-muted/30">—</td>
+              </tr>
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+
+      {/* By Empresa (GLD / GL) */}
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between space-y-0">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <PieChart className="h-4 w-4" />
+              Distribucion por Empresa (GLD / GL)
+            </CardTitle>
+          </div>
+          <div className="flex items-center gap-1">
+            <ExcelButton
+              rows={byEmpresa.map(function(r) {
+                return {
+                  Empresa: r.tipo,
+                  "HE 50%": r.he50,
+                  "HE 100%": r.he100,
+                  "Noct. 100%": r.noct100,
+                  "Total HE": r.totalHE,
+                  Registros: r.registros,
+                  Personal: r.personal,
+                };
+              })}
+              filename="horas-extras-empresa"
+              sheetName="Empresa"
+              colWidths={[10, 10, 10, 10, 10, 12, 10]}
+            />
+            <PrintButton title="HE por Empresa" />
+          </div>
+        </CardHeader>
+        <CardContent className="p-0 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="text-xs font-semibold text-left p-2 sticky left-0 bg-card min-w-[80px]">Empresa</th>
+                <th className="text-xs font-semibold text-center p-2">HE 50%</th>
+                <th className="text-xs font-semibold text-center p-2">HE 100%</th>
+                <th className="text-xs font-semibold text-center p-2">Noct. 100%</th>
+                <th className="text-xs font-semibold text-center p-2 text-amber-600">Total HE</th>
+                <th className="text-xs font-semibold text-center p-2">Registros</th>
+                <th className="text-xs font-semibold text-center p-2">Personal</th>
+              </tr>
+            </thead>
+            <tbody>
+              {byEmpresa.map(function(row) {
+                return (
+                  <tr key={row.tipo} className="border-b hover:bg-muted/50">
+                    <td className="text-xs font-medium p-2 sticky left-0 bg-card">
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${row.tipo === "GLD" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"}`}>
+                        {row.tipo}
+                      </span>
+                    </td>
                     <td className="text-xs text-center p-2">{row.he50}</td>
                     <td className="text-xs text-center p-2">{row.he100}</td>
                     <td className="text-xs text-center p-2">{row.noct100}</td>
