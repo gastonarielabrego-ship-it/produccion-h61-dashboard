@@ -398,10 +398,12 @@ export function ErroresTab() {
                 Personal: r.nombre,
                 Registros: r.total,
                 "Suma errores": r.suma,
+                Faltantes: r.fal,
+                Sobrantes: r.sob,
               }))}
               filename="errores-ranking-personal"
               sheetName="Ranking"
-              colWidths={[6, 30, 12, 14]}
+              colWidths={[6, 30, 12, 14, 12, 12]}
             />
             <PrintButton title="Ranking Personal" />
           </div>
@@ -414,6 +416,8 @@ export function ErroresTab() {
                 <th className="text-xs font-semibold text-left p-2 sticky left-0 bg-card min-w-[200px]">Personal</th>
                 <th className="text-xs font-semibold text-center p-2">Registros</th>
                 <th className="text-xs font-semibold text-center p-2 text-red-500">Suma errores</th>
+                <th className="text-xs font-semibold text-center p-2 text-orange-500">Faltantes</th>
+                <th className="text-xs font-semibold text-center p-2 text-blue-500">Sobrantes</th>
               </tr>
             </thead>
             <tbody>
@@ -423,6 +427,8 @@ export function ErroresTab() {
                   <td className="text-xs font-medium p-2 sticky left-0 bg-card">{row.nombre}</td>
                   <td className="text-xs text-center p-2">{row.total.toLocaleString("es-AR")}</td>
                   <td className="text-xs text-center p-2 font-medium text-red-500">{row.suma.toLocaleString("es-AR")}</td>
+                  <td className="text-xs text-center p-2 font-medium text-orange-500">{row.fal.toLocaleString("es-AR")}</td>
+                  <td className="text-xs text-center p-2 font-medium text-blue-500">{row.sob.toLocaleString("es-AR")}</td>
                 </tr>
               ))}
             </tbody>

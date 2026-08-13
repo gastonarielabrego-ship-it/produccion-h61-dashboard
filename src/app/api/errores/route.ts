@@ -73,9 +73,9 @@ export async function GET(request: Request) {
       args: params,
     });
 
-    // Ranking by personal (tipo_control has person names in data)
+    // Ranking by personal with FAL/SOB breakdown
     const rankingResult = await client.execute({
-      sql: `SELECT tipo_control, COUNT(*) as total, SUM(errores) as suma FROM errores_records ${where} GROUP BY tipo_control ORDER BY suma DESC LIMIT 30`,
+      sql: `SELECT tipo_control, motivo, COUNT(*) as total, SUM(errores) as suma FROM errores_records ${where} GROUP BY tipo_control, motivo ORDER BY tipo_control`,
       args: params,
     });
 
@@ -148,17 +148,32 @@ export async function GET(request: Request) {
       });
     }
 
-    const ranking: { nombre: string; total: number; suma: number }[] = [];
+    // Build ranking with FAL/SOB per person
+    const rankingMap: Record<string, { nombre: string; total: number; suma: number; fal: number; sob: number }> = {};
     for (let i = 0; i < rankingResult.rows.length; i++) {
       const row = rankingResult.rows[i];
       const nombre = String(row.tipo_control || "").trim();
       if (!nombre) continue;
-      ranking.push({
-        nombre: nombre,
-        total: Number(row.total),
-        suma: Number(row.suma),
-      });
+      if (!rankingMap[nombre]) {
+        rankingMap[nombre] = { nombre: nombre, total: 0, suma: 0, fal: 0, sob: 0 };
+      }
+      const r = rankingMap[nombre];
+      r.total += Number(row.total);
+      r.suma += Number(row.suma);
+      const mot = String(row.motivo || "").toUpperCase().trim();
+      if (mot.indexOf("FAL") >= 0) r.fal += Number(row.suma);
+      else if (mot.indexOf("SOB") >= 0) r.sob += Number(row.suma);
     }
+
+    const ranking: { nombre: string; total: number; suma: number; fal: number; sob: number }[] = [];
+    const rankingKeys = Object.keys(rankingMap);
+    for (let i = 0; i < rankingKeys.length; i++) {
+      ranking.push(rankingMap[rankingKeys[i]]);
+    }
+    // Sort by suma DESC
+    ranking.sort(function(a, b) { return b.suma - a.suma; });
+    // Top 30
+    if (ranking.length > 30) ranking.length = 30;
 
     const daily: { date: number; total: number; suma: number }[] = [];
     for (let i = 0; i < dailyResult.rows.length; i++) {
