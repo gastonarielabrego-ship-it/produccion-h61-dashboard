@@ -249,7 +249,7 @@ export function ErroresTab() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -266,15 +266,6 @@ export function ErroresTab() {
               <span className="text-xs font-medium">Total errores</span>
             </div>
             <p className="text-2xl font-bold">{totals.suma.toLocaleString("es-AR")}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <AlertTriangle className="h-4 w-4" />
-              <span className="text-xs font-medium">Controladores</span>
-            </div>
-            <p className="text-2xl font-bold">{byControlador.length.toLocaleString("es-AR")}</p>
           </CardContent>
         </Card>
         <Card>
@@ -360,36 +351,6 @@ export function ErroresTab() {
               {byMotivo.map((row: any) => (
                 <tr key={row.motivo} className="border-b hover:bg-muted/50">
                   <td className="text-xs font-medium p-2 sticky left-0 bg-card">{row.motivo || "(sin motivo)"}</td>
-                  <td className="text-xs text-center p-2">{row.total.toLocaleString("es-AR")}</td>
-                  <td className="text-xs text-center p-2 font-medium text-red-500">{row.suma.toLocaleString("es-AR")}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
-
-      {/* Top Controladores */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <AlertTriangle className="h-4 w-4" />
-            Top 50 Controladores con mas errores
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b">
-                <th className="text-xs font-semibold text-left p-2 sticky left-0 bg-card">Controlador</th>
-                <th className="text-xs font-semibold text-center p-2">Registros</th>
-                <th className="text-xs font-semibold text-center p-2">Suma errores</th>
-              </tr>
-            </thead>
-            <tbody>
-              {byControlador.map((row: any) => (
-                <tr key={row.controlador} className="border-b hover:bg-muted/50">
-                  <td className="text-xs font-medium p-2 sticky left-0 bg-card">{row.controlador}</td>
                   <td className="text-xs text-center p-2">{row.total.toLocaleString("es-AR")}</td>
                   <td className="text-xs text-center p-2 font-medium text-red-500">{row.suma.toLocaleString("es-AR")}</td>
                 </tr>
