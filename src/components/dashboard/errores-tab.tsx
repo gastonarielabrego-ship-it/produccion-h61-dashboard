@@ -98,22 +98,33 @@ export function ErroresTab() {
 
       if (rows.length < 2) { setUploadMsg("Error: archivo vacio"); setUploading(false); return; }
 
-      // Collect dates to delete first
+      // Collect dates to delete first — handle Excel serial numbers too
       const dates: number[] = [];
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
         if (!row[0]) continue;
-        const s = String(row[0]).trim();
-        const parts = s.split(/[\sT\-:]+/);
-        if (parts.length >= 3) {
-          const y = Number(parts[0]);
-          const m = Number(parts[1]);
-          const day = Number(parts[2]);
-          if (y > 0 && m > 0 && day > 0) {
-            const d = y * 10000 + m * 100 + day;
-            if (dates.indexOf(d) === -1) dates.push(d);
+        const v = row[0];
+        let d = 0;
+        if (typeof v === "number") {
+          if (v > 30000 && v < 60000) {
+            // Excel serial number
+            const epoch = new Date(1899, 11, 30);
+            const jsDate = new Date(epoch.getTime() + v * 86400000);
+            d = jsDate.getFullYear() * 10000 + (jsDate.getMonth() + 1) * 100 + jsDate.getDate();
+          } else if (v > 20000101) {
+            d = v;
+          }
+        } else {
+          const s = String(v).trim();
+          const parts = s.split(/[\sT\-:]+/);
+          if (parts.length >= 3) {
+            const y = Number(parts[0]);
+            const m = Number(parts[1]);
+            const day = Number(parts[2]);
+            if (y > 0 && m > 0 && day > 0) d = y * 10000 + m * 100 + day;
           }
         }
+        if (d > 0 && dates.indexOf(d) === -1) dates.push(d);
       }
 
       // Delete existing dates

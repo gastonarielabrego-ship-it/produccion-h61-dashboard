@@ -28,7 +28,17 @@ const PH = "(?,?,?,?,?,?,?,?,?)";
 
 function dateToInt(d: string | number | null | undefined): number {
   if (!d) return 0;
-  if (typeof d === "number") return d;
+  if (typeof d === "number") {
+    // If it's an Excel serial number (< 60000), convert to YYYYMMDD
+    if (d > 30000 && d < 60000) {
+      const epoch = new Date(1899, 11, 30);
+      const jsDate = new Date(epoch.getTime() + d * 86400000);
+      return jsDate.getFullYear() * 10000 + (jsDate.getMonth() + 1) * 100 + jsDate.getDate();
+    }
+    // Already in YYYYMMDD format (e.g. 20240826)
+    if (d > 20000101 && d < 21000000) return d;
+    return d;
+  }
   const s = String(d).trim();
   // Format: "2024-08-26 00:00:00" or "2024-08-26"
   const parts = s.split(/[\sT\-:]+/);
@@ -37,6 +47,11 @@ function dateToInt(d: string | number | null | undefined): number {
     const m = Number(parts[1]);
     const day = Number(parts[2]);
     if (y > 0 && m > 0 && day > 0) return y * 10000 + m * 100 + day;
+  }
+  // DD/MM/YYYY format
+  if (parts.length >= 3 && day <= 31 && m <= 12) {
+    const y = Number(parts[2]);
+    if (y > 0) return y * 10000 + m * 100 + day;
   }
   return 0;
 }
@@ -74,11 +89,23 @@ export async function POST(request: Request) {
         header.push(String(rows[0][i] ?? "").toUpperCase().trim().replace(/\xa0/g, " ").replace(/\s+/g, " "));
       }
 
-      // Find column indices — header: Preparacion, Control, Tiempo Control, ID, Tipo de control, Controlador, codigo producto, producto, Errores, motivo
-      // NOTE: In data, col 5 has controlador names and col 6 has tipo_control (swapped vs header)
+      // Find column indices — flexible matching
       const colIdx: Record<string, number> = {};
       for (let i = 0; i < header.length; i++) {
         colIdx[header[i]] = i;
+      }
+
+      function findCol(keys: string[]): number {
+        for (let k = 0; k < keys.length; k++) {
+          // Exact match
+          if (colIdx[keys[k]] !== undefined) return colIdx[keys[k]];
+          // Partial/contains match
+          const hKeys = Object.keys(colIdx);
+          for (let h = 0; h < hKeys.length; h++) {
+            if (hKeys[h].indexOf(keys[k]) >= 0 || keys[k].indexOf(hKeys[h]) >= 0) return colIdx[hKeys[h]];
+          }
+        }
+        return -1;
       }
 
       function getVal(row: (string | number | null | undefined)[], ci: number): number {
@@ -92,18 +119,27 @@ export async function POST(request: Request) {
         return v === null || v === undefined ? "" : String(v).trim().replace(/\xa0/g, " ").replace(/\s+/g, " ");
       }
 
-      // Map columns (handle both possible header layouts)
-      const cPrep = colIdx["PREPARACION"] ?? colIdx["PREPARACION "] ?? -1;
-      const cCtrl = colIdx["CONTROL"] ?? colIdx["CONTROL "] ?? -1;
-      const cId = colIdx["ID"] ?? -1;
-      // Col labeled "TIPO DE CONTROL" actually has controlador names in data
-      const cControlador = colIdx["TIPO DE CONTROL"] ?? colIdx["TIPO DE CONTROL "] ?? -1;
-      // Col labeled "CONTROLADOR" actually has tipo_control values in data
-      const cTipoCtrl = colIdx["CONTROLADOR"] ?? colIdx["CONTROLADOR "] ?? -1;
-      const cCodProd = colIdx["CODIGO PRODUCTO"] ?? colIdx["CODIGO PRODUCTO "] ?? -1;
-      const cProducto = colIdx["PRODUCTO"] ?? colIdx["PRODUCTO "] ?? -1;
-      const cErrores = colIdx["ERRORES"] ?? colIdx["ERRORES "] ?? -1;
-      const cMotivo = colIdx["MOTIVO"] ?? colIdx["MOTIVO "] ?? -1;
+      // Map columns — flexible: exact first, then partial match, then positional fallback
+      let cPrep = findCol(["PREPARACION", "PREPARACIÓN", "FECHA PREPARACION", "FECHA PREPARACIÓN", "FECHA PREP", "FECHA"]);
+      let cCtrl = findCol(["CONTROL", "FECHA CONTROL", "FECHA CTRL", "CTRL"]);
+      let cId = findCol(["ID", "ID OPERARIO", "OPERARIO"]);
+      let cControlador = findCol(["TIPO DE CONTROL", "TIPO CONTROL"]);
+      let cTipoCtrl = findCol(["CONTROLADOR"]);
+      let cCodProd = findCol(["CODIGO PRODUCTO", "COD PRODUCTO", "CODIGO", "COD."]);
+      let cProducto = findCol(["PRODUCTO", "DESCRIPCION", "DESCRIPCIÓN"]);
+      let cErrores = findCol(["ERRORES", "ERROR", "CANTIDAD", "CANT"]);
+      let cMotivo = findCol(["MOTIVO", "OBSERVACION", "OBSERVACIÓN", "OBS"]);
+
+      // Positional fallback: if key columns not found, try by position
+      if (cPrep < 0 && header.length >= 1) cPrep = 0;
+      if (cCtrl < 0 && header.length >= 2) cCtrl = 1;
+      if (cId < 0 && header.length >= 4) cId = 3;
+      if (cControlador < 0 && header.length >= 6) cControlador = 4;
+      if (cTipoCtrl < 0 && header.length >= 7) cTipoCtrl = 5;
+      if (cCodProd < 0 && header.length >= 8) cCodProd = 6;
+      if (cProducto < 0 && header.length >= 9) cProducto = 7;
+      if (cErrores < 0 && header.length >= 10) cErrores = 8;
+      if (cMotivo < 0 && header.length >= 11) cMotivo = 9;
 
       const allArgs: (string | number)[][] = [];
       for (let i = 1; i < rows.length; i++) {
@@ -124,7 +160,7 @@ export async function POST(request: Request) {
         ]);
       }
 
-      if (allArgs.length === 0) throw new Error("No hay filas validas");
+      if (allArgs.length === 0) throw new Error("No hay filas validas. Headers detectados: [" + header.join(" | ") + "], cPrep=" + cPrep + ", total filas=" + (rows.length - 1));
 
       const client = getClient();
       const CHUNK = 200;
