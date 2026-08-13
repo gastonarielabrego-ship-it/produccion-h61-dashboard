@@ -63,6 +63,14 @@ export async function POST(request: Request) {
     const body = await request.json();
     const action = body.action;
 
+    if (action === "delete-all") {
+      const client = getClient();
+      const countBefore = await client.execute("SELECT COUNT(*) as cnt FROM errores_records");
+      const before = Number(countBefore.rows[0]?.cnt ?? 0);
+      await client.execute("DELETE FROM errores_records");
+      return NextResponse.json({ message: before + " registros eliminados (todos)", elapsed: ((Date.now() - t0) / 1000).toFixed(1) + "s" });
+    }
+
     if (action === "delete") {
       const dates: number[] = body.dates || [];
       if (dates.length === 0) return NextResponse.json({ message: "Sin fechas", deletedDates: [] });

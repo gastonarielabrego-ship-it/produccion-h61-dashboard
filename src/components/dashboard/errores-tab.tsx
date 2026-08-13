@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertTriangle, Upload, Filter, X, Search } from "lucide-react";
+import { AlertTriangle, Upload, Filter, X, Search, Trash2 } from "lucide-react";
 import { ExcelButton } from "./excel-button";
 import { PrintButton } from "./print-button";
 
@@ -163,6 +163,22 @@ export function ErroresTab() {
 
   const hasFilters = fMotivo || fControlador;
 
+  const handleDeleteAll = async () => {
+    if (!confirm("Eliminar TODOS los registros de errores?")) return;
+    try {
+      const res = await fetch("/api/admin/upload-errores", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete-all" }),
+      });
+      const json = await res.json();
+      setUploadMsg("OK: " + (json.message || "Registros eliminados"));
+      fetchData();
+    } catch (err: any) {
+      setUploadMsg("Error: " + (err.message || err));
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Upload + Filters */}
@@ -179,6 +195,11 @@ export function ErroresTab() {
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50">
                 <Upload className="h-3.5 w-3.5" />
                 {uploading ? "Procesando..." : "Seleccionar archivo"}
+              </button>
+              <button onClick={handleDeleteAll}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-red-600 text-white rounded-md hover:bg-red-700">
+                <Trash2 className="h-3.5 w-3.5" />
+                Vaciar todo
               </button>
               {uploadMsg && <span className={`text-xs ${uploadMsg.startsWith("OK") ? "text-emerald-600" : "text-red-500"}`}>{uploadMsg}</span>}
             </div>
