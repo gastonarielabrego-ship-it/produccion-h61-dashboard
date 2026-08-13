@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertTriangle, Upload, Filter, X, Search, Trash2 } from "lucide-react";
+import { AlertTriangle, Upload, Filter, X, Trash2, Trophy, BarChart3 } from "lucide-react";
 import { ExcelButton } from "./excel-button";
 import { PrintButton } from "./print-button";
 
@@ -13,11 +13,13 @@ function formatDate(dateNum: number): string {
   return String(day).padStart(2, "0") + "/" + String(monthNum).padStart(2, "0") + "/" + year;
 }
 
-function formatMonth(dateNum: number): string {
-  const monthNum = dateNum % 100;
-  const year = Math.floor(dateNum / 100);
-  const MONTH_NAMES = ["", "Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-  return (MONTH_NAMES[monthNum] || "") + " " + year;
+function formatWeekday(dateNum: number): string {
+  const day = dateNum % 100;
+  const monthNum = Math.floor(dateNum / 100) % 100;
+  const year = Math.floor(dateNum / 10000);
+  const days = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"];
+  const d = new Date(year, monthNum - 1, day);
+  return days[d.getDay()];
 }
 
 export function ErroresTab() {
@@ -29,27 +31,24 @@ export function ErroresTab() {
 
   // Filters
   const [fMotivo, setFMotivo] = useState("");
-  const [fControlador, setFControlador] = useState("");
-  const [searchCtrl, setSearchCtrl] = useState("");
 
   const fetchData = useCallback(() => {
     setError(false);
     const params = new URLSearchParams();
     if (fMotivo) params.set("motivo", fMotivo);
-    if (fControlador) params.set("controlador", fControlador);
     fetch("/api/errores?" + params.toString(), { cache: "no-store" })
       .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
       .then(setData)
       .catch(() => setError(true));
-  }, [fMotivo, fControlador]);
+  }, [fMotivo]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   // All hooks before returns
-  const records = data ? (data.records || []) : [];
   const monthly = data ? (data.monthly || []) : [];
   const byMotivo = data ? (data.byMotivo || []) : [];
-  const byControlador = data ? (data.byControlador || []) : [];
+  const ranking = data ? (data.ranking || []) : [];
+  const daily = data ? (data.daily || []) : [];
 
   const motivos = useMemo(() => {
     const s: Record<string, boolean> = {};
@@ -57,17 +56,24 @@ export function ErroresTab() {
     return Object.keys(s);
   }, [byMotivo]);
 
-  const filteredCtrls = useMemo(() => {
-    if (!searchCtrl) return byControlador.slice(0, 20);
-    const q = searchCtrl.toLowerCase();
-    return byControlador.filter((c: any) => c.controlador.toLowerCase().includes(q)).slice(0, 20);
-  }, [byControlador, searchCtrl]);
-
   const totals = useMemo(() => {
-    let t = 0, s = 0;
-    for (let i = 0; i < records.length; i++) { t++; s += records[i].errores; }
-    return { total: t, suma: s };
-  }, [records]);
+    let t = 0, s = 0, fal = 0, sob = 0;
+    for (let i = 0; i < monthly.length; i++) {
+      t += monthly[i].total;
+      s += monthly[i].sumaErrores;
+      fal += monthly[i].fal;
+      sob += monthly[i].sob;
+    }
+    return { total: t, suma: s, fal, sob };
+  }, [monthly]);
+
+  const maxDaily = useMemo(() => {
+    let m = 1;
+    for (let i = 0; i < daily.length; i++) {
+      if (daily[i].suma > m) m = daily[i].suma;
+    }
+    return m;
+  }, [daily]);
 
   if (error) return (
     <Card><CardContent className="p-8 text-center">
@@ -98,7 +104,7 @@ export function ErroresTab() {
 
       if (rows.length < 2) { setUploadMsg("Error: archivo vacio"); setUploading(false); return; }
 
-      // Collect dates to delete first — handle Excel serial numbers too
+      // Collect dates to delete first
       const dates: number[] = [];
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
@@ -107,7 +113,6 @@ export function ErroresTab() {
         let d = 0;
         if (typeof v === "number") {
           if (v > 30000 && v < 60000) {
-            // Excel serial number
             const epoch = new Date(1899, 11, 30);
             const jsDate = new Date(epoch.getTime() + v * 86400000);
             d = jsDate.getFullYear() * 10000 + (jsDate.getMonth() + 1) * 100 + jsDate.getDate();
@@ -127,7 +132,6 @@ export function ErroresTab() {
         if (d > 0 && dates.indexOf(d) === -1) dates.push(d);
       }
 
-      // Delete existing dates
       if (dates.length > 0) {
         await fetch("/api/admin/upload-errores", {
           method: "POST",
@@ -136,7 +140,6 @@ export function ErroresTab() {
         });
       }
 
-      // Insert in chunks
       const CHUNK = 500;
       let totalInserted = 0;
       for (let start = 1; start < rows.length; start += CHUNK) {
@@ -160,8 +163,6 @@ export function ErroresTab() {
       if (fileRef.current) fileRef.current.value = "";
     }
   };
-
-  const hasFilters = fMotivo || fControlador;
 
   const handleDeleteAll = async () => {
     if (!confirm("Eliminar TODOS los registros de errores?")) return;
@@ -210,8 +211,8 @@ export function ErroresTab() {
             <div className="flex items-center gap-2 text-muted-foreground mb-3">
               <Filter className="h-4 w-4" />
               <span className="text-xs font-medium">Filtros</span>
-              {hasFilters && (
-                <button onClick={() => { setFMotivo(""); setFControlador(""); setSearchCtrl(""); }}
+              {fMotivo && (
+                <button onClick={() => setFMotivo("")}
                   className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
                   <X className="h-3 w-3" /> Limpiar
                 </button>
@@ -223,33 +224,13 @@ export function ErroresTab() {
                 <option value="">Motivo...</option>
                 {motivos.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
-              <div className="relative">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-                <input value={searchCtrl} onChange={(e) => setSearchCtrl(e.target.value)} placeholder="Controlador..."
-                  className="text-xs border rounded pl-7 pr-2 py-1 bg-background w-[140px]" />
-                {searchCtrl && filteredCtrls.length > 0 && (
-                  <div className="absolute top-full left-0 z-50 mt-1 bg-card border rounded shadow-lg max-h-[160px] overflow-y-auto w-[220px]">
-                    {filteredCtrls.map((c: any) => (
-                      <button key={c.controlador} onClick={() => { setFControlador(c.controlador); setSearchCtrl(""); }}
-                        className="block w-full text-left text-xs px-3 py-1.5 hover:bg-muted truncate">
-                        {c.controlador} ({c.total})
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              {fControlador && (
-                <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded flex items-center gap-1">
-                  {fControlador} <X className="h-3 w-3 cursor-pointer" onClick={() => setFControlador("")} />
-                </span>
-              )}
             </div>
           </CardContent>
         </Card>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -265,27 +246,86 @@ export function ErroresTab() {
               <AlertTriangle className="h-4 w-4" />
               <span className="text-xs font-medium">Total errores</span>
             </div>
-            <p className="text-2xl font-bold">{totals.suma.toLocaleString("es-AR")}</p>
+            <p className="text-2xl font-bold text-red-500">{totals.suma.toLocaleString("es-AR")}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
               <AlertTriangle className="h-4 w-4" />
-              <span className="text-xs font-medium">Meses</span>
+              <span className="text-xs font-medium">Faltantes</span>
             </div>
-            <p className="text-2xl font-bold">{monthly.length}</p>
+            <p className="text-2xl font-bold text-orange-500">{totals.fal.toLocaleString("es-AR")}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <AlertTriangle className="h-4 w-4" />
+              <span className="text-xs font-medium">Sobrantes</span>
+            </div>
+            <p className="text-2xl font-bold text-blue-500">{totals.sob.toLocaleString("es-AR")}</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Monthly trend */}
+      {/* Daily chart */}
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between space-y-0">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <BarChart3 className="h-4 w-4" />
+              Errores por Dia
+            </CardTitle>
+            <CardDescription>Comparativo diario de errores registrados</CardDescription>
+          </div>
+          <div className="flex items-center gap-1">
+            <ExcelButton
+              rows={daily.map((r: any) => ({
+                Fecha: formatDate(r.date),
+                Dia: formatWeekday(r.date),
+                Registros: r.total,
+                Errores: r.suma,
+              }))}
+              filename="errores-diario"
+              sheetName="Errores Diario"
+              colWidths={[12, 8, 10, 10]}
+            />
+            <PrintButton title="Errores por Dia" />
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-end gap-[2px] h-[200px] w-full overflow-x-auto pb-1">
+            {daily.map((d: any) => {
+              const h = Math.max(2, (d.suma / maxDaily) * 180);
+              return (
+                <div key={d.date} className="flex flex-col items-center shrink-0 group" style={{ minWidth: "6px" }}>
+                  <div
+                    className="w-[4px] rounded-t bg-red-400 hover:bg-red-600 transition-colors cursor-pointer"
+                    style={{ height: h + "px" }}
+                    title={formatDate(d.date) + ": " + d.suma + " errores"}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          {daily.length > 0 && (
+            <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+              <span>{formatDate(daily[0].date)}</span>
+              <span>{daily.length} dias</span>
+              <span>{formatDate(daily[daily.length - 1].date)}</span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* FAL/SOB by Month */}
       <Card>
         <CardHeader className="flex flex-row items-start justify-between space-y-0">
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <AlertTriangle className="h-4 w-4" />
-              Errores por Mes
+              Faltantes y Sobrantes por Mes
             </CardTitle>
           </div>
           <div className="flex items-center gap-1">
@@ -293,26 +333,28 @@ export function ErroresTab() {
               rows={monthly.map((r: any) => ({
                 Mes: r.label,
                 Registros: r.total,
-                Controladores: r.controladores,
                 Dias: r.dias,
-                "Suma errores": r.sumaErrores,
+                "Total errores": r.sumaErrores,
+                Faltantes: r.fal,
+                Sobrantes: r.sob,
               }))}
-              filename="errores-mensual"
-              sheetName="Errores Mensual"
-              colWidths={[14, 12, 14, 8, 14]}
+              filename="errores-fal-sob-mensual"
+              sheetName="FAL/SOB Mensual"
+              colWidths={[14, 10, 8, 14, 12, 12]}
             />
-            <PrintButton title="Errores Mensual" />
+            <PrintButton title="FAL/SOB por Mes" />
           </div>
         </CardHeader>
         <CardContent className="p-0 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b">
-                <th className="text-xs font-semibold text-left p-2 sticky left-0 bg-card">Mes</th>
+                <th className="text-xs font-semibold text-left p-2 sticky left-0 bg-card min-w-[120px]">Mes</th>
                 <th className="text-xs font-semibold text-center p-2">Registros</th>
-                <th className="text-xs font-semibold text-center p-2">Controladores</th>
                 <th className="text-xs font-semibold text-center p-2">Dias</th>
-                <th className="text-xs font-semibold text-center p-2">Suma errores</th>
+                <th className="text-xs font-semibold text-center p-2 text-red-500">Total errores</th>
+                <th className="text-xs font-semibold text-center p-2 text-orange-500">Faltantes</th>
+                <th className="text-xs font-semibold text-center p-2 text-blue-500">Sobrantes</th>
               </tr>
             </thead>
             <tbody>
@@ -320,9 +362,67 @@ export function ErroresTab() {
                 <tr key={row.month} className="border-b hover:bg-muted/50">
                   <td className="text-xs font-medium p-2 sticky left-0 bg-card">{row.label}</td>
                   <td className="text-xs text-center p-2">{row.total.toLocaleString("es-AR")}</td>
-                  <td className="text-xs text-center p-2">{row.controladores}</td>
                   <td className="text-xs text-center p-2">{row.dias}</td>
                   <td className="text-xs text-center p-2 font-medium text-red-500">{row.sumaErrores.toLocaleString("es-AR")}</td>
+                  <td className="text-xs text-center p-2 font-medium text-orange-500">{row.fal.toLocaleString("es-AR")}</td>
+                  <td className="text-xs text-center p-2 font-medium text-blue-500">{row.sob.toLocaleString("es-AR")}</td>
+                </tr>
+              ))}
+              <tr className="border-t-2 font-bold bg-muted/30">
+                <td className="text-xs font-bold p-2 sticky left-0 bg-muted/30">TOTAL</td>
+                <td className="text-xs text-center font-bold p-2 bg-muted/30">{totals.total.toLocaleString("es-AR")}</td>
+                <td className="text-xs text-center font-bold p-2 bg-muted/30">—</td>
+                <td className="text-xs text-center font-bold p-2 text-red-500 bg-muted/30">{totals.suma.toLocaleString("es-AR")}</td>
+                <td className="text-xs text-center font-bold p-2 text-orange-500 bg-muted/30">{totals.fal.toLocaleString("es-AR")}</td>
+                <td className="text-xs text-center font-bold p-2 text-blue-500 bg-muted/30">{totals.sob.toLocaleString("es-AR")}</td>
+              </tr>
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+
+      {/* Ranking Personal */}
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between space-y-0">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Trophy className="h-4 w-4" />
+              Ranking de Personal con Mayor Cantidad de Errores
+            </CardTitle>
+            <CardDescription>Top 30 por suma de errores</CardDescription>
+          </div>
+          <div className="flex items-center gap-1">
+            <ExcelButton
+              rows={ranking.map((r: any, i: number) => ({
+                "#": i + 1,
+                Personal: r.nombre,
+                Registros: r.total,
+                "Suma errores": r.suma,
+              }))}
+              filename="errores-ranking-personal"
+              sheetName="Ranking"
+              colWidths={[6, 30, 12, 14]}
+            />
+            <PrintButton title="Ranking Personal" />
+          </div>
+        </CardHeader>
+        <CardContent className="p-0 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="text-xs font-semibold text-center p-2 w-[40px]">#</th>
+                <th className="text-xs font-semibold text-left p-2 sticky left-0 bg-card min-w-[200px]">Personal</th>
+                <th className="text-xs font-semibold text-center p-2">Registros</th>
+                <th className="text-xs font-semibold text-center p-2 text-red-500">Suma errores</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ranking.map((row: any, idx: number) => (
+                <tr key={row.nombre} className="border-b hover:bg-muted/50">
+                  <td className="text-xs text-center p-2 text-muted-foreground">{idx + 1}</td>
+                  <td className="text-xs font-medium p-2 sticky left-0 bg-card">{row.nombre}</td>
+                  <td className="text-xs text-center p-2">{row.total.toLocaleString("es-AR")}</td>
+                  <td className="text-xs text-center p-2 font-medium text-red-500">{row.suma.toLocaleString("es-AR")}</td>
                 </tr>
               ))}
             </tbody>
@@ -355,75 +455,6 @@ export function ErroresTab() {
                   <td className="text-xs text-center p-2 font-medium text-red-500">{row.suma.toLocaleString("es-AR")}</td>
                 </tr>
               ))}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
-
-      {/* Detail table */}
-      <Card>
-        <CardHeader className="flex flex-row items-start justify-between space-y-0">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <AlertTriangle className="h-4 w-4" />
-              Detalle de Errores
-            </CardTitle>
-            <CardDescription>{records.length} registros</CardDescription>
-          </div>
-          <div className="flex items-center gap-1">
-            <ExcelButton
-              rows={records.slice(0, 5000).map((r: any) => ({
-                "Fecha Prep.": formatDate(r.fechaPrep),
-                "Fecha Ctrl.": formatDate(r.fechaCtrl),
-                "ID": r.idOperario,
-                "Tipo Control": r.tipoControl,
-                Controlador: r.controlador,
-                "Cod. Producto": r.codigoProducto,
-                Producto: r.producto,
-                Errores: r.errores,
-                Motivo: r.motivo,
-              }))}
-              filename="errores-detalle"
-              sheetName="Errores"
-              colWidths={[12, 12, 10, 14, 24, 16, 30, 8, 8]}
-            />
-            <PrintButton title="Errores Detalle" />
-          </div>
-        </CardHeader>
-        <CardContent className="p-0 overflow-x-auto max-h-[500px] overflow-y-auto">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10">
-              <tr className="border-b bg-card">
-                <th className="text-xs font-semibold text-left p-2 sticky left-0 bg-card min-w-[90px]">Fecha Prep.</th>
-                <th className="text-xs font-semibold text-left p-2 min-w-[90px]">Fecha Ctrl.</th>
-                <th className="text-xs font-semibold text-left p-2 min-w-[80px]">ID</th>
-                <th className="text-xs font-semibold text-left p-2 min-w-[80px]">Tipo</th>
-                <th className="text-xs font-semibold text-left p-2 min-w-[140px]">Controlador</th>
-                <th className="text-xs font-semibold text-left p-2 min-w-[120px]">Cod. Producto</th>
-                <th className="text-xs font-semibold text-left p-2 min-w-[160px]">Producto</th>
-                <th className="text-xs font-semibold text-center p-2 min-w-[50px] text-red-500">Err.</th>
-                <th className="text-xs font-semibold text-center p-2 min-w-[50px]">Motivo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {records.slice(0, 2000).map((row: any, idx: number) => (
-                <tr key={idx} className="border-b hover:bg-muted/50">
-                  <td className="text-xs p-2 sticky left-0 bg-card">{formatDate(row.fechaPrep)}</td>
-                  <td className="text-xs p-2">{formatDate(row.fechaCtrl)}</td>
-                  <td className="text-xs p-2">{row.idOperario}</td>
-                  <td className="text-xs p-2">{row.tipoControl}</td>
-                  <td className="text-xs p-2">{row.controlador}</td>
-                  <td className="text-xs p-2">{row.codigoProducto}</td>
-                  <td className="text-xs p-2">{row.producto}</td>
-                  <td className="text-xs text-center p-2 font-medium text-red-500">{row.errores}</td>
-                  <td className="text-xs text-center p-2">{row.motivo}</td>
-                </tr>
-              ))}
-              {records.length > 2000 && (
-                <tr><td colSpan={9} className="text-xs text-center p-3 text-muted-foreground">
-                  Mostrando 2000 de {records.length.toLocaleString("es-AR")} registros. Exporta a Excel para ver todos.
-                </td></tr>
-              )}
             </tbody>
           </table>
         </CardContent>

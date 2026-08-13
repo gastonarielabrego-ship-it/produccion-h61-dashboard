@@ -17,8 +17,8 @@ async function ensureTable() {
       motivo TEXT NOT NULL DEFAULT ''
     )` },
     { sql: `CREATE INDEX IF NOT EXISTS idx_errores_fecha ON errores_records (fecha_prep)` },
-    { sql: `CREATE INDEX IF NOT EXISTS idx_errores_controlador ON errores_records (controlador)` },
     { sql: `CREATE INDEX IF NOT EXISTS idx_errores_motivo ON errores_records (motivo)` },
+    { sql: `CREATE INDEX IF NOT EXISTS idx_errores_tipo_ctrl ON errores_records (tipo_control)` },
   ]);
 }
 
@@ -31,7 +31,6 @@ export async function GET(request: Request) {
     const dateFrom = url.searchParams.get("dateFrom");
     const dateTo = url.searchParams.get("dateTo");
     const motivo = url.searchParams.get("motivo");
-    const controlador = url.searchParams.get("controlador");
 
     const conditions: string[] = [];
     const params: Record<string, string | number> = {};
@@ -39,25 +38,31 @@ export async function GET(request: Request) {
     if (dateFrom) { conditions.push("fecha_prep >= $df"); params.df = Number(dateFrom); }
     if (dateTo) { conditions.push("fecha_prep <= $dt"); params.dt = Number(dateTo); }
     if (motivo) { conditions.push("motivo = $motivo"); params.motivo = motivo; }
-    if (controlador) { conditions.push("controlador = $ctrl"); params.ctrl = controlador; }
 
     const where = conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
 
-    const result = await client.execute({
-      sql: `SELECT * FROM errores_records ${where} ORDER BY fecha_prep DESC, controlador, producto`,
-      args: params,
-    });
-
-    // Monthly summary
+    // Monthly summary (without controladores)
     const monthlyResult = await client.execute({
       sql: `SELECT
         fecha_prep / 100 as month_key,
         COUNT(*) as total_errores,
-        COUNT(DISTINCT controlador) as controladores,
         COUNT(DISTINCT fecha_prep) as dias,
         SUM(errores) as suma_errores
       FROM errores_records ${where}
       GROUP BY month_key
+      ORDER BY month_key`,
+      args: params,
+    });
+
+    // FAL/SOB breakdown by month
+    const falSobResult = await client.execute({
+      sql: `SELECT
+        fecha_prep / 100 as month_key,
+        motivo,
+        COUNT(*) as total,
+        SUM(errores) as suma
+      FROM errores_records ${where}
+      GROUP BY month_key, motivo
       ORDER BY month_key`,
       args: params,
     });
@@ -68,59 +73,104 @@ export async function GET(request: Request) {
       args: params,
     });
 
-    // By controlador summary (top 20)
-    const ctrlResult = await client.execute({
-      sql: `SELECT controlador, COUNT(*) as total, SUM(errores) as suma FROM errores_records ${where} GROUP BY controlador ORDER BY total DESC LIMIT 50`,
+    // Ranking by personal (tipo_control has person names in data)
+    const rankingResult = await client.execute({
+      sql: `SELECT tipo_control, COUNT(*) as total, SUM(errores) as suma FROM errores_records ${where} GROUP BY tipo_control ORDER BY suma DESC LIMIT 30`,
       args: params,
     });
 
-    const records = result.rows.map(function(row) {
-      return {
-        fechaPrep: Number(row.fecha_prep),
-        fechaCtrl: Number(row.fecha_ctrl),
-        idOperario: String(row.id_operario || ""),
-        tipoControl: String(row.tipo_control || ""),
-        controlador: String(row.controlador || ""),
-        codigoProducto: String(row.codigo_producto || ""),
-        producto: String(row.producto || ""),
-        errores: Number(row.errores || 1),
-        motivo: String(row.motivo || ""),
-      };
+    // Daily data for chart
+    const dailyResult = await client.execute({
+      sql: `SELECT
+        fecha_prep as date,
+        COUNT(*) as total,
+        SUM(errores) as suma
+      FROM errores_records ${where}
+      GROUP BY fecha_prep
+      ORDER BY fecha_prep`,
+      args: params,
+    });
+
+    // By motivo per month (FAL/SOB by month)
+    const motivoMonthResult = await client.execute({
+      sql: `SELECT
+        fecha_prep / 100 as month_key,
+        motivo,
+        COUNT(*) as total,
+        SUM(errores) as suma
+      FROM errores_records ${where}
+      GROUP BY month_key, motivo
+      ORDER BY month_key, motivo`,
+      args: params,
     });
 
     const MONTH_NAMES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
-    const monthly = monthlyResult.rows.map(function(row) {
+    const monthly: { month: number; label: string; total: number; dias: number; sumaErrores: number; fal: number; sob: number }[] = [];
+    for (let i = 0; i < monthlyResult.rows.length; i++) {
+      const row = monthlyResult.rows[i];
       const mk = Number(row.month_key);
       const monthNum = mk % 100;
       const year = Math.floor(mk / 100);
-      return {
+      monthly.push({
         month: mk,
         label: (MONTH_NAMES[monthNum] || "") + " " + year,
         total: Number(row.total_errores),
-        controladores: Number(row.controladores),
         dias: Number(row.dias),
         sumaErrores: Number(row.suma_errores),
-      };
-    });
+        fal: 0,
+        sob: 0,
+      });
+    }
 
-    const byMotivo = motivoResult.rows.map(function(row) {
-      return {
+    // Fill FAL/SOB per month from motivoMonthResult
+    for (let i = 0; i < motivoMonthResult.rows.length; i++) {
+      const row = motivoMonthResult.rows[i];
+      const mk = Number(row.month_key);
+      const mot = String(row.motivo || "").toUpperCase().trim();
+      const suma = Number(row.suma) || 0;
+      for (let j = 0; j < monthly.length; j++) {
+        if (monthly[j].month === mk) {
+          if (mot.indexOf("FAL") >= 0) monthly[j].fal = suma;
+          else if (mot.indexOf("SOB") >= 0) monthly[j].sob = suma;
+          break;
+        }
+      }
+    }
+
+    const byMotivo: { motivo: string; total: number; suma: number }[] = [];
+    for (let i = 0; i < motivoResult.rows.length; i++) {
+      const row = motivoResult.rows[i];
+      byMotivo.push({
         motivo: String(row.motivo || ""),
         total: Number(row.total),
         suma: Number(row.suma),
-      };
-    });
+      });
+    }
 
-    const byControlador = ctrlResult.rows.map(function(row) {
-      return {
-        controlador: String(row.controlador || ""),
+    const ranking: { nombre: string; total: number; suma: number }[] = [];
+    for (let i = 0; i < rankingResult.rows.length; i++) {
+      const row = rankingResult.rows[i];
+      const nombre = String(row.tipo_control || "").trim();
+      if (!nombre) continue;
+      ranking.push({
+        nombre: nombre,
         total: Number(row.total),
         suma: Number(row.suma),
-      };
-    });
+      });
+    }
 
-    return NextResponse.json({ records, monthly, byMotivo, byControlador });
+    const daily: { date: number; total: number; suma: number }[] = [];
+    for (let i = 0; i < dailyResult.rows.length; i++) {
+      const row = dailyResult.rows[i];
+      daily.push({
+        date: Number(row.date),
+        total: Number(row.total),
+        suma: Number(row.suma),
+      });
+    }
+
+    return NextResponse.json({ monthly, byMotivo, ranking, daily });
   } catch (error) {
     console.error("Errores API error:", error);
     const msg = error instanceof Error ? error.message : String(error);
