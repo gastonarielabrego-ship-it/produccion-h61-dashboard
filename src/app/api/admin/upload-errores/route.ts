@@ -142,8 +142,10 @@ export async function POST(request: Request) {
       if (cMotivo < 0 && header.length >= 11) cMotivo = 9;
 
       const allArgs: (string | number)[][] = [];
+      let debugFirstRow = "";
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
+        if (i === 1) debugFirstRow = "row[0] type=" + typeof row[cPrep] + " val=" + JSON.stringify(row[cPrep]) + " dateToInt=" + dateToInt(row[cPrep]);
         const fechaPrep = dateToInt(row[cPrep]);
         if (fechaPrep <= 0) continue;
 
@@ -160,7 +162,7 @@ export async function POST(request: Request) {
         ]);
       }
 
-      if (allArgs.length === 0) throw new Error("No hay filas validas. Headers detectados: [" + header.join(" | ") + "], cPrep=" + cPrep + ", total filas=" + (rows.length - 1));
+      if (allArgs.length === 0) throw new Error("No hay filas validas. Headers detectados: [" + header.join(" | ") + "], cPrep=" + cPrep + ", total filas=" + (rows.length - 1) + ", debug: " + debugFirstRow);
 
       const client = getClient();
       const CHUNK = 200;
