@@ -324,9 +324,7 @@ export function HorasExtrasTab() {
               <Trophy className="h-4 w-4" />
               Ranking de Personal con Mayor Cantidad de Horas Extras
             </CardTitle>
-            <CardDescription>
-              Redondeo: si los minutos son &ge;45 se cuenta como 1 hora completa, si son &lt;45 no se cuentan.
-            </CardDescription>
+
           </div>
           <div className="flex items-center gap-1">
             <ExcelButton
