@@ -22,6 +22,14 @@ function formatWeekday(dateNum: number): string {
   return days[d.getDay()];
 }
 
+const MONTH_NAMES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+
+function formatMonthLabel(monthKey: number): string {
+  const m = monthKey % 100;
+  const y = Math.floor(monthKey / 100);
+  return (MONTH_NAMES[m] || "") + " " + y;
+}
+
 export function ErroresTab() {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState(false);
@@ -31,16 +39,43 @@ export function ErroresTab() {
 
   // Filters
   const [fMotivo, setFMotivo] = useState("");
+  const [fMes, setFMes] = useState("");
+  const [fDia, setFDia] = useState("");
+  const [availDates, setAvailDates] = useState<number[]>([]);
+  const [availMonths, setAvailMonths] = useState<number[]>([]);
+
+  // Load available dates/months
+  useEffect(() => {
+    fetch("/api/errores/dates", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.dates) setAvailDates(d.dates);
+        if (d.months) setAvailMonths(d.months);
+      })
+      .catch(() => {});
+  }, [data]);
 
   const fetchData = useCallback(() => {
     setError(false);
     const params = new URLSearchParams();
     if (fMotivo) params.set("motivo", fMotivo);
+    if (fMes) {
+      const mesNum = Number(fMes);
+      const year = Math.floor(mesNum / 100);
+      const month = mesNum % 100;
+      const lastDay = new Date(year, month, 0).getDate();
+      params.set("dateFrom", `${mesNum}01`);
+      params.set("dateTo", `${mesNum}${String(lastDay).padStart(2, "0")}`);
+    }
+    if (fDia) {
+      params.set("dateFrom", fDia);
+      params.set("dateTo", fDia);
+    }
     fetch("/api/errores?" + params.toString(), { cache: "no-store" })
       .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
       .then(setData)
       .catch(() => setError(true));
-  }, [fMotivo]);
+  }, [fMotivo, fMes, fDia]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -49,6 +84,26 @@ export function ErroresTab() {
   const byMotivo = data ? (data.byMotivo || []) : [];
   const ranking = data ? (data.ranking || []) : [];
   const daily = data ? (data.daily || []) : [];
+
+  // When month changes, clear day filter
+  const handleMesChange = useCallback((val: string) => {
+    setFMes(val);
+    setFDia("");
+  }, []);
+
+  // When day changes, clear month filter
+  const handleDiaChange = useCallback((val: string) => {
+    setFDia(val);
+    setFMes("");
+  }, []);
+
+  // Filtered dates based on selected month
+  const filteredDates = useMemo(() => {
+    if (fMes) {
+      return availDates.filter((d) => Math.floor(d / 100) === Number(fMes));
+    }
+    return availDates;
+  }, [availDates, fMes]);
 
   const motivos = useMemo(() => {
     const s: Record<string, boolean> = {};
@@ -211,14 +266,26 @@ export function ErroresTab() {
             <div className="flex items-center gap-2 text-muted-foreground mb-3">
               <Filter className="h-4 w-4" />
               <span className="text-xs font-medium">Filtros</span>
-              {fMotivo && (
-                <button onClick={() => setFMotivo("")}
+              {(fMotivo || fMes || fDia) && (
+                <button onClick={() => { setFMotivo(""); setFMes(""); setFDia(""); }}
                   className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
                   <X className="h-3 w-3" /> Limpiar
                 </button>
               )}
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <select value={fMes} onChange={(e) => handleMesChange(e.target.value)}
+                className="text-xs border rounded px-2 py-1 bg-background max-w-[130px]">
+                <option value="">Mes...</option>
+                {availMonths.map((m) => <option key={m} value={m}>{formatMonthLabel(m)}</option>)}
+              </select>
+              <select value={fDia} onChange={(e) => handleDiaChange(e.target.value)}
+                className="text-xs border rounded px-2 py-1 bg-background max-w-[130px]">
+                <option value="">Dia...</option>
+                {filteredDates.slice(0, 60).map((d) => (
+                  <option key={d} value={d}>{formatDate(d)}</option>
+                ))}
+              </select>
               <select value={fMotivo} onChange={(e) => setFMotivo(e.target.value)}
                 className="text-xs border rounded px-2 py-1 bg-background max-w-[120px]">
                 <option value="">Motivo...</option>
