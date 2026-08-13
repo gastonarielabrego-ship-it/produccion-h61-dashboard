@@ -116,7 +116,7 @@ export default function Home() {
             <CitacionTab key={`cit-${refreshKey}`} baseQuery={baseQuery} showTipoFilter />
           </TabsContent>
           <TabsContent value="horas-extras" className="mt-6">
-            <HorasExtrasTab key={`he-${refreshKey}`} baseQuery={baseQuery} />
+            <HorasExtrasTab key={`he-${refreshKey}`} />
           </TabsContent>
 
           {/* Clarkistas full section */}
