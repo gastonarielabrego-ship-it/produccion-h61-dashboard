@@ -38,34 +38,29 @@ export function ErroresTab() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Filters
-  const [fMotivo, setFMotivo] = useState("");
   const [fDesde, setFDesde] = useState("");
   const [fHasta, setFHasta] = useState("");
-  const [availDates, setAvailDates] = useState<number[]>([]);
-  const [availMonths, setAvailMonths] = useState<number[]>([]);
 
-  // Load available dates/months
-  useEffect(() => {
-    fetch("/api/errores/dates", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.dates) setAvailDates(d.dates);
-        if (d.months) setAvailMonths(d.months);
-      })
-      .catch(() => {});
-  }, [data]);
+  // Convert date input (YYYY-MM-DD) to YYYYMMDD number for API
+  const dateToInt = useCallback(function(dateStr: string): string {
+    if (!dateStr) return "";
+    const parts = dateStr.split("-");
+    if (parts.length !== 3) return "";
+    return String(Number(parts[0]) * 10000 + Number(parts[1]) * 100 + Number(parts[2]));
+  }, []);
 
   const fetchData = useCallback(() => {
     setError(false);
     const params = new URLSearchParams();
-    if (fMotivo) params.set("motivo", fMotivo);
-    if (fDesde) params.set("dateFrom", fDesde);
-    if (fHasta) params.set("dateTo", fHasta);
+    const fromNum = dateToInt(fDesde);
+    if (fromNum) params.set("dateFrom", fromNum);
+    const toNum = dateToInt(fHasta);
+    if (toNum) params.set("dateTo", toNum);
     fetch("/api/errores?" + params.toString(), { cache: "no-store" })
       .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
       .then(setData)
       .catch(() => setError(true));
-  }, [fMotivo, fDesde, fHasta]);
+  }, [fDesde, fHasta, dateToInt]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -74,16 +69,6 @@ export function ErroresTab() {
   const byMotivo = data ? (data.byMotivo || []) : [];
   const ranking = data ? (data.ranking || []) : [];
   const daily = data ? (data.daily || []) : [];
-
-  const filteredDates = useMemo(() => {
-    return availDates;
-  }, [availDates]);
-
-  const motivos = useMemo(() => {
-    const s: Record<string, boolean> = {};
-    for (let i = 0; i < byMotivo.length; i++) s[byMotivo[i].motivo] = true;
-    return Object.keys(s);
-  }, [byMotivo]);
 
   const totals = useMemo(() => {
     let t = 0, s = 0, fal = 0, sob = 0;
@@ -240,33 +225,18 @@ export function ErroresTab() {
             <div className="flex items-center gap-2 text-muted-foreground mb-3">
               <Filter className="h-4 w-4" />
               <span className="text-xs font-medium">Filtros</span>
-              {(fMotivo || fDesde || fHasta) && (
-                <button onClick={() => { setFMotivo(""); setFDesde(""); setFHasta(""); }}
+              {(fDesde || fHasta) && (
+                <button onClick={() => { setFDesde(""); setFHasta(""); }}
                   className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
                   <X className="h-3 w-3" /> Limpiar
                 </button>
               )}
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <select value={fDesde} onChange={(e) => setFDesde(e.target.value)}
-                className="text-xs border rounded px-2 py-1 bg-background max-w-[130px]">
-                <option value="">Desde...</option>
-                {availDates.map((d) => (
-                  <option key={d} value={String(d)}>{formatDate(d)}</option>
-                ))}
-              </select>
-              <select value={fHasta} onChange={(e) => setFHasta(e.target.value)}
-                className="text-xs border rounded px-2 py-1 bg-background max-w-[130px]">
-                <option value="">Hasta...</option>
-                {availDates.map((d) => (
-                  <option key={d} value={String(d)}>{formatDate(d)}</option>
-                ))}
-              </select>
-              <select value={fMotivo} onChange={(e) => setFMotivo(e.target.value)}
-                className="text-xs border rounded px-2 py-1 bg-background max-w-[120px]">
-                <option value="">Motivo...</option>
-                {motivos.map((m) => <option key={m} value={m}>{m}</option>)}
-              </select>
+              <input type="date" value={fDesde} onChange={(e) => setFDesde(e.target.value)}
+                className="text-xs border rounded px-2 py-1 bg-background" placeholder="Desde" />
+              <input type="date" value={fHasta} onChange={(e) => setFHasta(e.target.value)}
+                className="text-xs border rounded px-2 py-1 bg-background" placeholder="Hasta" />
             </div>
           </CardContent>
         </Card>

@@ -23,15 +23,13 @@ function ensureTable() {
 }
 
 /**
- * Rounding rule:
- * If minutes >= 45, round UP to next hour (count as 1 extra hour)
- * If minutes < 45, round DOWN (don't count those minutes)
+ * Rounding rule (matches Excel ENTERO formula):
+ * ENTERO(Valor(Hora) + Minuto/60) = Math.floor(decimal hours)
+ * Simply truncates the decimal part, discarding fractional minutes.
  */
 function roundMinutesToHours(minutes: number): number {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (m >= 45) return h + 1;
-  return h;
+  if (minutes <= 0) return 0;
+  return Math.floor(minutes / 60);
 }
 
 export async function GET(request: Request) {

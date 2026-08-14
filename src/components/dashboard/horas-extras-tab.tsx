@@ -41,16 +41,26 @@ export function HorasExtrasTab() {
   const [fDesde, setFDesde] = useState("");
   const [fHasta, setFHasta] = useState("");
 
+  // Convert date input (YYYY-MM-DD) to YYYYMMDD number for API
+  const dateToInt = useCallback(function(dateStr: string): string {
+    if (!dateStr) return "";
+    const parts = dateStr.split("-");
+    if (parts.length !== 3) return "";
+    return String(Number(parts[0]) * 10000 + Number(parts[1]) * 100 + Number(parts[2]));
+  }, []);
+
   const fetchData = useCallback(() => {
     setError(false);
     const params = new URLSearchParams();
-    if (fDesde) params.set("dateFrom", fDesde);
-    if (fHasta) params.set("dateTo", fHasta);
+    const fromNum = dateToInt(fDesde);
+    if (fromNum) params.set("dateFrom", fromNum);
+    const toNum = dateToInt(fHasta);
+    if (toNum) params.set("dateTo", toNum);
     fetch("/api/horas-extras?" + params.toString(), { cache: "no-store" })
       .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
       .then(setData)
       .catch(() => setError(true));
-  }, [fDesde, fHasta]);
+  }, [fDesde, fHasta, dateToInt]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -61,20 +71,8 @@ export function HorasExtrasTab() {
   const daily = data ? (data.daily || []) : [];
   const monthly = data ? (data.monthly || []) : [];
   const totals = data ? (data.totals || { totalHE: 0, he50: 0, he100: 0, noct100: 0, totalMins: 0 }) : { totalHE: 0, he50: 0, he100: 0, noct100: 0, totalMins: 0 };
-  const availDates = data ? (data.dates || []) : [];
-  const availMonths = data ? (data.months || []) : [];
 
-  const filteredDates = useMemo(() => {
-    return availDates;
-  }, [availDates]);
 
-    const handleDesdeChange = useCallback(function(val: string) {
-      setFDesde(val);
-    }, []);
-
-    const handleHastaChange = useCallback(function(val: string) {
-      setFHasta(val);
-    }, []);
 
   const dailyTotals = useMemo(function() {
     let tHE = 0, tRegs = 0;
@@ -241,20 +239,10 @@ export function HorasExtrasTab() {
               )}
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <select value={fDesde} onChange={(e) => handleDesdeChange(e.target.value)}
-                className="text-xs border rounded px-2 py-1 bg-background max-w-[140px]">
-                <option value="">Desde...</option>
-                {availDates.map(function(d) {
-                  return <option key={d} value={String(d)}>{formatDate(d)} ({formatWeekday(d)})</option>;
-                })}
-              </select>
-              <select value={fHasta} onChange={(e) => handleHastaChange(e.target.value)}
-                className="text-xs border rounded px-2 py-1 bg-background max-w-[140px]">
-                <option value="">Hasta...</option>
-                {availDates.map(function(d) {
-                  return <option key={d} value={String(d)}>{formatDate(d)} ({formatWeekday(d)})</option>;
-                })}
-              </select>
+              <input type="date" value={fDesde} onChange={(e) => setFDesde(e.target.value)}
+                className="text-xs border rounded px-2 py-1 bg-background" />
+              <input type="date" value={fHasta} onChange={(e) => setFHasta(e.target.value)}
+                className="text-xs border rounded px-2 py-1 bg-background" />
             </div>
           </CardContent>
         </Card>
