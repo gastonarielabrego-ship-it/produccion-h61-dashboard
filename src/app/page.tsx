@@ -94,8 +94,8 @@ export default function Home() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Preparación filter bar */}
-          {!isClarkistas && (
+          {/* Preparación filter bar — hidden for Errores and Hs. Extras (they have their own filters) */}
+          {!isClarkistas && activeTab !== "errores" && activeTab !== "horas-extras" && (
             <FilterBar filters={filters} filterState={filterState} setFilterState={setFilterState} title="Preparación" showTipo />
           )}
 

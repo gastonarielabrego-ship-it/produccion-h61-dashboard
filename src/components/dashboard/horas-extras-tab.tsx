@@ -38,29 +38,19 @@ export function HorasExtrasTab() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Filters
-  const [fMes, setFMes] = useState("");
-  const [fDia, setFDia] = useState("");
+  const [fDesde, setFDesde] = useState("");
+  const [fHasta, setFHasta] = useState("");
 
   const fetchData = useCallback(() => {
     setError(false);
     const params = new URLSearchParams();
-    if (fMes) {
-      const mesNum = Number(fMes);
-      const year = Math.floor(mesNum / 100);
-      const month = mesNum % 100;
-      const lastDay = new Date(year, month, 0).getDate();
-      params.set("dateFrom", String(mesNum) + "01");
-      params.set("dateTo", String(mesNum) + String(lastDay).padStart(2, "0"));
-    }
-    if (fDia) {
-      params.set("dateFrom", fDia);
-      params.set("dateTo", fDia);
-    }
+    if (fDesde) params.set("dateFrom", fDesde);
+    if (fHasta) params.set("dateTo", fHasta);
     fetch("/api/horas-extras?" + params.toString(), { cache: "no-store" })
       .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
       .then(setData)
       .catch(() => setError(true));
-  }, [fMes, fDia]);
+  }, [fDesde, fHasta]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -75,21 +65,16 @@ export function HorasExtrasTab() {
   const availMonths = data ? (data.months || []) : [];
 
   const filteredDates = useMemo(() => {
-    if (fMes) {
-      return availDates.filter(function(d) { return Math.floor(d / 100) === Number(fMes); });
-    }
     return availDates;
-  }, [availDates, fMes]);
+  }, [availDates]);
 
-  const handleMesChange = useCallback(function(val: string) {
-    setFMes(val);
-    setFDia("");
-  }, []);
+    const handleDesdeChange = useCallback(function(val: string) {
+      setFDesde(val);
+    }, []);
 
-  const handleDiaChange = useCallback(function(val: string) {
-    setFDia(val);
-    setFMes("");
-  }, []);
+    const handleHastaChange = useCallback(function(val: string) {
+      setFHasta(val);
+    }, []);
 
   const dailyTotals = useMemo(function() {
     let tHE = 0, tRegs = 0;
@@ -248,23 +233,25 @@ export function HorasExtrasTab() {
             <div className="flex items-center gap-2 text-muted-foreground mb-3">
               <Filter className="h-4 w-4" />
               <span className="text-xs font-medium">Filtros</span>
-              {(fMes || fDia) && (
-                <button onClick={() => { setFMes(""); setFDia(""); }}
+              {(fDesde || fHasta) && (
+                <button onClick={() => { setFDesde(""); setFHasta(""); }}
                   className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
                   <X className="h-3 w-3" /> Limpiar
                 </button>
               )}
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <select value={fMes} onChange={(e) => handleMesChange(e.target.value)}
+              <select value={fDesde} onChange={(e) => handleDesdeChange(e.target.value)}
                 className="text-xs border rounded px-2 py-1 bg-background max-w-[140px]">
-                <option value="">Mes...</option>
-                {availMonths.map(function(m) { return <option key={m} value={m}>{formatMonthLabel(m)}</option>; })}
+                <option value="">Desde...</option>
+                {availDates.map(function(d) {
+                  return <option key={d} value={String(d)}>{formatDate(d)} ({formatWeekday(d)})</option>;
+                })}
               </select>
-              <select value={fDia} onChange={(e) => handleDiaChange(e.target.value)}
+              <select value={fHasta} onChange={(e) => handleHastaChange(e.target.value)}
                 className="text-xs border rounded px-2 py-1 bg-background max-w-[140px]">
-                <option value="">Dia...</option>
-                {filteredDates.slice(0, 80).map(function(d) {
+                <option value="">Hasta...</option>
+                {availDates.map(function(d) {
                   return <option key={d} value={String(d)}>{formatDate(d)} ({formatWeekday(d)})</option>;
                 })}
               </select>
