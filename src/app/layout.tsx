@@ -19,7 +19,8 @@ export const metadata: Metadata = {
   keywords: ["producción", "H61", "dashboard", "manufactura", "industria", "Next.js", "Google Sheets"],
   authors: [{ name: "H61 Production Team" }],
   icons: {
-    icon: "/logo.svg",
+    icon: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
   },
   openGraph: {
     title: "Producción H61 — Dashboard",
