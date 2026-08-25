@@ -80,6 +80,24 @@ function rowToRecord(row: Record<string, unknown>): ProductionRecord {
   };
 }
 
+// ─── Nomina override (eventual→efectivo) ────────────────
+let _nominaTableEnsured = false;
+let _nominaEnsurePromise: Promise<void> | null = null;
+
+async function ensureNominaOverrideTable() {
+  if (_nominaTableEnsured) return;
+  if (_nominaEnsurePromise) return _nominaEnsurePromise;
+  _nominaEnsurePromise = (async () => {
+    const client = getClient();
+    await client.batch([
+      { sql: `CREATE TABLE IF NOT EXISTS nomina_override (operario TEXT PRIMARY KEY, nombre TEXT NOT NULL DEFAULT '', fecha_alta TEXT NOT NULL DEFAULT '')` },
+    ]);
+    _nominaTableEnsured = true;
+    _nominaEnsurePromise = null;
+  })();
+  return _nominaEnsurePromise;
+}
+
 // ─── Query builder with optional filters ────────────────
 function buildWhere(filters: FilterOptions): { sql: string; params: Record<string, string | number> } {
   const conditions: string[] = [];
@@ -121,9 +139,9 @@ function buildWhere(filters: FilterOptions): { sql: string; params: Record<strin
   }
   if (filters.tipo) {
     if (filters.tipo === "EFECTIVO") {
-      conditions.push("CAST(SUBSTR(operario, 2) AS INTEGER) < 10247");
+      conditions.push("(CAST(SUBSTR(operario, 2) AS INTEGER) < 10247 OR operario IN (SELECT operario FROM nomina_override))");
     } else if (filters.tipo === "EVENTUAL") {
-      conditions.push("CAST(SUBSTR(operario, 2) AS INTEGER) >= 10247");
+      conditions.push("(CAST(SUBSTR(operario, 2) AS INTEGER) >= 10247 AND operario NOT IN (SELECT operario FROM nomina_override))");
     }
   }
 
@@ -155,6 +173,7 @@ export async function getAllRecords(filters?: FilterOptions, tableName = "produc
   if (tableName === "clarkistas_records") {
     await ensureClarkTable();
   }
+  await ensureNominaOverrideTable();
   const client = getClient();
   const { sql, params } = buildWhere(filters ?? {});
 
