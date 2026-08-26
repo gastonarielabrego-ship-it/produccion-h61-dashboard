@@ -84,7 +84,7 @@ function rowToRecord(row: Record<string, unknown>): ProductionRecord {
 let _nominaTableEnsured = false;
 let _nominaEnsurePromise: Promise<void> | null = null;
 
-async function ensureNominaOverrideTable() {
+export async function ensureNominaOverrideTable() {
   if (_nominaTableEnsured) return;
   if (_nominaEnsurePromise) return _nominaEnsurePromise;
   _nominaEnsurePromise = (async () => {

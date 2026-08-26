@@ -1,23 +1,14 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload, Filter, X, Trash2, TrendingUp, Download } from "lucide-react";
+import { Filter, X, TrendingUp } from "lucide-react";
 import { ExcelButton } from "./excel-button";
 import { PrintButton } from "./print-button";
-
-function formatFecha(fecha: number): string {
-  const day = fecha % 100;
-  const month = Math.floor(fecha / 100) % 100;
-  return String(day).padStart(2, "0") + "/" + String(month).padStart(2, "0");
-}
 
 export function RendimientosTab() {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadMsg, setUploadMsg] = useState("");
-  const fileRef = useRef<HTMLInputElement>(null);
 
   // Filters
   const [fDesde, setFDesde] = useState("");
@@ -45,7 +36,6 @@ export function RendimientosTab() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // All hooks before returns
   const summary = data ? (data.summary || []) : [];
   const daily = data ? (data.daily || []) : [];
   const totals = data ? (data.totals || {}) : {};
@@ -61,9 +51,9 @@ export function RendimientosTab() {
         hsBrutas: hsBrutas,
         tmHs: Number(r.total_tm ?? 0),
         hsNetas: hsNetas,
-        produccion: hsNetas > 0 ? bultos / hsNetas : 0,
-        bhBruta: hsBrutas > 0 ? bultos / hsBrutas : 0,
-        bhNeta: hsNetas > 0 ? bultos / hsNetas : 0,
+        produccion: hsNetas > 0 ? Math.round((bultos / hsNetas) * 10) / 10 : 0,
+        bhBruta: hsBrutas > 0 ? Math.round((bultos / hsBrutas) * 10) / 10 : 0,
+        bhNeta: hsNetas > 0 ? Math.round((bultos / hsNetas) * 10) / 10 : 0,
         dias: Number(r.dias ?? 0),
       };
     });
@@ -109,9 +99,9 @@ export function RendimientosTab() {
           Personal: s.nombre,
           Bultos: Number(d.bultos ?? 0),
           "Hs. Brutas": Number(d.hs_brutas ?? 0),
-          "TM (hs)": Number(d.tm_hs ?? 0),
-          "Hs. Netas": Number(d.hs_netas ?? 0),
-          Produccion: Number(d.produccion ?? 0),
+          "TM (hs)": Math.round(Number(d.tm_hs ?? 0) * 100) / 100,
+          "Hs. Netas": Math.round(Number(d.hs_netas ?? 0) * 100) / 100,
+          Produccion: Math.round(Number(d.produccion ?? 0) * 10) / 10,
           "B/H Bruta": Math.round(Number(d.bh_bruta ?? 0) * 10) / 10,
           "B/H Neta": Math.round(Number(d.bh_neta ?? 0) * 10) / 10,
         });
@@ -122,9 +112,9 @@ export function RendimientosTab() {
         Dia: "TOTAL",
         Personal: s.nombre,
         Bultos: s.bultos,
-        "Hs. Brutas": s.hsBrutas,
+        "Hs. Brutas": Math.round(s.hsBrutas * 100) / 100,
         "TM (hs)": Math.round(s.tmHs * 100) / 100,
-        "Hs. Netas": s.hsNetas,
+        "Hs. Netas": Math.round(s.hsNetas * 100) / 100,
         Produccion: Math.round(s.produccion * 10) / 10,
         "B/H Bruta": Math.round(s.bhBruta * 10) / 10,
         "B/H Neta": Math.round(s.bhNeta * 10) / 10,
@@ -149,129 +139,29 @@ export function RendimientosTab() {
     })}</div>
   );
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    setUploadMsg("Procesando...");
-
-    try {
-      const XLSX = await import("xlsx");
-      const ab = await file.arrayBuffer();
-      const wb = XLSX.read(ab, { type: "array" });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows: (string | number | null | undefined)[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true });
-
-      if (rows.length < 2) { setUploadMsg("Error: archivo vacio"); setUploading(false); return; }
-
-      // Collect all dates to delete first
-      const dates: number[] = [];
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-        if (!row[0]) continue;
-        const v = String(row[0]).trim();
-        if (v.toLowerCase() === "dia" || v.toLowerCase() === "total") continue;
-        // Try parse DD/MM
-        const parts = v.split("/");
-        if (parts.length === 2) {
-          const day = Number(parts[0]);
-          const month = Number(parts[1]);
-          if (day > 0 && month > 0) {
-            const f = 20260000 + month * 100 + day;
-            if (dates.indexOf(f) === -1) dates.push(f);
-          }
-        }
-      }
-
-      if (dates.length > 0) {
-        await fetch("/api/admin/upload-rendimientos", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "delete", dates }),
-        });
-      }
-
-      // Insert all rows
-      const res = await fetch("/api/admin/upload-rendimientos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "insert", rows: rows }),
-      });
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
-      setUploadMsg("OK: " + (json.inserted || 0) + " registros cargados");
-      fetchData();
-    } catch (err: any) {
-      setUploadMsg("Error: " + (err.message || err));
-    } finally {
-      setUploading(false);
-      if (fileRef.current) fileRef.current.value = "";
-    }
-  };
-
-  const handleDeleteAll = async () => {
-    if (!confirm("Eliminar TODOS los registros de rendimientos?")) return;
-    try {
-      const res = await fetch("/api/admin/upload-rendimientos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "delete-all" }),
-      });
-      const json = await res.json();
-      setUploadMsg("OK: " + (json.message || "Eliminados"));
-      fetchData();
-    } catch (err: any) {
-      setUploadMsg("Error: " + (err.message || err));
-    }
-  };
-
   return (
     <div className="space-y-6">
-      {/* Upload + Filters */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-3">
-              <Upload className="h-4 w-4" />
-              <span className="text-xs font-medium">Cargar Rendimientos</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleUpload} className="hidden" />
-              <button onClick={() => fileRef.current?.click()} disabled={uploading}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50">
-                <Upload className="h-3.5 w-3.5" />
-                {uploading ? "Procesando..." : "Seleccionar archivo"}
+      {/* Filters */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 text-muted-foreground mb-3">
+            <Filter className="h-4 w-4" />
+            <span className="text-xs font-medium">Filtros</span>
+            {(fDesde || fHasta) && (
+              <button onClick={() => { setFDesde(""); setFHasta(""); }}
+                className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                <X className="h-3 w-3" /> Limpiar
               </button>
-              <button onClick={handleDeleteAll}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-red-600 text-white rounded-md hover:bg-red-700">
-                <Trash2 className="h-3.5 w-3.5" />
-                Vaciar todo
-              </button>
-              {uploadMsg && <span className={"text-xs " + (uploadMsg.startsWith("OK") ? "text-emerald-600" : "text-red-500")}>{uploadMsg}</span>}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-3">
-              <Filter className="h-4 w-4" />
-              <span className="text-xs font-medium">Filtros</span>
-              {(fDesde || fHasta) && (
-                <button onClick={() => { setFDesde(""); setFHasta(""); }}
-                  className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-                  <X className="h-3 w-3" /> Limpiar
-                </button>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <input type="date" value={fDesde} onChange={(e) => setFDesde(e.target.value)}
-                className="text-xs border rounded px-2 py-1 bg-background" />
-              <input type="date" value={fHasta} onChange={(e) => setFHasta(e.target.value)}
-                className="text-xs border rounded px-2 py-1 bg-background" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input type="date" value={fDesde} onChange={(e) => setFDesde(e.target.value)}
+              className="text-xs border rounded px-2 py-1 bg-background" />
+            <input type="date" value={fHasta} onChange={(e) => setFHasta(e.target.value)}
+              className="text-xs border rounded px-2 py-1 bg-background" />
+          </div>
+        </CardContent>
+      </Card>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -313,7 +203,7 @@ export function RendimientosTab() {
         </Card>
       </div>
 
-      {/* Summary Table — same structure as Excel */}
+      {/* Summary Table */}
       <Card>
         <CardHeader className="flex flex-row items-start justify-between space-y-0">
           <div>
@@ -327,7 +217,7 @@ export function RendimientosTab() {
               rows={excelRows}
               filename="Rendimientos"
               sheetName="Diarias"
-              colWidths={[8, 30, 10, 10, 8, 10, 12, 10, 10]}
+              colWidths={[22, 30, 10, 10, 8, 10, 12, 10, 10]}
             />
             <PrintButton title="Rendimientos" />
           </div>
@@ -353,9 +243,9 @@ export function RendimientosTab() {
                   <tr key={row.nombre} className="border-b hover:bg-muted/50">
                     <td className="text-xs font-medium p-2 sticky left-0 bg-card">{row.nombre}</td>
                     <td className="text-xs text-center p-2">{row.bultos.toLocaleString("es-AR")}</td>
-                    <td className="text-xs text-center p-2">{row.hsBrutas}</td>
+                    <td className="text-xs text-center p-2">{Math.round(row.hsBrutas * 100) / 100}</td>
                     <td className="text-xs text-center p-2">{Math.round(row.tmHs * 100) / 100}</td>
-                    <td className="text-xs text-center p-2">{row.hsNetas}</td>
+                    <td className="text-xs text-center p-2">{Math.round(row.hsNetas * 100) / 100}</td>
                     <td className="text-xs text-center p-2">{Math.round(row.produccion * 10) / 10}</td>
                     <td className="text-xs text-center p-2 font-medium text-blue-600">{Math.round(row.bhBruta * 10) / 10}</td>
                     <td className="text-xs text-center p-2 font-medium text-emerald-600">{Math.round(row.bhNeta * 10) / 10}</td>
@@ -366,10 +256,10 @@ export function RendimientosTab() {
               <tr className="border-t-2 font-bold bg-muted/30">
                 <td className="text-xs font-bold p-2 sticky left-0 bg-muted/30">TOTAL</td>
                 <td className="text-xs text-center font-bold p-2 bg-muted/30">{(totals.totalBultos ?? 0).toLocaleString("es-AR")}</td>
-                <td className="text-xs text-center font-bold p-2 bg-muted/30">{totals.totalHsBrutas ?? 0}</td>
+                <td className="text-xs text-center font-bold p-2 bg-muted/30">{Math.round((totals.totalHsBrutas ?? 0) * 100) / 100}</td>
                 <td className="text-xs text-center font-bold p-2 bg-muted/30">{Math.round((totals.totalTm ?? 0) * 100) / 100}</td>
-                <td className="text-xs text-center font-bold p-2 bg-muted/30">{totals.totalHsNetas ?? 0}</td>
-                <td className="text-xs text-center font-bold p-2 bg-muted/30">{totals.totalHsNetas > 0 ? Math.round((totals.totalBultos / totals.totalHsNetas) * 10) / 10 : 0}</td>
+                <td className="text-xs text-center font-bold p-2 bg-muted/30">{Math.round((totals.totalHsNetas ?? 0) * 100) / 100}</td>
+                <td className="text-xs text-center font-bold p-2 bg-muted/30">{totals.totalHsNetas > 0 ? Math.round(((totals.totalBultos ?? 0) / totals.totalHsNetas) * 10) / 10 : 0}</td>
                 <td className="text-xs text-center font-bold p-2 text-blue-600 bg-muted/30">{Math.round((totals.bhBruta ?? 0) * 10) / 10}</td>
                 <td className="text-xs text-center font-bold p-2 text-emerald-600 bg-muted/30">{Math.round((totals.bhNeta ?? 0) * 10) / 10}</td>
                 <td className="text-xs text-center font-bold p-2 bg-muted/30">{totals.dias ?? 0}</td>
@@ -408,8 +298,8 @@ export function RendimientosTab() {
                         <td className="text-xs text-center p-2">{String(r.dia ?? "")}</td>
                         <td className="text-xs text-center p-2">{Number(r.bultos ?? 0).toLocaleString("es-AR")}</td>
                         <td className="text-xs text-center p-2">{Number(r.hs_brutas ?? 0)}</td>
-                        <td className="text-xs text-center p-2">{Number(r.tm_hs ?? 0)}</td>
-                        <td className="text-xs text-center p-2">{Number(r.hs_netas ?? 0)}</td>
+                        <td className="text-xs text-center p-2">{Math.round(Number(r.tm_hs ?? 0) * 100) / 100}</td>
+                        <td className="text-xs text-center p-2">{Math.round(Number(r.hs_netas ?? 0) * 100) / 100}</td>
                         <td className="text-xs text-center p-2 text-blue-600">{Math.round(Number(r.bh_bruta ?? 0) * 10) / 10}</td>
                         <td className="text-xs text-center p-2 text-emerald-600">{Math.round(Number(r.bh_neta ?? 0) * 10) / 10}</td>
                       </tr>
@@ -419,9 +309,9 @@ export function RendimientosTab() {
                     <tr className="border-t-2 font-bold bg-muted/30">
                       <td className="text-xs text-center font-bold p-2 bg-muted/30">TOTAL</td>
                       <td className="text-xs text-center font-bold p-2 bg-muted/30">{sData.bultos.toLocaleString("es-AR")}</td>
-                      <td className="text-xs text-center font-bold p-2 bg-muted/30">{sData.hsBrutas}</td>
+                      <td className="text-xs text-center font-bold p-2 bg-muted/30">{Math.round(sData.hsBrutas * 100) / 100}</td>
                       <td className="text-xs text-center font-bold p-2 bg-muted/30">{Math.round(sData.tmHs * 100) / 100}</td>
-                      <td className="text-xs text-center font-bold p-2 bg-muted/30">{sData.hsNetas}</td>
+                      <td className="text-xs text-center font-bold p-2 bg-muted/30">{Math.round(sData.hsNetas * 100) / 100}</td>
                       <td className="text-xs text-center font-bold p-2 text-blue-600 bg-muted/30">{Math.round(sData.bhBruta * 10) / 10}</td>
                       <td className="text-xs text-center font-bold p-2 text-emerald-600 bg-muted/30">{Math.round(sData.bhNeta * 10) / 10}</td>
                     </tr>
