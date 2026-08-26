@@ -66,7 +66,7 @@ export function RendimientosTab() {
         hsBrutas: hsBrutas,
         tmHs: Number(r.total_tm ?? 0),
         hsNetas: hsNetas,
-        produccion: hsNetas > 0 ? Math.round((bultos / hsNetas) * 10) / 10 : 0,
+        produccion: row.dias > 0 ? Math.round((bultos / row.dias) * 10) / 10 : 0,
         bhBruta: hsBrutas > 0 ? Math.round((bultos / hsBrutas) * 10) / 10 : 0,
         bhNeta: hsNetas > 0 ? Math.round((bultos / hsNetas) * 10) / 10 : 0,
         dias: Number(r.dias ?? 0),
@@ -295,7 +295,7 @@ export function RendimientosTab() {
                 <td className="text-xs text-center font-bold p-2 bg-muted/30">{Math.round((totals.totalHsBrutas ?? 0) * 100) / 100}</td>
                 <td className="text-xs text-center font-bold p-2 bg-muted/30">{Math.round((totals.totalTm ?? 0) * 100) / 100}</td>
                 <td className="text-xs text-center font-bold p-2 bg-muted/30">{Math.round((totals.totalHsNetas ?? 0) * 100) / 100}</td>
-                <td className="text-xs text-center font-bold p-2 bg-muted/30">{totals.totalHsNetas > 0 ? Math.round(((totals.totalBultos ?? 0) / totals.totalHsNetas) * 10) / 10 : 0}</td>
+                <td className="text-xs text-center font-bold p-2 bg-muted/30">{Math.round((totals.produccion ?? 0) * 10) / 10}</td>
                 <td className="text-xs text-center font-bold p-2 text-blue-600 bg-muted/30">{Math.round((totals.bhBruta ?? 0) * 10) / 10}</td>
                 <td className="text-xs text-center font-bold p-2 text-emerald-600 bg-muted/30">{Math.round((totals.bhNeta ?? 0) * 10) / 10}</td>
                 <td className="text-xs text-center font-bold p-2 bg-muted/30">{totals.dias ?? 0}</td>

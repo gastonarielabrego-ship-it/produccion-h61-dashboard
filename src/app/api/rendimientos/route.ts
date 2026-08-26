@@ -147,7 +147,7 @@ export async function GET(request: Request) {
       const tmMin = tmMap[key] || 0;
       const tmHs = Math.round((tmMin / 60) * 100) / 100;
       const hsNetas = Math.round((hsBrutas - tmHs) * 100) / 100;
-      const produccion = hsNetas > 0 ? Math.round((bultos / hsNetas) * 10) / 10 : 0;
+      const produccion = bultos;
       const bhBruta = hsBrutas > 0 ? Math.round((bultos / hsBrutas) * 10) / 10 : 0;
       const bhNeta = hsNetas > 0 ? Math.round((bultos / hsNetas) * 10) / 10 : 0;
 
@@ -194,6 +194,7 @@ export async function GET(request: Request) {
       const s = summaryMap[sKeys[i]];
       const avgBhBruta = s.total_hs_brutas > 0 ? Math.round((s.total_bultos / s.total_hs_brutas) * 10) / 10 : 0;
       const avgBhNeta = s.total_hs_netas > 0 ? Math.round((s.total_bultos / s.total_hs_netas) * 10) / 10 : 0;
+      const produccion = s.dias > 0 ? Math.round((s.total_bultos / s.dias) * 10) / 10 : 0;
       summary.push({
         nombre: s.nombre,
         total_bultos: s.total_bultos,
@@ -202,6 +203,7 @@ export async function GET(request: Request) {
         total_hs_netas: Math.round(s.total_hs_netas * 100) / 100,
         avg_bh_bruta: avgBhBruta,
         avg_bh_neta: avgBhNeta,
+        produccion: produccion,
         dias: s.dias,
       });
     }
@@ -246,6 +248,7 @@ export async function GET(request: Request) {
         totalHsNetas: totalHsNetas,
         bhBruta: totalHsBrutas > 0 ? Math.round((totalBultos / totalHsBrutas) * 10) / 10 : 0,
         bhNeta: totalHsNetas > 0 ? Math.round((totalBultos / totalHsNetas) * 10) / 10 : 0,
+        produccion: dateSet.size > 0 ? Math.round((totalBultos / dateSet.size) * 10) / 10 : 0,
         personal: personSet.size,
         dias: dateSet.size,
         registros: daily.length,
