@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Filter, X, TrendingUp } from "lucide-react";
+import { Filter, X, TrendingUp, Clock, Users } from "lucide-react";
 import { ExcelButton } from "./excel-button";
 import { PrintButton } from "./print-button";
 
@@ -13,6 +13,19 @@ export function RendimientosTab() {
   // Filters
   const [fDesde, setFDesde] = useState("");
   const [fHasta, setFHasta] = useState("");
+  const [fTurno, setFTurno] = useState("");
+  const [fTipo, setFTipo] = useState("");
+  const [shifts, setShifts] = useState<{ value: string; label: string }[]>([]);
+
+  // Fetch available shifts once
+  useEffect(function() {
+    fetch("/api/production/dates", { cache: "no-store" })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d && d.shifts) setShifts(d.shifts);
+      })
+      .catch(function() {});
+  }, []);
 
   const dateToInt = useCallback(function(dateStr: string): string {
     if (!dateStr) return "";
@@ -21,20 +34,22 @@ export function RendimientosTab() {
     return String(Number(parts[0]) * 10000 + Number(parts[1]) * 100 + Number(parts[2]));
   }, []);
 
-  const fetchData = useCallback(() => {
+  const fetchData = useCallback(function() {
     setError(false);
     const params = new URLSearchParams();
     const fromNum = dateToInt(fDesde);
     if (fromNum) params.set("dateFrom", fromNum);
     const toNum = dateToInt(fHasta);
     if (toNum) params.set("dateTo", toNum);
+    if (fTurno) params.set("turno", fTurno);
+    if (fTipo) params.set("tipo", fTipo);
     fetch("/api/rendimientos?" + params.toString(), { cache: "no-store" })
-      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
       .then(setData)
-      .catch(() => setError(true));
-  }, [fDesde, fHasta, dateToInt]);
+      .catch(function() { setError(true); });
+  }, [fDesde, fHasta, fTurno, fTipo, dateToInt]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(function() { fetchData(); }, [fetchData]);
 
   const summary = data ? (data.summary || []) : [];
   const daily = data ? (data.daily || []) : [];
@@ -123,6 +138,9 @@ export function RendimientosTab() {
     return rows;
   }, [summaryRows, dailyByPerson]);
 
+  const hasFilters = fDesde || fHasta || fTurno || fTipo;
+  const clearFilters = function() { setFDesde(""); setFHasta(""); setFTurno(""); setFTipo(""); };
+
   if (error) return (
     <Card><CardContent className="p-8 text-center">
       <p className="text-sm text-muted-foreground">Error al cargar datos de rendimientos.</p>
@@ -141,24 +159,42 @@ export function RendimientosTab() {
 
   return (
     <div className="space-y-6">
-      {/* Filters */}
+      {/* Filters */
       <Card>
         <CardContent className="p-4">
           <div className="flex items-center gap-2 text-muted-foreground mb-3">
             <Filter className="h-4 w-4" />
             <span className="text-xs font-medium">Filtros</span>
-            {(fDesde || fHasta) && (
-              <button onClick={() => { setFDesde(""); setFHasta(""); }}
+            {hasFilters && (
+              <button onClick={clearFilters}
                 className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
                 <X className="h-3 w-3" /> Limpiar
               </button>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <input type="date" value={fDesde} onChange={(e) => setFDesde(e.target.value)}
-              className="text-xs border rounded px-2 py-1 bg-background" />
-            <input type="date" value={fHasta} onChange={(e) => setFHasta(e.target.value)}
-              className="text-xs border rounded px-2 py-1 bg-background" />
+            <div className="flex items-center gap-1">
+              <input type="date" value={fDesde} onChange={function(e) { setFDesde(e.target.value); }}
+                className="text-xs border rounded px-2 py-1 bg-background" />
+              <span className="text-xs text-muted-foreground">a</span>
+              <input type="date" value={fHasta} onChange={function(e) { setFHasta(e.target.value); }}
+                className="text-xs border rounded px-2 py-1 bg-background" />
+            </div>
+
+            <select value={fTurno} onChange={function(e) { setFTurno(e.target.value); }}
+              className="text-xs border rounded px-2 py-1 bg-background">
+              <option value="">Todos los turnos</option>
+              {shifts.map(function(s) {
+                return <option key={s.value} value={s.value}>{s.label}</option>;
+              })}
+            </select>
+
+            <select value={fTipo} onChange={function(e) { setFTipo(e.target.value); }}
+              className="text-xs border rounded px-2 py-1 bg-background">
+              <option value="">Todos</option>
+              <option value="EFECTIVO">Efectivo</option>
+              <option value="EVENTUAL">Eventual</option>
+            </select>
           </div>
         </CardContent>
       </Card>
@@ -195,7 +231,7 @@ export function RendimientosTab() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <TrendingUp className="h-4 w-4" />
+              <Users className="h-4 w-4" />
               <span className="text-xs font-medium">Personal / Dias</span>
             </div>
             <p className="text-2xl font-bold">{totals.personal ?? 0} <span className="text-sm font-normal text-muted-foreground">/ {totals.dias ?? 0}</span></p>

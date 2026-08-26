@@ -66,12 +66,14 @@ export async function GET(request: Request) {
     const dateFrom = url.searchParams.get("dateFrom");
     const dateTo = url.searchParams.get("dateTo");
     const tipo = url.searchParams.get("tipo");
+    const turno = url.searchParams.get("turno");
 
     // Build WHERE clause
     const conditions: string[] = [];
     const params: Record<string, string | number> = {};
     if (dateFrom) { conditions.push("fecha >= $dateFrom"); params.dateFrom = Number(dateFrom); }
     if (dateTo) { conditions.push("fecha <= $dateTo"); params.dateTo = Number(dateTo); }
+    if (turno) { conditions.push("turno = $turno"); params.turno = turno; }
     if (tipo === "EFECTIVO") {
       conditions.push("(CAST(SUBSTR(operario, 2) AS INTEGER) < 10247 OR operario IN (SELECT operario FROM nomina_override))");
     } else if (tipo === "EVENTUAL") {
