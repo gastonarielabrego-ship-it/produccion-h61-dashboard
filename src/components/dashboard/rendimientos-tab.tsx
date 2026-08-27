@@ -66,7 +66,7 @@ export function RendimientosTab() {
         hsBrutas: hsBrutas,
         tmHs: Number(r.total_tm ?? 0),
         hsNetas: hsNetas,
-        produccion: row.dias > 0 ? Math.round((bultos / row.dias) * 10) / 10 : 0,
+        produccion: r.dias > 0 ? Math.round((bultos / r.dias) * 10) / 10 : 0,
         bhBruta: hsBrutas > 0 ? Math.round((bultos / hsBrutas) * 10) / 10 : 0,
         bhNeta: hsNetas > 0 ? Math.round((bultos / hsNetas) * 10) / 10 : 0,
         dias: Number(r.dias ?? 0),
