@@ -116,7 +116,7 @@ export default function Home() {
 
           {/* Rendimientos */}
           <TabsContent value="rendimientos" className="mt-6">
-            <RendimientosTab />
+            <RendimientosTab refreshKey={refreshKey} />
           </TabsContent>
         </Tabs>
       </main>

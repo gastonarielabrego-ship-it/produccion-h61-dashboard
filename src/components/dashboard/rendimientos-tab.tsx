@@ -6,7 +6,9 @@ import { Filter, X, TrendingUp, Clock, Users } from "lucide-react";
 import { ExcelButton } from "./excel-button";
 import { PrintButton } from "./print-button";
 
-export function RendimientosTab() {
+interface RendimientosTabProps { refreshKey?: number }
+
+export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState(false);
 
@@ -49,7 +51,7 @@ export function RendimientosTab() {
       .catch(function() { setError(true); });
   }, [fDesde, fHasta, fTurno, fTipo, dateToInt]);
 
-  useEffect(function() { fetchData(); }, [fetchData]);
+  useEffect(function() { fetchData(); }, [fetchData, refreshKey]);
 
   const summary = data ? (data.summary || []) : [];
   const daily = data ? (data.daily || []) : [];
