@@ -63,6 +63,7 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
       const hsNetas = Number(r.total_hs_netas ?? 0);
       const bultos = Number(r.total_bultos ?? 0);
       return {
+        operario: r.operario || "",
         nombre: r.nombre,
         bultos: bultos,
         hsBrutas: hsBrutas,
@@ -98,6 +99,7 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
       // Header row per person
       rows.push({
         Dia: "Dia",
+        Operario: "Operario",
         Personal: s.nombre,
         Bultos: "Bultos",
         "Hs. Brutas": "Hs. Brutas",
@@ -113,6 +115,7 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
         const d = personDaily[j];
         rows.push({
           Dia: String(d.dia ?? ""),
+          Operario: String(d.operario ?? ""),
           Personal: s.nombre,
           Bultos: Number(d.bultos ?? 0),
           "Hs. Brutas": Number(d.hs_brutas ?? 0),
@@ -127,6 +130,7 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
       // Total row
       rows.push({
         Dia: "TOTAL",
+        Operario: s.operario,
         Personal: s.nombre,
         Bultos: s.bultos,
         "Hs. Brutas": Math.round(s.hsBrutas * 100) / 100,
@@ -255,7 +259,7 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
               rows={excelRows}
               filename="Rendimientos"
               sheetName="Diarias"
-              colWidths={[22, 30, 10, 10, 8, 10, 12, 10, 10]}
+              colWidths={[22, 14, 30, 10, 10, 8, 10, 12, 10, 10]}
             />
             <PrintButton title="Rendimientos" />
           </div>
@@ -265,6 +269,7 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
             <thead>
               <tr className="border-b">
                 <th className="text-xs font-semibold text-left p-2 sticky left-0 bg-card min-w-[200px]">Personal</th>
+                <th className="text-xs font-semibold text-center p-2">Operario</th>
                 <th className="text-xs font-semibold text-center p-2">Bultos</th>
                 <th className="text-xs font-semibold text-center p-2">Hs. Brutas</th>
                 <th className="text-xs font-semibold text-center p-2">TM (hs)</th>
@@ -280,6 +285,7 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
                 return (
                   <tr key={row.nombre} className="border-b hover:bg-muted/50">
                     <td className="text-xs font-medium p-2 sticky left-0 bg-card">{row.nombre}</td>
+                    <td className="text-xs text-center p-2 font-mono">{row.operario}</td>
                     <td className="text-xs text-center p-2">{row.bultos.toLocaleString("es-AR")}</td>
                     <td className="text-xs text-center p-2">{Math.round(row.hsBrutas * 100) / 100}</td>
                     <td className="text-xs text-center p-2">{Math.round(row.tmHs * 100) / 100}</td>
@@ -293,6 +299,7 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
               })}
               <tr className="border-t-2 font-bold bg-muted/30">
                 <td className="text-xs font-bold p-2 sticky left-0 bg-muted/30">TOTAL</td>
+                <td className="text-xs text-center font-bold p-2 bg-muted/30"></td>
                 <td className="text-xs text-center font-bold p-2 bg-muted/30">{(totals.totalBultos ?? 0).toLocaleString("es-AR")}</td>
                 <td className="text-xs text-center font-bold p-2 bg-muted/30">{Math.round((totals.totalHsBrutas ?? 0) * 100) / 100}</td>
                 <td className="text-xs text-center font-bold p-2 bg-muted/30">{Math.round((totals.totalTm ?? 0) * 100) / 100}</td>
@@ -314,13 +321,14 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
         return (
           <Card key={nombre}>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm">{nombre}</CardTitle>
+              <CardTitle className="text-sm">{nombre} <span className="text-xs font-normal text-muted-foreground font-mono">({rows[0]?.operario ?? ""})</span></CardTitle>
             </CardHeader>
             <CardContent className="p-0 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b">
                     <th className="text-xs font-semibold text-center p-2">Dia</th>
+                    <th className="text-xs font-semibold text-center p-2">Operario</th>
                     <th className="text-xs font-semibold text-center p-2">Bultos</th>
                     <th className="text-xs font-semibold text-center p-2">Hs. Brutas</th>
                     <th className="text-xs font-semibold text-center p-2">TM (hs)</th>
@@ -334,6 +342,7 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
                     return (
                       <tr key={idx} className="border-b hover:bg-muted/50">
                         <td className="text-xs text-center p-2">{String(r.dia ?? "")}</td>
+                        <td className="text-xs text-center p-2 font-mono">{String(r.operario ?? "")}</td>
                         <td className="text-xs text-center p-2">{Number(r.bultos ?? 0).toLocaleString("es-AR")}</td>
                         <td className="text-xs text-center p-2">{Number(r.hs_brutas ?? 0)}</td>
                         <td className="text-xs text-center p-2">{Math.round(Number(r.tm_hs ?? 0) * 100) / 100}</td>
@@ -346,6 +355,7 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
                   {sData && (
                     <tr className="border-t-2 font-bold bg-muted/30">
                       <td className="text-xs text-center font-bold p-2 bg-muted/30">TOTAL</td>
+                      <td className="text-xs text-center font-bold p-2 bg-muted/30"></td>
                       <td className="text-xs text-center font-bold p-2 bg-muted/30">{sData.bultos.toLocaleString("es-AR")}</td>
                       <td className="text-xs text-center font-bold p-2 bg-muted/30">{Math.round(sData.hsBrutas * 100) / 100}</td>
                       <td className="text-xs text-center font-bold p-2 bg-muted/30">{Math.round(sData.tmHs * 100) / 100}</td>

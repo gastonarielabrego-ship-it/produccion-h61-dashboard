@@ -106,7 +106,7 @@ export async function GET(request: Request) {
 
     // ── 3. Aggregate per (fecha, operario, nombre) ──
     // Key: "fecha:operario" → { nombre, bultos, activeHours[] }
-    const personDateMap: Record<string, { nombre: string; bultos: number; activeHours: number[] }> = {};
+    const personDateMap: Record<string, { operario: string; nombre: string; bultos: number; activeHours: number[] }> = {};
 
     for (let i = 0; i < result.rows.length; i++) {
       const row = result.rows[i];
@@ -118,7 +118,7 @@ export async function GET(request: Request) {
 
       const key = fecha + ":" + operario;
       if (!personDateMap[key]) {
-        personDateMap[key] = { nombre: nombre, bultos: 0, activeHours: [] };
+        personDateMap[key] = { operario: operario, nombre: nombre, bultos: 0, activeHours: [] };
       }
       const entry = personDateMap[key];
       entry.bultos += total;
@@ -152,6 +152,7 @@ export async function GET(request: Request) {
       const bhNeta = hsNetas > 0 ? Math.round((bultos / hsNetas) * 10) / 10 : 0;
 
       daily.push({
+        operario: entry.operario,
         nombre: entry.nombre,
         dia: getDiaLabel(fecha),
         fecha: fecha,
@@ -173,12 +174,13 @@ export async function GET(request: Request) {
     });
 
     // ── 5. Summary per person ──
-    const summaryMap: Record<string, { nombre: string; total_bultos: number; total_hs_brutas: number; total_tm: number; total_hs_netas: number; dias: number }> = {};
+    const summaryMap: Record<string, { operario: string; nombre: string; total_bultos: number; total_hs_brutas: number; total_tm: number; total_hs_netas: number; dias: number }> = {};
     for (let i = 0; i < daily.length; i++) {
       const d = daily[i];
       const n = d.nombre;
+      const operarioKey = d.operario || "";
       if (!summaryMap[n]) {
-        summaryMap[n] = { nombre: n, total_bultos: 0, total_hs_brutas: 0, total_tm: 0, total_hs_netas: 0, dias: 0 };
+        summaryMap[n] = { operario: operarioKey, nombre: n, total_bultos: 0, total_hs_brutas: 0, total_tm: 0, total_hs_netas: 0, dias: 0 };
       }
       const s = summaryMap[n];
       s.total_bultos += d.bultos;
@@ -196,6 +198,7 @@ export async function GET(request: Request) {
       const avgBhNeta = s.total_hs_netas > 0 ? Math.round((s.total_bultos / s.total_hs_netas) * 10) / 10 : 0;
       const produccion = s.dias > 0 ? Math.round((s.total_bultos / s.dias) * 10) / 10 : 0;
       summary.push({
+        operario: s.operario,
         nombre: s.nombre,
         total_bultos: s.total_bultos,
         total_hs_brutas: Math.round(s.total_hs_brutas * 100) / 100,
