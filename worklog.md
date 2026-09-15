@@ -119,3 +119,29 @@ Stage Summary:
 - New monthly grouped chart shows all collaborators with bars per month
 - Evolution chart shows month-by-month trend with monthly average reference line
 - Deployed to Vercel
+
+---
+Task ID: 3
+Agent: main
+Task: Redesign Comparativo tab - remove cluttered bar charts, add distribution histogram + multi-collaborator comparison
+
+Work Log:
+- Analyzed screenshots with VLM: confirmed charts were unintelligible (185 bars, spaghetti effect)
+- Removed the two problematic bar charts (horizontal bar + monthly grouped)
+- Added distribution histogram: stacked bars showing how many people fall in each B/H Neta range, colored by category (top/average/below)
+- Redesigned evolution section as a multi-collaborator comparator:
+  - Can select up to 5 collaborators via "+" buttons on tables or search
+  - Line chart shows all selected persons' monthly B/H Neta trends together
+  - Monthly average reference line
+  - Per-person detail table with diff vs global avg
+  - Colored chips for selected persons with remove button
+- Modified API to support multiple operarios (operario param now repeats)
+- Added distribution histogram data to API response
+- Build and deploy successful
+
+Stage Summary:
+- No more cluttered bar charts
+- Distribution histogram gives a clear visual of how performance is distributed
+- Multi-collaborator comparison is the main interactive feature
+- "+" buttons on all ranking tables and full ranking table to add people to compare
+- Deployed to Vercel
