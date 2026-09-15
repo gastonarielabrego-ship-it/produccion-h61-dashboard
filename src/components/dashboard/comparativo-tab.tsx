@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Filter, X, TrendingUp, TrendingDown, Minus, BarChart3, User, Trophy, Target, ArrowDownCircle, Calendar } from "lucide-react";
+import { Filter, X, BarChart3, User, Trophy, Target, ArrowDownCircle, Calendar, Search } from "lucide-react";
 import { ExcelButton } from "./excel-button";
 import { PrintButton } from "./print-button";
 import {
@@ -72,13 +72,13 @@ function MonthlyTooltip({ active, payload, label }: any) {
   return (
     <div className="rounded-lg border bg-background p-3 shadow-md max-h-[200px] overflow-y-auto">
       <p className="font-semibold text-sm mb-1">{label}</p>
-      {payload.slice(0, 8).map((entry: any, i: number) => (
+      {payload.slice(0, 10).map((entry: any, i: number) => (
         <p key={i} className="text-xs flex items-center gap-1.5">
           <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
           {entry.name}: {Number(entry.value).toLocaleString("es-AR")}
         </p>
       ))}
-      {payload.length > 8 && <p className="text-xs text-muted-foreground">...y {payload.length - 8} mas</p>}
+      {payload.length > 10 && <p className="text-xs text-muted-foreground">...y {payload.length - 10} mas</p>}
     </div>
   );
 }
@@ -93,6 +93,10 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
   const [fTurno, setFTurno] = useState("");
   const [fTipo, setFTipo] = useState("");
   const [shifts, setShifts] = useState<{ value: string; label: string }[]>([]);
+
+  // Collaborator filter
+  const [searchText, setSearchText] = useState("");
+  const [showCount, setShowCount] = useState("20"); // "10", "20", "30", "all"
 
   // Selected collaborator for evolution chart
   const [selectedOperario, setSelectedOperario] = useState("");
@@ -169,11 +173,29 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
   const avgHigh = data ? (data.avgHigh || 0) : 0;
   const totalPeople = data ? (data.totalPeople || 0) : 0;
   const monthLabels = data ? (data.monthLabels || []) : [];
-  const monthlyChartData = data ? (data.monthlyChartData || []) : [];
+  const monthlyChartDataRaw = data ? (data.monthlyChartData || []) : [];
 
-  // Prepare chart data — truncate long names
+  // ── Filtered ranking: apply search + show count ──
+  const filteredRanking = useMemo(function() {
+    let list = ranking;
+    // Search filter
+    if (searchText.trim()) {
+      const q = searchText.trim().toUpperCase();
+      list = list.filter(function(r: any) {
+        return r.nombre.toUpperCase().indexOf(q) >= 0 || r.operario.toUpperCase().indexOf(q) >= 0;
+      });
+    }
+    // Show count (top N from the already sorted ranking)
+    if (showCount !== "all") {
+      const n = Number(showCount);
+      if (list.length > n) list = list.slice(0, n);
+    }
+    return list;
+  }, [ranking, searchText, showCount]);
+
+  // Prepare chart data — truncate long names, only show filtered
   const chartData = useMemo(function() {
-    return ranking.map(function(r: any) {
+    return filteredRanking.map(function(r: any) {
       const parts = r.nombre.split(" ");
       const shortName = parts.length > 2 ? parts[0] + " " + parts[1] : r.nombre;
       return {
@@ -186,7 +208,25 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
         operario: r.operario,
       };
     });
-  }, [ranking]);
+  }, [filteredRanking]);
+
+  // Filter monthly chart data to match filtered ranking
+  const monthlyChartData = useMemo(function() {
+    if (searchText.trim() || showCount !== "all") {
+      const allowedNames = new Set(filteredRanking.map(function(r: any) { return r.nombre; }));
+      // Always include the selected person if any
+      if (selectedOperario) {
+        const sel = ranking.find(function(r: any) { return r.operario === selectedOperario; });
+        if (sel) allowedNames.add(sel.nombre);
+      }
+      return monthlyChartDataRaw.filter(function(d: any) { return allowedNames.has(d.nombre); });
+    }
+    // If no filter but too many, limit to top 20
+    if (monthlyChartDataRaw.length > 20 && showCount === "all") {
+      return monthlyChartDataRaw.slice(0, 20);
+    }
+    return monthlyChartDataRaw;
+  }, [monthlyChartDataRaw, filteredRanking, searchText, showCount, selectedOperario, ranking]);
 
   // Selected collaborator info
   const selectedPerson = useMemo(function() {
@@ -198,7 +238,6 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
   const evolutionChartData = useMemo(function() {
     if (evolutionData.length === 0) return [];
     return evolutionData.map(function(e: any) {
-      // Find the monthly average for this month
       const avgEntry = monthlyAvgData.find(function(a: any) { return a.ym === e.ym; });
       return {
         ...e,
@@ -210,28 +249,24 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
   // Excel download data
   const excelRows = useMemo(function() {
     const rows: any[] = [];
-    // Top 10
     rows.push({ Seccion: "TOP 10 MEJORES", Personal: "", "B/H Neta": "", "B/H Bruta": "", Bultos: "", Meses: "" });
     for (let i = 0; i < top10.length; i++) {
       const r = top10[i];
       rows.push({ Seccion: String(i + 1), Personal: r.nombre, "B/H Neta": r.bh_neta, "B/H Bruta": r.bh_bruta, Bultos: r.total_bultos, Meses: r.meses });
     }
     rows.push({ Seccion: "", Personal: "", "B/H Neta": "", "B/H Bruta": "", Bultos: "", Meses: "" });
-    // Average 10
     rows.push({ Seccion: "10 EN EL PROMEDIO", Personal: "", "B/H Neta": "", "B/H Bruta": "", Bultos: "", Meses: "" });
     for (let i = 0; i < average10.length; i++) {
       const r = average10[i];
       rows.push({ Seccion: String(i + 1), Personal: r.nombre, "B/H Neta": r.bh_neta, "B/H Bruta": r.bh_bruta, Bultos: r.total_bultos, Meses: r.meses });
     }
     rows.push({ Seccion: "", Personal: "", "B/H Neta": "", "B/H Bruta": "", Bultos: "", Meses: "" });
-    // Below 10
     rows.push({ Seccion: "10 POR DEBAJO", Personal: "", "B/H Neta": "", "B/H Bruta": "", Bultos: "", Meses: "" });
     for (let i = 0; i < below10.length; i++) {
       const r = below10[i];
       rows.push({ Seccion: String(i + 1), Personal: r.nombre, "B/H Neta": r.bh_neta, "B/H Bruta": r.bh_bruta, Bultos: r.total_bultos, Meses: r.meses });
     }
     rows.push({ Seccion: "", Personal: "", "B/H Neta": "", "B/H Bruta": "", Bultos: "", Meses: "" });
-    // Full ranking
     rows.push({ Seccion: "RANKING COMPLETO", Personal: "", "B/H Neta": "", "B/H Bruta": "", Bultos: "", Meses: "" });
     for (let i = 0; i < ranking.length; i++) {
       const r = ranking[i];
@@ -240,8 +275,8 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
     return rows;
   }, [top10, average10, below10, ranking]);
 
-  const hasFilters = fDesde || fHasta || fTurno || fTipo;
-  const clearFilters = function() { setFDesde(""); setFHasta(""); setFTurno(""); setFTipo(""); };
+  const hasFilters = fDesde || fHasta || fTurno || fTipo || searchText;
+  const clearFilters = function() { setFDesde(""); setFHasta(""); setFTurno(""); setFTipo(""); setSearchText(""); setShowCount("20"); };
 
   if (error) return (
     <Card><CardContent className="p-8 text-center">
@@ -259,10 +294,13 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
     })}</div>
   );
 
-  // Count people per category
   const topCount = ranking.filter(function(r: any) { return r.category === "top"; }).length;
   const avgCount = ranking.filter(function(r: any) { return r.category === "average"; }).length;
   const belowCount = ranking.filter(function(r: any) { return r.category === "below"; }).length;
+
+  // Dynamic chart height based on number of bars
+  const barChartHeight = Math.max(300, chartData.length * 22);
+  const monthlyChartHeight = Math.max(300, monthlyChartData.length * 22);
 
   return (
     <div className="space-y-6">
@@ -299,6 +337,28 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
               <option value="">Todos</option>
               <option value="EFECTIVO">Efectivo</option>
               <option value="EVENTUAL">Eventual</option>
+            </select>
+
+            {/* Collaborator search */}
+            <div className="flex items-center gap-1 border rounded px-2 py-1 bg-background">
+              <Search className="h-3 w-3 text-muted-foreground" />
+              <input
+                type="text"
+                value={searchText}
+                onChange={function(e) { setSearchText(e.target.value); }}
+                placeholder="Buscar colaborador..."
+                className="text-xs bg-transparent outline-none w-[140px]"
+              />
+            </div>
+
+            {/* Show count */}
+            <select value={showCount} onChange={function(e) { setShowCount(e.target.value); }}
+              className="text-xs border rounded px-2 py-1 bg-background">
+              <option value="10">Top 10</option>
+              <option value="20">Top 20</option>
+              <option value="30">Top 30</option>
+              <option value="50">Top 50</option>
+              <option value="all">Todos ({totalPeople})</option>
             </select>
           </div>
         </CardContent>
@@ -348,7 +408,7 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
         </Card>
       </div>
 
-      {/* Comparative Bar Chart by Person */}
+      {/* Comparative Bar Chart by Person (filtered) */}
       <Card>
         <CardHeader className="flex flex-row items-start justify-between space-y-0">
           <div>
@@ -357,7 +417,7 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
               Comparativo por Colaborador — B/H Neta (promedio mensual)
             </CardTitle>
             <CardDescription>
-              {totalPeople} colaboradores · Promedio general: {globalAvg} · {monthLabels.join(", ")}
+              Mostrando {chartData.length} de {totalPeople} colaboradores · Promedio general: {globalAvg}
             </CardDescription>
           </div>
           <div className="flex items-center gap-1">
@@ -372,9 +432,9 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
         </CardHeader>
         <CardContent>
           {chartData.length > 0 ? (
-            <div className="h-[500px]">
+            <div style={{ height: barChartHeight + "px" }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 80 }} layout="vertical">
+                <BarChart data={chartData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis
                     type="number"
@@ -388,12 +448,12 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
                     tick={{ fontSize: 10 }}
                     tickLine={false}
                     axisLine={false}
-                    width={120}
+                    width={130}
                   />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} iconType="circle" iconSize={8} />
                   <ReferenceLine x={globalAvg} stroke="#eab308" strokeDasharray="6 3" label={{ value: "Prom: " + globalAvg, position: "insideTopRight", fill: "#eab308", fontSize: 10 }} />
-                  <Bar dataKey="bh_neta" name="B/H Neta" maxBarSize={20} radius={[0, 4, 4, 0]}>
+                  <Bar dataKey="bh_neta" name="B/H Neta" maxBarSize={18} radius={[0, 4, 4, 0]}>
                     {chartData.map(function(entry: any, idx: number) {
                       return (
                         <Cell
@@ -408,14 +468,14 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
             </div>
           ) : (
             <div className="h-[200px] flex items-center justify-center text-sm text-muted-foreground">
-              No hay datos para el período seleccionado
+              No hay datos para los filtros seleccionados
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Monthly Comparison Chart — grouped bars by month */}
-      {monthLabels.length > 0 && (
+      {/* Monthly Comparison Chart — only if we have a reasonable number of people */}
+      {monthLabels.length > 0 && monthlyChartData.length > 0 && monthlyChartData.length <= 30 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -423,53 +483,61 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
               Comparativo Mensual — B/H Neta por Mes
             </CardTitle>
             <CardDescription>
-              Evolución mensual de cada colaborador · Los colores indican categoría (verde=mejor, amarillo=promedio, rojo=por debajo)
+              {monthlyChartData.length} colaboradores · {monthLabels.join(", ")} · Use el filtro de busqueda para reducir la cantidad
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {monthlyChartData.length > 0 ? (
-              <div className="h-[400px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={monthlyChartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis
-                      dataKey="nombre"
-                      tick={{ fontSize: 9 }}
-                      tickLine={false}
-                      axisLine={false}
-                      interval={0}
-                      angle={-45}
-                      textAnchor="end"
-                      height={100}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 11 }}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <Tooltip content={<MonthlyTooltip />} />
-                    <Legend wrapperStyle={{ fontSize: 10, paddingTop: 10 }} iconType="circle" iconSize={8} />
-                    <ReferenceLine y={globalAvg} stroke="#eab308" strokeDasharray="6 3" label={{ value: "Prom", position: "insideTopRight", fill: "#eab308", fontSize: 10 }} />
-                    {monthLabels.map(function(label: string, i: number) {
-                      return (
-                        <Bar
-                          key={label}
-                          dataKey={label}
-                          name={label}
-                          fill={MONTH_BAR_COLORS[i % MONTH_BAR_COLORS.length]}
-                          maxBarSize={15}
-                          radius={[2, 2, 0, 0]}
-                        />
-                      );
-                    })}
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="h-[100px] flex items-center justify-center text-sm text-muted-foreground">
-                No hay datos mensuales
-              </div>
-            )}
+            <div style={{ height: monthlyChartHeight + "px" }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={monthlyChartData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis
+                    type="number"
+                    tick={{ fontSize: 11 }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="nombre"
+                    tick={{ fontSize: 10 }}
+                    tickLine={false}
+                    axisLine={false}
+                    width={130}
+                  />
+                  <Tooltip content={<MonthlyTooltip />} />
+                  <Legend wrapperStyle={{ fontSize: 10, paddingTop: 10 }} iconType="circle" iconSize={8} />
+                  <ReferenceLine x={globalAvg} stroke="#eab308" strokeDasharray="6 3" label={{ value: "Prom", position: "insideTopRight", fill: "#eab308", fontSize: 10 }} />
+                  {monthLabels.map(function(label: string, i: number) {
+                    return (
+                      <Bar
+                        key={label}
+                        dataKey={label}
+                        name={label}
+                        fill={MONTH_BAR_COLORS[i % MONTH_BAR_COLORS.length]}
+                        maxBarSize={14}
+                        radius={[0, 3, 3, 0]}
+                      />
+                    );
+                  })}
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Show a hint when monthly chart is hidden due to too many people */}
+      {monthlyChartData.length > 30 && (
+        <Card>
+          <CardContent className="p-6 text-center">
+            <Calendar className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+            <p className="text-sm text-muted-foreground">
+              Hay {monthlyChartData.length} colaboradores. El grafico mensual se muestra con 30 o menos.
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Use el campo <strong>Buscar colaborador</strong> o reduzca <strong>Top N</strong> para ver el grafico mensual.
+            </p>
           </CardContent>
         </Card>
       )}
@@ -629,7 +697,6 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
 
           {selectedOperario && evolutionChartData.length > 0 ? (
             <div className="space-y-4">
-              {/* Evolution line chart by month */}
               <div className="h-[350px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={evolutionChartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
@@ -673,7 +740,6 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
                   <tbody>
                     {evolutionChartData.map(function(d: any, idx: number) {
                       const diffGral = Math.round((d.bh_neta - globalAvg) * 10) / 10;
-                      const diffMes = d.avgBhNeta ? Math.round((d.bh_neta - d.avgBhNeta) * 10) / 10 : null;
                       return (
                         <tr key={idx} className="border-b hover:bg-muted/50">
                           <td className="text-xs text-center p-2 font-medium">{d.monthLabel}</td>
@@ -729,12 +795,14 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
               </tr>
             </thead>
             <tbody>
-              {ranking.map(function(r: any, i: number) {
+              {filteredRanking.map(function(r: any, i: number) {
+                // Find the absolute rank in the full ranking
+                const absRank = ranking.findIndex(function(rr: any) { return rr.operario === r.operario; }) + 1;
                 const catIcon = r.category === "top" ? "▲" : r.category === "average" ? "●" : "▼";
                 const catColor = r.category === "top" ? "text-emerald-600" : r.category === "average" ? "text-amber-600" : "text-red-600";
                 return (
                   <tr key={r.operario} className="border-b hover:bg-muted/50 cursor-pointer" onClick={function() { setSelectedOperario(r.operario); }}>
-                    <td className="text-xs text-center p-2">{i + 1}</td>
+                    <td className="text-xs text-center p-2">{absRank}</td>
                     <td className="text-xs font-medium p-2">{r.nombre}</td>
                     <td className="text-xs text-center p-2 font-mono">{r.operario}</td>
                     <td className="text-xs text-center p-2">{r.total_bultos.toLocaleString("es-AR")}</td>
@@ -745,7 +813,7 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
                   </tr>
                 );
               })}
-              {ranking.length === 0 && (
+              {filteredRanking.length === 0 && (
                 <tr><td colSpan={8} className="text-xs text-center p-4 text-muted-foreground">No hay datos</td></tr>
               )}
             </tbody>
