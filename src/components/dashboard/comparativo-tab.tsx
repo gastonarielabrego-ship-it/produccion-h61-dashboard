@@ -418,9 +418,9 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
                   />
                   <Tooltip content={<MonthlyCatTooltip />} />
                   <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} iconType="circle" iconSize={8} />
-                  <Bar dataKey="top" name="Mejores" stackId="a" fill="#10b981" radius={[0, 0, 0, 0]} maxBarSize={60} />
-                  <Bar dataKey="average" name="En Promedio" stackId="a" fill="#f59e0b" radius={[0, 0, 0, 0]} maxBarSize={60} />
-                  <Bar dataKey="below" name="Por Debajo" stackId="a" fill="#ef4444" radius={[4, 4, 0, 0]} maxBarSize={60} />
+                  <Bar dataKey="top" name="Mejores" stackId="a" fill="#10b981" radius={[0, 0, 0, 0]} maxBarSize={60} label={{ position: "center", fill: "#fff", fontSize: 11, fontWeight: 600, formatter: function(v: number) { return v > 0 ? v : ""; } }} />
+                  <Bar dataKey="average" name="En Promedio" stackId="a" fill="#f59e0b" radius={[0, 0, 0, 0]} maxBarSize={60} label={{ position: "center", fill: "#fff", fontSize: 11, fontWeight: 600, formatter: function(v: number) { return v > 0 ? v : ""; } }} />
+                  <Bar dataKey="below" name="Por Debajo" stackId="a" fill="#ef4444" radius={[4, 4, 0, 0]} maxBarSize={60} label={{ position: "center", fill: "#fff", fontSize: 11, fontWeight: 600, formatter: function(v: number) { return v > 0 ? v : ""; } }} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -682,6 +682,7 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
                           strokeWidth={2.5}
                           dot={{ r: 5, fill: "#fff", stroke: COMPARE_COLORS[idx % COMPARE_COLORS.length], strokeWidth: 2 }}
                           activeDot={{ r: 7 }}
+                          label={{ position: "top", fill: COMPARE_COLORS[idx % COMPARE_COLORS.length], fontSize: 10, fontWeight: 600, formatter: function(v: number) { return v != null ? v : ""; } }}
                           connectNulls
                         />
                       );
@@ -867,7 +868,7 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
                                   <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} domain={["dataMin - 5", "dataMax + 5"]} />
                                   <Tooltip content={<EvolutionTooltip />} />
                                   <ReferenceLine y={globalAvg} stroke="#eab308" strokeDasharray="6 3" label={{ value: "Prom: " + globalAvg, position: "insideTopRight", fill: "#eab308", fontSize: 9 }} />
-                                  <Area type="monotone" dataKey="bh_neta" name="B/H Neta" stroke="#10b981" fill="#10b981" fillOpacity={0.15} strokeWidth={2} dot={{ r: 4, fill: "#fff", stroke: "#10b981", strokeWidth: 2 }} />
+                                  <Area type="monotone" dataKey="bh_neta" name="B/H Neta" stroke="#10b981" fill="#10b981" fillOpacity={0.15} strokeWidth={2} dot={{ r: 4, fill: "#fff", stroke: "#10b981", strokeWidth: 2 }} label={{ position: "top", fill: "#10b981", fontSize: 10, fontWeight: 600 }} />
                                 </AreaChart>
                               </ResponsiveContainer>
                             </div>
