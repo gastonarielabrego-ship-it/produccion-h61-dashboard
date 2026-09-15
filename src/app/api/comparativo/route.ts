@@ -126,12 +126,21 @@ export async function GET(request: Request) {
       const bultos = entry.bultos;
       const hsBrutas = calcHorasBrutas(entry.activeHours);
       const tmMin = tmMap[key] || 0;
-      // Cap TM to hsBrutas: TM cannot exceed worked hours (data entry errors)
       const tmHsRaw = Math.round((tmMin / 60) * 100) / 100;
-      const tmHs = Math.min(tmHsRaw, hsBrutas);
-      const hsNetas = Math.round((hsBrutas - tmHs) * 100) / 100;
       const bhBruta = hsBrutas > 0 ? Math.round((bultos / hsBrutas) * 10) / 10 : 0;
-      const bhNeta = hsNetas > 0 ? Math.round((bultos / hsNetas) * 10) / 10 : bhBruta;
+      // If TM >= 80% of hsBrutas, TM data is unreliable — use B/H Bruta as B/H Neta
+      // This handles data entry errors where TM >> actual downtime
+      let bhNeta: number;
+      let hsNetas: number;
+      const tmHs = Math.min(tmHsRaw, hsBrutas);
+      if (hsBrutas > 0 && tmHsRaw >= hsBrutas * 0.8) {
+        // TM unreliable: treat hs_netas ≈ hs_brutas
+        hsNetas = hsBrutas;
+        bhNeta = bhBruta;
+      } else {
+        hsNetas = Math.round((hsBrutas - tmHs) * 100) / 100;
+        bhNeta = hsNetas > 0 ? Math.round((bultos / hsNetas) * 10) / 10 : bhBruta;
+      }
       daily.push({
         operario: entry.operario,
         nombre: entry.nombre,
