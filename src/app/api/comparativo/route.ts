@@ -393,6 +393,56 @@ export async function GET(request: Request) {
       });
     }
 
+    // ── 12. Monthly category counts (how many people in each category per month) ──
+    const monthlyCategoryCounts: any[] = [];
+    for (let i = 0; i < allMonths.length; i++) {
+      const ym = allMonths[i];
+      const monthData = monthly.filter(function(m) { return m.ym === ym; });
+      // For each person in this month, determine their category based on their monthly B/H Neta
+      let topCnt = 0;
+      let avgCnt = 0;
+      let belowCnt = 0;
+      for (let j = 0; j < monthData.length; j++) {
+        const bh = monthData[j].bh_neta;
+        if (bh >= avgHigh) {
+          topCnt++;
+        } else if (bh >= avgLow) {
+          avgCnt++;
+        } else {
+          belowCnt++;
+        }
+      }
+      monthlyCategoryCounts.push({
+        ym: ym,
+        monthLabel: getMonthLabel(ym),
+        top: topCnt,
+        average: avgCnt,
+        below: belowCnt,
+        total: topCnt + avgCnt + belowCnt,
+      });
+    }
+
+    // ── 13. Per-person monthly evolution data for ranking accordion ──
+    const personMonthlyMap: Record<string, any[]> = {};
+    for (let i = 0; i < monthly.length; i++) {
+      const m = monthly[i];
+      if (!personMonthlyMap[m.operario]) personMonthlyMap[m.operario] = [];
+      personMonthlyMap[m.operario].push({
+        ym: m.ym,
+        monthLabel: m.monthLabel,
+        total_bultos: m.total_bultos,
+        bh_bruta: m.bh_bruta,
+        bh_neta: m.bh_neta,
+        produccion: m.produccion,
+        dias: m.dias,
+      });
+    }
+    // Sort each person's monthly data chronologically
+    const pKeys = Object.keys(personMonthlyMap);
+    for (let i = 0; i < pKeys.length; i++) {
+      personMonthlyMap[pKeys[i]].sort(function(a, b) { return a.ym - b.ym; });
+    }
+
     return NextResponse.json({
       ranking: ranking,
       top10: top10,
@@ -405,6 +455,8 @@ export async function GET(request: Request) {
       evolutionSeries: evolutionSeries,
       distribution: distribution,
       monthlyAvg: monthlyAvg,
+      monthlyCategoryCounts: monthlyCategoryCounts,
+      personMonthly: personMonthlyMap,
       monthLabels: monthLabels,
       totalPeople: ranking.length,
       dates: dates,

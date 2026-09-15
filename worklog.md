@@ -145,3 +145,35 @@ Stage Summary:
 - Multi-collaborator comparison is the main interactive feature
 - "+" buttons on all ranking tables and full ranking table to add people to compare
 - Deployed to Vercel
+
+---
+Task ID: 4
+Agent: main
+Task: Add accordion to ranking rows with monthly evolution + replace distribution chart with month-by-month category chart
+
+Work Log:
+- Modified /api/comparativo/route.ts to add two new data structures:
+  - monthlyCategoryCounts: per-month count of people in each category (top/average/below) based on monthly B/H Neta
+  - personMonthly: per-person monthly evolution data (operario → sorted monthly rows)
+- Replaced the static distribution histogram with "Evolución Mensual por Categoría" stacked bar chart:
+  - X axis = months, stacked bars show Mejores (green), En Promedio (yellow), Por Debajo (red)
+  - Added summary table below the chart with per-month counts
+  - Custom MonthlyCatTooltip showing totals
+- Added accordion/dropdown to every row in the Ranking Completo table:
+  - Click any row to expand/collapse with chevron icon
+  - Expanded view shows: mini AreaChart of monthly B/H Neta trend with global avg reference line
+  - Monthly detail table with: Mes, Bultos, Dias, B/H Bruta, B/H Neta, vs Prom., vs Mes Ant.
+  - Color-coded diffs (green=positive, red=negative, amber=neutral)
+- Added "Tendencia" column to ranking table showing trend indicator:
+  - TrendingUp (green) if last month improved by >0.5 vs previous month
+  - TrendingDown (red) if declined by >0.5
+  - Minus (amber) if change within ±0.5
+- Added EvolutionTooltip component for the accordion area chart
+- Added Fragment import for multiple <tr> per ranking row
+- Build verified successfully
+
+Stage Summary:
+- Distribution chart replaced by month-by-month category count stacked bar chart
+- Each ranking row is now expandable with monthly evolution detail
+- Trend indicators show if collaborators are improving or declining
+- API now returns monthlyCategoryCounts and personMonthly data

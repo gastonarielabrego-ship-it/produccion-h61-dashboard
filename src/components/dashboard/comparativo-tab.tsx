@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, Fragment } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Filter, X, BarChart3, User, Trophy, Target, ArrowDownCircle, Calendar, Search, Users, Plus, Trash2 } from "lucide-react";
+import { Filter, X, BarChart3, User, Trophy, Target, ArrowDownCircle, Calendar, Search, Users, Plus, Trash2, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { ExcelButton } from "./excel-button";
 import { PrintButton } from "./print-button";
 import {
@@ -18,6 +18,8 @@ import {
   Cell,
   LineChart,
   Line,
+  AreaChart,
+  Area,
 } from "recharts";
 
 interface ComparativoTabProps { refreshKey?: number }
@@ -66,6 +68,38 @@ function CompareTooltip({ active, payload, label }: any) {
   );
 }
 
+function MonthlyCatTooltip({ active, payload, label }: any) {
+  if (!active || !payload || !payload.length) return null;
+  const total = payload.reduce((sum: number, entry: any) => sum + Number(entry.value), 0);
+  return (
+    <div className="rounded-lg border bg-background p-3 shadow-md">
+      <p className="font-semibold text-sm mb-1">{label}</p>
+      {payload.map((entry: any, i: number) => (
+        <p key={i} className="text-xs flex items-center gap-1.5">
+          <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
+          {entry.name}: <span className="font-medium">{Number(entry.value)}</span>
+        </p>
+      ))}
+      <p className="text-xs mt-1 pt-1 border-t font-medium">Total: {total}</p>
+    </div>
+  );
+}
+
+function EvolutionTooltip({ active, payload, label }: any) {
+  if (!active || !payload || !payload.length) return null;
+  return (
+    <div className="rounded-lg border bg-background p-3 shadow-md">
+      <p className="font-semibold text-sm mb-1">{label}</p>
+      {payload.map((entry: any, i: number) => (
+        <p key={i} className="text-xs flex items-center gap-1.5">
+          <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
+          {entry.name}: <span className="font-medium">{Number(entry.value).toLocaleString("es-AR")}</span>
+        </p>
+      ))}
+    </div>
+  );
+}
+
 export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState(false);
@@ -82,6 +116,8 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
   const [compareSearch, setCompareSearch] = useState("");
   const [evolutionSeries, setEvolutionSeries] = useState<any[]>([]);
   const [monthlyAvgData, setMonthlyAvgData] = useState<any[]>([]);
+  // Accordion: which ranking rows are expanded
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   // Fetch available shifts once
   useEffect(function() {
@@ -154,6 +190,8 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
   const totalPeople = data ? (data.totalPeople || 0) : 0;
   const monthLabels = data ? (data.monthLabels || []) : [];
   const distribution = data ? (data.distribution || []) : [];
+  const monthlyCategoryCounts = data ? (data.monthlyCategoryCounts || []) : [];
+  const personMonthly = data ? (data.personMonthly || {}) : {};
 
   // Add/remove collaborators for comparison
   const addCompare = function(operario: string) {
@@ -349,26 +387,26 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
         </Card>
       </div>
 
-      {/* Distribution Histogram */}
-      {distribution.length > 0 && (
+      {/* Month-by-Month Category Distribution Chart */}
+      {monthlyCategoryCounts.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <BarChart3 className="h-4 w-4" />
-              Distribución de Rendimiento — B/H Neta
+              Evolución Mensual por Categoría
             </CardTitle>
             <CardDescription>
-              {totalPeople} colaboradores · Cada barra = cantidad de personas en ese rango · Verde=mejores · Amarillo=promedio · Rojo=por debajo
+              Cantidad de colaboradores en cada rango por mes · Verde=mejores · Amarillo=promedio · Rojo=por debajo
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-[300px]">
+            <div className="h-[350px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={distribution} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
+                <BarChart data={monthlyCategoryCounts} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis
-                    dataKey="range"
-                    tick={{ fontSize: 10 }}
+                    dataKey="monthLabel"
+                    tick={{ fontSize: 11 }}
                     tickLine={false}
                     axisLine={false}
                   />
@@ -378,13 +416,40 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
                     axisLine={false}
                     allowDecimals={false}
                   />
-                  <Tooltip content={<DistTooltip />} />
+                  <Tooltip content={<MonthlyCatTooltip />} />
                   <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} iconType="circle" iconSize={8} />
-                  <Bar dataKey="top" name="Mejores" stackId="a" fill="#10b981" radius={[0, 0, 0, 0]} maxBarSize={50} />
-                  <Bar dataKey="average" name="Promedio" stackId="a" fill="#f59e0b" radius={[0, 0, 0, 0]} maxBarSize={50} />
-                  <Bar dataKey="below" name="Por debajo" stackId="a" fill="#ef4444" radius={[4, 4, 0, 0]} maxBarSize={50} />
+                  <Bar dataKey="top" name="Mejores" stackId="a" fill="#10b981" radius={[0, 0, 0, 0]} maxBarSize={60} />
+                  <Bar dataKey="average" name="En Promedio" stackId="a" fill="#f59e0b" radius={[0, 0, 0, 0]} maxBarSize={60} />
+                  <Bar dataKey="below" name="Por Debajo" stackId="a" fill="#ef4444" radius={[4, 4, 0, 0]} maxBarSize={60} />
                 </BarChart>
               </ResponsiveContainer>
+            </div>
+            {/* Summary table below the chart */}
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-xs font-semibold text-center p-2">Mes</th>
+                    <th className="text-xs font-semibold text-center p-2 text-emerald-600">Mejores</th>
+                    <th className="text-xs font-semibold text-center p-2 text-amber-500">En Promedio</th>
+                    <th className="text-xs font-semibold text-center p-2 text-red-500">Por Debajo</th>
+                    <th className="text-xs font-semibold text-center p-2">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {monthlyCategoryCounts.map(function(m: any) {
+                    return (
+                      <tr key={m.ym} className="border-b hover:bg-muted/50">
+                        <td className="text-xs text-center p-2 font-medium">{m.monthLabel}</td>
+                        <td className="text-xs text-center p-2 text-emerald-600 font-medium">{m.top}</td>
+                        <td className="text-xs text-center p-2 text-amber-600">{m.average}</td>
+                        <td className="text-xs text-center p-2 text-red-600">{m.below}</td>
+                        <td className="text-xs text-center p-2 font-medium">{m.total}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </CardContent>
         </Card>
@@ -683,7 +748,7 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
         </CardContent>
       </Card>
 
-      {/* Full Ranking Table */}
+      {/* Full Ranking Table with Accordion */}
       <Card>
         <CardHeader className="flex flex-row items-start justify-between space-y-0">
           <div>
@@ -691,6 +756,9 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
               <BarChart3 className="h-4 w-4" />
               Ranking Completo ({totalPeople} colaboradores)
             </CardTitle>
+            <CardDescription className="text-xs mt-1">
+              Haga clic en un colaborador para desplegar su evolución mensual
+            </CardDescription>
           </div>
           <div className="flex items-center gap-1">
             <ExcelButton
@@ -706,6 +774,7 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b">
+                <th className="text-xs font-semibold text-center p-2 w-8"></th>
                 <th className="text-xs font-semibold text-center p-2 w-8">#</th>
                 <th className="text-xs font-semibold text-left p-2 min-w-[180px]">Personal</th>
                 <th className="text-xs font-semibold text-center p-2">Operario</th>
@@ -714,6 +783,7 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
                 <th className="text-xs font-semibold text-center p-2 text-emerald-600">B/H Neta</th>
                 <th className="text-xs font-semibold text-center p-2">Meses</th>
                 <th className="text-xs font-semibold text-center p-2">Categoria</th>
+                <th className="text-xs font-semibold text-center p-2">Tendencia</th>
                 <th className="text-xs font-semibold text-center p-2">Comparar</th>
               </tr>
             </thead>
@@ -722,23 +792,139 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
                 const catIcon = r.category === "top" ? "▲" : r.category === "average" ? "●" : "▼";
                 const catColor = r.category === "top" ? "text-emerald-600" : r.category === "average" ? "text-amber-600" : "text-red-600";
                 const isAdded = compareOperarios.indexOf(r.operario) >= 0;
+                const isExpanded = expandedRows.has(r.operario);
+                const monthlyData = personMonthly[r.operario] || [];
+
+                // Calculate trend: compare last 2 months B/H Neta
+                let trend: "up" | "down" | "flat" | "none" = "none";
+                let trendDiff = 0;
+                if (monthlyData.length >= 2) {
+                  const last = monthlyData[monthlyData.length - 1].bh_neta;
+                  const prev = monthlyData[monthlyData.length - 2].bh_neta;
+                  trendDiff = Math.round((last - prev) * 10) / 10;
+                  if (trendDiff > 0.5) trend = "up";
+                  else if (trendDiff < -0.5) trend = "down";
+                  else trend = "flat";
+                }
+
+                const toggleRow = function() {
+                  setExpandedRows(function(prev) {
+                    const next = new Set(prev);
+                    if (next.has(r.operario)) {
+                      next.delete(r.operario);
+                    } else {
+                      next.add(r.operario);
+                    }
+                    return next;
+                  });
+                };
+
                 return (
-                  <tr key={r.operario} className="border-b hover:bg-muted/50">
-                    <td className="text-xs text-center p-2">{i + 1}</td>
-                    <td className="text-xs font-medium p-2">{r.nombre}</td>
-                    <td className="text-xs text-center p-2 font-mono">{r.operario}</td>
-                    <td className="text-xs text-center p-2">{r.total_bultos.toLocaleString("es-AR")}</td>
-                    <td className="text-xs text-center p-2 text-blue-600">{r.bh_bruta}</td>
-                    <td className="text-xs text-center p-2 font-medium text-emerald-600">{r.bh_neta}</td>
-                    <td className="text-xs text-center p-2">{r.meses}</td>
-                    <td className={"text-xs text-center p-2 font-medium " + catColor}>{catIcon} {CATEGORY_LABELS[r.category as keyof typeof CATEGORY_LABELS]}</td>
-                    <td className="text-xs text-center p-2">
-                      <button onClick={function() { isAdded ? removeCompare(r.operario) : addCompare(r.operario); }}
-                        className={"text-xs px-1.5 py-0.5 rounded " + (isAdded ? "bg-red-100 text-red-600" : "bg-primary/10 text-primary")}>
-                        {isAdded ? "✕" : "+"}
-                      </button>
-                    </td>
-                  </tr>
+                  <Fragment key={r.operario}>
+                    <tr className={"border-b hover:bg-muted/50 cursor-pointer " + (isExpanded ? "bg-muted/30" : "")} onClick={toggleRow}>
+                      <td className="text-xs text-center p-2">
+                        {isExpanded ? <ChevronDown className="h-3.5 w-3.5 inline text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 inline text-muted-foreground" />}
+                      </td>
+                      <td className="text-xs text-center p-2">{i + 1}</td>
+                      <td className="text-xs font-medium p-2">{r.nombre}</td>
+                      <td className="text-xs text-center p-2 font-mono">{r.operario}</td>
+                      <td className="text-xs text-center p-2">{r.total_bultos.toLocaleString("es-AR")}</td>
+                      <td className="text-xs text-center p-2 text-blue-600">{r.bh_bruta}</td>
+                      <td className="text-xs text-center p-2 font-medium text-emerald-600">{r.bh_neta}</td>
+                      <td className="text-xs text-center p-2">{r.meses}</td>
+                      <td className={"text-xs text-center p-2 font-medium " + catColor}>{catIcon} {CATEGORY_LABELS[r.category as keyof typeof CATEGORY_LABELS]}</td>
+                      <td className="text-xs text-center p-2">
+                        {trend === "up" && <span className="text-emerald-600 flex items-center justify-center gap-0.5"><TrendingUp className="h-3.5 w-3.5" />+{trendDiff}</span>}
+                        {trend === "down" && <span className="text-red-600 flex items-center justify-center gap-0.5"><TrendingDown className="h-3.5 w-3.5" />{trendDiff}</span>}
+                        {trend === "flat" && <span className="text-amber-500 flex items-center justify-center gap-0.5"><Minus className="h-3.5 w-3.5" />{trendDiff > 0 ? "+" : ""}{trendDiff}</span>}
+                        {trend === "none" && <span className="text-muted-foreground">—</span>}
+                      </td>
+                      <td className="text-xs text-center p-2" onClick={function(e) { e.stopPropagation(); }}>
+                        <button onClick={function() { isAdded ? removeCompare(r.operario) : addCompare(r.operario); }}
+                          className={"text-xs px-1.5 py-0.5 rounded " + (isAdded ? "bg-red-100 text-red-600" : "bg-primary/10 text-primary")}>
+                          {isAdded ? "✕" : "+"}
+                        </button>
+                      </td>
+                    </tr>
+                    {/* Expanded row with monthly evolution */}
+                    {isExpanded && monthlyData.length > 0 && (
+                      <tr className="border-b bg-muted/10">
+                        <td colSpan={11} className="p-0">
+                          <div className="p-4 space-y-3">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-sm font-semibold">{r.nombre}</span>
+                              <span className="text-xs text-muted-foreground font-mono">({r.operario})</span>
+                              <span className={"text-xs font-medium " + catColor}>
+                                {r.category === "top" ? "▲ Mejor" : r.category === "average" ? "● Promedio" : "▼ Por debajo"}
+                              </span>
+                            </div>
+                            {/* Mini evolution chart */}
+                            <div className="h-[180px]">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={monthlyData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                                  <XAxis dataKey="monthLabel" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                                  <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} domain={["dataMin - 5", "dataMax + 5"]} />
+                                  <Tooltip content={<EvolutionTooltip />} />
+                                  <ReferenceLine y={globalAvg} stroke="#eab308" strokeDasharray="6 3" label={{ value: "Prom: " + globalAvg, position: "insideTopRight", fill: "#eab308", fontSize: 9 }} />
+                                  <Area type="monotone" dataKey="bh_neta" name="B/H Neta" stroke="#10b981" fill="#10b981" fillOpacity={0.15} strokeWidth={2} dot={{ r: 4, fill: "#fff", stroke: "#10b981", strokeWidth: 2 }} />
+                                </AreaChart>
+                              </ResponsiveContainer>
+                            </div>
+                            {/* Monthly detail table */}
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="border-b">
+                                    <th className="text-xs font-semibold text-center p-2">Mes</th>
+                                    <th className="text-xs font-semibold text-center p-2">Bultos</th>
+                                    <th className="text-xs font-semibold text-center p-2">Dias</th>
+                                    <th className="text-xs font-semibold text-center p-2 text-blue-600">B/H Bruta</th>
+                                    <th className="text-xs font-semibold text-center p-2 text-emerald-600">B/H Neta</th>
+                                    <th className="text-xs font-semibold text-center p-2">vs Prom.</th>
+                                    <th className="text-xs font-semibold text-center p-2">vs Mes Ant.</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {monthlyData.map(function(m: any, mi: number) {
+                                    const diffVsAvg = Math.round((m.bh_neta - globalAvg) * 10) / 10;
+                                    const diffVsPrev = mi > 0 ? Math.round((m.bh_neta - monthlyData[mi - 1].bh_neta) * 10) / 10 : null;
+                                    return (
+                                      <tr key={m.ym} className="border-b hover:bg-muted/50">
+                                        <td className="text-xs text-center p-2 font-medium">{m.monthLabel}</td>
+                                        <td className="text-xs text-center p-2">{m.total_bultos.toLocaleString("es-AR")}</td>
+                                        <td className="text-xs text-center p-2">{m.dias}</td>
+                                        <td className="text-xs text-center p-2 text-blue-600">{m.bh_bruta}</td>
+                                        <td className="text-xs text-center p-2 font-medium text-emerald-600">{m.bh_neta}</td>
+                                        <td className={"text-xs text-center p-2 font-medium " + (diffVsAvg >= 0 ? "text-emerald-600" : "text-red-600")}>
+                                          {diffVsAvg >= 0 ? "+" : ""}{diffVsAvg}
+                                        </td>
+                                        <td className={"text-xs text-center p-2 font-medium " + (
+                                          diffVsPrev === null ? "" :
+                                          diffVsPrev > 0.5 ? "text-emerald-600" :
+                                          diffVsPrev < -0.5 ? "text-red-600" :
+                                          "text-amber-500"
+                                        )}>
+                                          {diffVsPrev === null ? "—" : (diffVsPrev > 0 ? "+" : "") + diffVsPrev}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    {isExpanded && monthlyData.length === 0 && (
+                      <tr className="border-b bg-muted/10">
+                        <td colSpan={11} className="p-3 text-xs text-muted-foreground text-center">
+                          Sin datos mensuales disponibles para este colaborador
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
             </tbody>
