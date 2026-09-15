@@ -92,3 +92,30 @@ Stage Summary:
 - Evolution chart shows daily B/H Neta and B/H Bruta trend for selected collaborator
 - Clicking any row in ranking tables selects that collaborador for evolution view
 - Restored upload route that was accidentally deleted
+
+---
+Task ID: 2
+Agent: main
+Task: Change Comparativo tab from daily to monthly comparison
+
+Work Log:
+- Rewrote /api/comparativo/route.ts to aggregate data by month (YYYYMM)
+- Added monthly aggregation: groups daily data per (month, person), calculates monthly B/H Neta
+- Added monthlyAvg: average B/H Neta per month across all collaborators
+- Added monthlyChartData: per-person monthly columns for grouped bar chart
+- Added monthLabels: list of month labels for chart legend
+- Added 'meses' count per person in ranking
+- Evolution now returns monthly data instead of daily
+- Rewrote comparativo-tab.tsx for monthly view
+- Added grouped ComposedChart showing all months as separate bars per person
+- Evolution chart shows month-by-month B/H Neta, B/H Bruta, and monthly average line
+- Detail table shows Mes, Bultos, Dias, Produccion, B/H Bruta, B/H Neta, Prom. Mes, vs Prom. Gral.
+- Ranking tables show Meses count instead of Dias
+- KPI card shows month count
+- Build and deploy successful
+
+Stage Summary:
+- Comparativo now compares by months as requested
+- New monthly grouped chart shows all collaborators with bars per month
+- Evolution chart shows month-by-month trend with monthly average reference line
+- Deployed to Vercel
