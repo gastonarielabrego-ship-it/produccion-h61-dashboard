@@ -285,6 +285,15 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
     return rows;
   }, [top10, average10, below10, ranking]);
 
+  // Filtered ranking for the search box — must be called before any early returns (Rules of Hooks)
+  const filteredRanking = useMemo(function() {
+    if (!fRankingSearch.trim()) return ranking;
+    const q = fRankingSearch.trim().toUpperCase();
+    return ranking.filter(function(r: any) {
+      return r.nombre.toUpperCase().indexOf(q) >= 0 || r.operario.toUpperCase().indexOf(q) >= 0;
+    });
+  }, [ranking, fRankingSearch]);
+
   const hasFilters = fDesde || fHasta || fTurno || fTipo || fActividad || fRankingSearch;
   const clearFilters = function() { setFDesde(""); setFHasta(""); setFTurno(""); setFTipo(""); setFActividad(""); setFRankingSearch(""); setCompareOperarios([]); setCompareSearch(""); };
 
@@ -307,15 +316,6 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
   const topCount = ranking.filter(function(r: any) { return r.category === "top"; }).length;
   const avgCount = ranking.filter(function(r: any) { return r.category === "average"; }).length;
   const belowCount = ranking.filter(function(r: any) { return r.category === "below"; }).length;
-
-  // Filtered ranking for the search box
-  const filteredRanking = useMemo(function() {
-    if (!fRankingSearch.trim()) return ranking;
-    const q = fRankingSearch.trim().toUpperCase();
-    return ranking.filter(function(r: any) {
-      return r.nombre.toUpperCase().indexOf(q) >= 0 || r.operario.toUpperCase().indexOf(q) >= 0;
-    });
-  }, [ranking, fRankingSearch]);
 
   return (
     <div className="space-y-6">
