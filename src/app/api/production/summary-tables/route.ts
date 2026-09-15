@@ -140,11 +140,13 @@ export async function GET(request: Request) {
         }
       }
       const tmMin = filters.operario ? (tmByDateOpAll[(date + ":" + filters.operario)] || 0) : (tmByDateAll[date] || 0);
-      const tmH = Math.round((tmMin / 60) * 100) / 100;
+      // Cap TM to hb: TM cannot exceed worked hours (data entry errors)
+      const tmHRaw = Math.round((tmMin / 60) * 100) / 100;
+      const tmH = Math.min(tmHRaw, hb);
       const hn = Math.round((hb - tmH) * 100) / 100;
       const prod = misiones > 0 ? Math.round((bultos / misiones) * 10) / 10 : 0;
       const bhB = hb > 0 ? Math.round((bultos / hb) * 10) / 10 : 0;
-      const bhN = hn > 0 ? Math.round((bultos / hn) * 10) / 10 : 0;
+      const bhN = hn > 0 ? Math.round((bultos / hn) * 10) / 10 : bhB;
       dailyMetrics.push({ date, misiones, bultos, horasProductivas: hb, tmHoras: tmH, horasNetas: hn, produccion: prod, bultosPorHoraBruta: bhB, bultosPorHoraNeta: bhN, horasExtras: Math.round(heDia * 100) / 100, misionesConHE: opConHEDia });
     }
 
@@ -207,11 +209,13 @@ export async function GET(request: Request) {
           }
         }
       }
-      const tmH = Math.round((tmMin / 60) * 100) / 100;
+      // Cap TM to hb: TM cannot exceed worked hours (data entry errors)
+      const tmHRaw = Math.round((tmMin / 60) * 100) / 100;
+      const tmH = Math.min(tmHRaw, hb);
       const hn = Math.round((hb - tmH) * 100) / 100;
       const prod = misiones > 0 ? Math.round((bultos / misiones) * 10) / 10 : 0;
       const bhB = hb > 0 ? Math.round((bultos / hb) * 10) / 10 : 0;
-      const bhN = hn > 0 ? Math.round((bultos / hn) * 10) / 10 : 0;
+      const bhN = hn > 0 ? Math.round((bultos / hn) * 10) / 10 : bhB;
 
       const prev = i > 0 ? monthlyData[i - 1] : null;
       const prevDays = prev ? prev.dias : 0;
