@@ -70,3 +70,25 @@ Stage Summary:
 - New "Hs. Extras" tab deployed with monthly overtime comparison
 - Restored /api/admin/upload route for data uploads
 - All previous fixes preserved (midnight wrap-around, TM calculation)
+
+---
+Task ID: 1
+Agent: main
+Task: Add Comparativo tab to dashboard with ranking, top/avg/below 10, and collaborator evolution chart
+
+Work Log:
+- Explored codebase: page.tsx, rendimientos-tab.tsx, rendimientos API, schema, chart patterns
+- Created /api/comparativo/route.ts — full API with ranking, top10, average10, below10, globalAvg, stdDev, evolution data
+- Created /components/dashboard/comparativo-tab.tsx — full UI with filters, KPI cards, horizontal bar chart (recharts), 3 ranking cards, evolution line chart with daily detail table, full ranking table, Excel download
+- Added Comparativo tab to page.tsx with GitCompare icon
+- Fixed accidental deletion of /api/admin/upload/route.ts during deploy
+- Build verified successfully
+- Deployed to Vercel via git push
+
+Stage Summary:
+- New Comparativo tab live at https://produccion-h61-dashboard.vercel.app
+- API: /api/comparativo returns ranking with category classification (top/average/below)
+- Categories based on globalAvg ± 0.5*stdDev thresholds
+- Evolution chart shows daily B/H Neta and B/H Bruta trend for selected collaborator
+- Clicking any row in ranking tables selects that collaborador for evolution view
+- Restored upload route that was accidentally deleted
