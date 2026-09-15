@@ -31,6 +31,19 @@ function calcHorasBrutas(hoursArr: number[]): number {
   return newMax - newMin + 1;
 }
 
+// ── Month label from YYYYMM integer ──
+const MONTH_NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+function getMonthLabel(ym: number): string {
+  const month = ym % 100;
+  const year = Math.floor(ym / 100);
+  return MONTH_NAMES[month - 1] + " " + String(year).slice(2);
+}
+
+// ── Extract YYYYMM from fecha integer (e.g. 20260715 → 202607) ──
+function toYYYYMM(fecha: number): number {
+  return Math.floor(fecha / 100);
+}
+
 export async function GET(request: Request) {
   try {
     await ensureNominaOverrideTable();
@@ -99,7 +112,7 @@ export async function GET(request: Request) {
       }
     }
 
-    // ── 4. Build daily rows (same as rendimientos) ──
+    // ── 4. Build daily rows ──
     const daily: any[] = [];
     const keys = Object.keys(personDateMap);
     for (let i = 0; i < keys.length; i++) {
@@ -119,6 +132,7 @@ export async function GET(request: Request) {
         operario: entry.operario,
         nombre: entry.nombre,
         fecha: fecha,
+        ym: toYYYYMM(fecha),
         bultos: bultos,
         hs_brutas: hsBrutas,
         tm_hs: tmHs,
@@ -128,7 +142,47 @@ export async function GET(request: Request) {
       });
     }
 
-    // ── 5. Summary per person ──
+    // ── 5. Aggregate per (month, person) for monthly comparison ──
+    const monthlyMap: Record<string, { operario: string; nombre: string; ym: number; total_bultos: number; total_hs_brutas: number; total_hs_netas: number; total_tm: number; dias: number }> = {};
+    for (let i = 0; i < daily.length; i++) {
+      const d = daily[i];
+      const mKey = d.ym + ":" + d.operario;
+      if (!monthlyMap[mKey]) {
+        monthlyMap[mKey] = { operario: d.operario, nombre: d.nombre, ym: d.ym, total_bultos: 0, total_hs_brutas: 0, total_hs_netas: 0, total_tm: 0, dias: 0 };
+      }
+      const m = monthlyMap[mKey];
+      m.total_bultos += d.bultos;
+      m.total_hs_brutas += d.hs_brutas;
+      m.total_hs_netas += d.hs_netas;
+      m.total_tm += d.tm_hs;
+      m.dias += 1;
+    }
+
+    // Build monthly rows
+    const monthly: any[] = [];
+    const mKeys = Object.keys(monthlyMap);
+    for (let i = 0; i < mKeys.length; i++) {
+      const m = monthlyMap[mKeys[i]];
+      const bhBruta = m.total_hs_brutas > 0 ? Math.round((m.total_bultos / m.total_hs_brutas) * 10) / 10 : 0;
+      const bhNeta = m.total_hs_netas > 0 ? Math.round((m.total_bultos / m.total_hs_netas) * 10) / 10 : 0;
+      const produccion = m.dias > 0 ? Math.round((m.total_bultos / m.dias) * 10) / 10 : 0;
+      monthly.push({
+        operario: m.operario,
+        nombre: m.nombre,
+        ym: m.ym,
+        monthLabel: getMonthLabel(m.ym),
+        total_bultos: m.total_bultos,
+        total_hs_brutas: Math.round(m.total_hs_brutas * 100) / 100,
+        total_hs_netas: Math.round(m.total_hs_netas * 100) / 100,
+        total_tm: Math.round(m.total_tm * 100) / 100,
+        bh_bruta: bhBruta,
+        bh_neta: bhNeta,
+        produccion: produccion,
+        dias: m.dias,
+      });
+    }
+
+    // ── 6. Summary per person (overall) ──
     const summaryMap: Record<string, { operario: string; nombre: string; total_bultos: number; total_hs_brutas: number; total_tm: number; total_hs_netas: number; dias: number }> = {};
     for (let i = 0; i < daily.length; i++) {
       const d = daily[i];
@@ -164,20 +218,30 @@ export async function GET(request: Request) {
         bh_neta: bhNeta,
         produccion: produccion,
         dias: s.dias,
+        meses: 0, // will be filled below
       });
     }
     // Sort by B/H Neta descending
     ranking.sort(function(a, b) { return b.bh_neta - a.bh_neta; });
 
-    // ── 6. Classify: top 10, average range, below 10 ──
-    // Calculate global average B/H Neta
+    // Count months per person
+    const personMonthSet: Record<string, Set<number>> = {};
+    for (let i = 0; i < monthly.length; i++) {
+      const m = monthly[i];
+      if (!personMonthSet[m.nombre]) personMonthSet[m.nombre] = new Set<number>();
+      personMonthSet[m.nombre].add(m.ym);
+    }
+    for (let i = 0; i < ranking.length; i++) {
+      ranking[i].meses = personMonthSet[ranking[i].nombre] ? personMonthSet[ranking[i].nombre].size : 0;
+    }
+
+    // ── 7. Classify: top 10, average range, below 10 ──
     let totalBhNeta = 0;
     for (let i = 0; i < ranking.length; i++) {
       totalBhNeta += ranking[i].bh_neta;
     }
     const globalAvg = ranking.length > 0 ? Math.round((totalBhNeta / ranking.length) * 10) / 10 : 0;
 
-    // Calculate standard deviation
     let sumSqDiff = 0;
     for (let i = 0; i < ranking.length; i++) {
       const diff = ranking[i].bh_neta - globalAvg;
@@ -185,7 +249,6 @@ export async function GET(request: Request) {
     }
     const stdDev = ranking.length > 1 ? Math.round(Math.sqrt(sumSqDiff / ranking.length) * 10) / 10 : 0;
 
-    // Classify each person
     const avgLow = globalAvg - stdDev * 0.5;
     const avgHigh = globalAvg + stdDev * 0.5;
 
@@ -207,33 +270,74 @@ export async function GET(request: Request) {
       }
     }
 
-    // ── 7. Evolution data for a specific collaborator ──
+    // ── 8. Monthly comparison data (all persons, all months) ──
+    // For the comparative chart: one entry per person with monthly columns
+    const allMonthsSet = new Set<number>();
+    for (let i = 0; i < monthly.length; i++) {
+      allMonthsSet.add(monthly[i].ym);
+    }
+    const allMonths = Array.from(allMonthsSet).sort(function(a, b) { return a - b; });
+    const monthLabels = allMonths.map(function(ym) { return getMonthLabel(ym); });
+
+    // Monthly per-person for chart: { nombre, operario, "Ene 26": bh_neta, "Feb 26": bh_neta, ... }
+    const monthlyByPerson: Record<string, any> = {};
+    for (let i = 0; i < monthly.length; i++) {
+      const m = monthly[i];
+      const k = m.nombre;
+      if (!monthlyByPerson[k]) {
+        monthlyByPerson[k] = { nombre: m.nombre, operario: m.operario, fullName: m.nombre, category: "" };
+      }
+      monthlyByPerson[k][m.monthLabel] = m.bh_neta;
+    }
+    // Assign category from ranking
+    for (let i = 0; i < ranking.length; i++) {
+      const r = ranking[i];
+      if (monthlyByPerson[r.nombre]) {
+        monthlyByPerson[r.nombre].category = r.category;
+      }
+    }
+    const monthlyChartData = Object.values(monthlyByPerson);
+
+    // ── 9. Evolution data for a specific collaborator (by month) ──
     let evolution: any[] = [];
     if (operarioParam) {
-      // Get daily data for this operario, sorted by fecha
-      const personDaily = daily.filter(function(d) { return d.operario === operarioParam; });
-      personDaily.sort(function(a, b) { return a.fecha - b.fecha; });
-      evolution = personDaily.map(function(d) {
-        const day = d.fecha % 100;
-        const month = Math.floor(d.fecha / 100) % 100;
+      // Aggregate daily data by month for this operario
+      const personMonthly = monthly.filter(function(m) { return m.operario === operarioParam; });
+      personMonthly.sort(function(a, b) { return a.ym - b.ym; });
+      evolution = personMonthly.map(function(m) {
         return {
-          fecha: d.fecha,
-          fechaLabel: String(day).padStart(2, "0") + "/" + String(month).padStart(2, "0"),
-          bultos: d.bultos,
-          bh_bruta: d.bh_bruta,
-          bh_neta: d.bh_neta,
-          hs_brutas: d.hs_brutas,
-          hs_netas: d.hs_netas,
+          ym: m.ym,
+          monthLabel: m.monthLabel,
+          total_bultos: m.total_bultos,
+          bh_bruta: m.bh_bruta,
+          bh_neta: m.bh_neta,
+          hs_brutas: m.total_hs_brutas,
+          hs_netas: m.total_hs_netas,
+          produccion: m.produccion,
+          dias: m.dias,
         };
       });
     }
 
-    // ── 8. Available dates ──
-    const dateSet = new Set<number>();
-    for (let i = 0; i < daily.length; i++) {
-      dateSet.add(daily[i].fecha);
+    // ── 10. Available months ──
+    const dates = allMonths;
+
+    // ── 11. Monthly averages per month (for reference lines in evolution) ──
+    const monthlyAvg: any[] = [];
+    for (let i = 0; i < allMonths.length; i++) {
+      const ym = allMonths[i];
+      const monthData = monthly.filter(function(m) { return m.ym === ym; });
+      let sumBhNeta = 0;
+      for (let j = 0; j < monthData.length; j++) {
+        sumBhNeta += monthData[j].bh_neta;
+      }
+      monthlyAvg.push({
+        ym: ym,
+        monthLabel: getMonthLabel(ym),
+        avgBhNeta: monthData.length > 0 ? Math.round((sumBhNeta / monthData.length) * 10) / 10 : 0,
+        personas: monthData.length,
+      });
     }
-    const dates = Array.from(dateSet).sort(function(a, b) { return a - b; });
 
     return NextResponse.json({
       ranking: ranking,
@@ -245,6 +349,9 @@ export async function GET(request: Request) {
       avgLow: Math.round(avgLow * 10) / 10,
       avgHigh: Math.round(avgHigh * 10) / 10,
       evolution: evolution,
+      monthlyAvg: monthlyAvg,
+      monthlyChartData: monthlyChartData,
+      monthLabels: monthLabels,
       totalPeople: ranking.length,
       dates: dates,
     });

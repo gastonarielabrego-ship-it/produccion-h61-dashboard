@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Filter, X, TrendingUp, TrendingDown, Minus, BarChart3, User, Trophy, Target, ArrowDownCircle } from "lucide-react";
+import { Filter, X, TrendingUp, TrendingDown, Minus, BarChart3, User, Trophy, Target, ArrowDownCircle, Calendar } from "lucide-react";
 import { ExcelButton } from "./excel-button";
 import { PrintButton } from "./print-button";
 import {
@@ -18,9 +18,7 @@ import {
   Cell,
   LineChart,
   Line,
-  ScatterChart,
-  Scatter,
-  ZAxis,
+  ComposedChart,
 } from "recharts";
 
 interface ComparativoTabProps { refreshKey?: number }
@@ -36,6 +34,8 @@ const CATEGORY_LABELS = {
   average: "En el promedio",
   below: "Por debajo",
 };
+
+const MONTH_BAR_COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
 
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload || !payload.length) return null;
@@ -67,6 +67,22 @@ function EvolutionTooltip({ active, payload, label }: any) {
   );
 }
 
+function MonthlyTooltip({ active, payload, label }: any) {
+  if (!active || !payload || !payload.length) return null;
+  return (
+    <div className="rounded-lg border bg-background p-3 shadow-md max-h-[200px] overflow-y-auto">
+      <p className="font-semibold text-sm mb-1">{label}</p>
+      {payload.slice(0, 8).map((entry: any, i: number) => (
+        <p key={i} className="text-xs flex items-center gap-1.5">
+          <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
+          {entry.name}: {Number(entry.value).toLocaleString("es-AR")}
+        </p>
+      ))}
+      {payload.length > 8 && <p className="text-xs text-muted-foreground">...y {payload.length - 8} mas</p>}
+    </div>
+  );
+}
+
 export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState(false);
@@ -81,6 +97,7 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
   // Selected collaborator for evolution chart
   const [selectedOperario, setSelectedOperario] = useState("");
   const [evolutionData, setEvolutionData] = useState<any[]>([]);
+  const [monthlyAvgData, setMonthlyAvgData] = useState<any[]>([]);
 
   // Fetch available shifts once
   useEffect(function() {
@@ -120,6 +137,7 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
   const fetchEvolution = useCallback(function() {
     if (!selectedOperario) {
       setEvolutionData([]);
+      setMonthlyAvgData([]);
       return;
     }
     const params = new URLSearchParams();
@@ -134,8 +152,9 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
       .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
       .then(function(d) {
         setEvolutionData(d.evolution || []);
+        setMonthlyAvgData(d.monthlyAvg || []);
       })
-      .catch(function() { setEvolutionData([]); });
+      .catch(function() { setEvolutionData([]); setMonthlyAvgData([]); });
   }, [selectedOperario, fDesde, fHasta, fTurno, fTipo, dateToInt]);
 
   useEffect(function() { fetchEvolution(); }, [fetchEvolution]);
@@ -149,6 +168,8 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
   const avgLow = data ? (data.avgLow || 0) : 0;
   const avgHigh = data ? (data.avgHigh || 0) : 0;
   const totalPeople = data ? (data.totalPeople || 0) : 0;
+  const monthLabels = data ? (data.monthLabels || []) : [];
+  const monthlyChartData = data ? (data.monthlyChartData || []) : [];
 
   // Prepare chart data — truncate long names
   const chartData = useMemo(function() {
@@ -173,35 +194,48 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
     return ranking.find(function(r: any) { return r.operario === selectedOperario; }) || null;
   }, [selectedOperario, ranking]);
 
+  // Evolution chart data: merge personal data with monthly averages
+  const evolutionChartData = useMemo(function() {
+    if (evolutionData.length === 0) return [];
+    return evolutionData.map(function(e: any) {
+      // Find the monthly average for this month
+      const avgEntry = monthlyAvgData.find(function(a: any) { return a.ym === e.ym; });
+      return {
+        ...e,
+        avgBhNeta: avgEntry ? avgEntry.avgBhNeta : globalAvg,
+      };
+    });
+  }, [evolutionData, monthlyAvgData, globalAvg]);
+
   // Excel download data
   const excelRows = useMemo(function() {
     const rows: any[] = [];
     // Top 10
-    rows.push({ Seccion: "TOP 10 MEJORES", Personal: "", "B/H Neta": "", "B/H Bruta": "", Bultos: "", Dias: "" });
+    rows.push({ Seccion: "TOP 10 MEJORES", Personal: "", "B/H Neta": "", "B/H Bruta": "", Bultos: "", Meses: "" });
     for (let i = 0; i < top10.length; i++) {
       const r = top10[i];
-      rows.push({ Seccion: String(i + 1), Personal: r.nombre, "B/H Neta": r.bh_neta, "B/H Bruta": r.bh_bruta, Bultos: r.total_bultos, Dias: r.dias });
+      rows.push({ Seccion: String(i + 1), Personal: r.nombre, "B/H Neta": r.bh_neta, "B/H Bruta": r.bh_bruta, Bultos: r.total_bultos, Meses: r.meses });
     }
-    rows.push({ Seccion: "", Personal: "", "B/H Neta": "", "B/H Bruta": "", Bultos: "", Dias: "" });
+    rows.push({ Seccion: "", Personal: "", "B/H Neta": "", "B/H Bruta": "", Bultos: "", Meses: "" });
     // Average 10
-    rows.push({ Seccion: "10 EN EL PROMEDIO", Personal: "", "B/H Neta": "", "B/H Bruta": "", Bultos: "", Dias: "" });
+    rows.push({ Seccion: "10 EN EL PROMEDIO", Personal: "", "B/H Neta": "", "B/H Bruta": "", Bultos: "", Meses: "" });
     for (let i = 0; i < average10.length; i++) {
       const r = average10[i];
-      rows.push({ Seccion: String(i + 1), Personal: r.nombre, "B/H Neta": r.bh_neta, "B/H Bruta": r.bh_bruta, Bultos: r.total_bultos, Dias: r.dias });
+      rows.push({ Seccion: String(i + 1), Personal: r.nombre, "B/H Neta": r.bh_neta, "B/H Bruta": r.bh_bruta, Bultos: r.total_bultos, Meses: r.meses });
     }
-    rows.push({ Seccion: "", Personal: "", "B/H Neta": "", "B/H Bruta": "", Bultos: "", Dias: "" });
+    rows.push({ Seccion: "", Personal: "", "B/H Neta": "", "B/H Bruta": "", Bultos: "", Meses: "" });
     // Below 10
-    rows.push({ Seccion: "10 POR DEBAJO", Personal: "", "B/H Neta": "", "B/H Bruta": "", Bultos: "", Dias: "" });
+    rows.push({ Seccion: "10 POR DEBAJO", Personal: "", "B/H Neta": "", "B/H Bruta": "", Bultos: "", Meses: "" });
     for (let i = 0; i < below10.length; i++) {
       const r = below10[i];
-      rows.push({ Seccion: String(i + 1), Personal: r.nombre, "B/H Neta": r.bh_neta, "B/H Bruta": r.bh_bruta, Bultos: r.total_bultos, Dias: r.dias });
+      rows.push({ Seccion: String(i + 1), Personal: r.nombre, "B/H Neta": r.bh_neta, "B/H Bruta": r.bh_bruta, Bultos: r.total_bultos, Meses: r.meses });
     }
-    rows.push({ Seccion: "", Personal: "", "B/H Neta": "", "B/H Bruta": "", Bultos: "", Dias: "" });
+    rows.push({ Seccion: "", Personal: "", "B/H Neta": "", "B/H Bruta": "", Bultos: "", Meses: "" });
     // Full ranking
-    rows.push({ Seccion: "RANKING COMPLETO", Personal: "", "B/H Neta": "", "B/H Bruta": "", Bultos: "", Dias: "" });
+    rows.push({ Seccion: "RANKING COMPLETO", Personal: "", "B/H Neta": "", "B/H Bruta": "", Bultos: "", Meses: "" });
     for (let i = 0; i < ranking.length; i++) {
       const r = ranking[i];
-      rows.push({ Seccion: String(i + 1), Personal: r.nombre, "B/H Neta": r.bh_neta, "B/H Bruta": r.bh_bruta, Bultos: r.total_bultos, Dias: r.dias });
+      rows.push({ Seccion: String(i + 1), Personal: r.nombre, "B/H Neta": r.bh_neta, "B/H Bruta": r.bh_bruta, Bultos: r.total_bultos, Meses: r.meses });
     }
     return rows;
   }, [top10, average10, below10, ranking]);
@@ -305,25 +339,25 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <BarChart3 className="h-4 w-4" />
+              <Calendar className="h-4 w-4" />
               <span className="text-xs font-medium">Promedio General</span>
             </div>
             <p className="text-2xl font-bold">{globalAvg}</p>
-            <p className="text-xs text-muted-foreground">Desv. Est. {stdDev}</p>
+            <p className="text-xs text-muted-foreground">Desv. Est. {stdDev} · {monthLabels.length} meses</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Comparative Bar Chart */}
+      {/* Comparative Bar Chart by Person */}
       <Card>
         <CardHeader className="flex flex-row items-start justify-between space-y-0">
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <BarChart3 className="h-4 w-4" />
-              Comparativo por Colaborador — B/H Neta
+              Comparativo por Colaborador — B/H Neta (promedio mensual)
             </CardTitle>
             <CardDescription>
-              {totalPeople} colaboradores · Promedio: {globalAvg} · Rango promedio: {avgLow}–{avgHigh}
+              {totalPeople} colaboradores · Promedio general: {globalAvg} · {monthLabels.join(", ")}
             </CardDescription>
           </div>
           <div className="flex items-center gap-1">
@@ -380,6 +414,66 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
         </CardContent>
       </Card>
 
+      {/* Monthly Comparison Chart — grouped bars by month */}
+      {monthLabels.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Calendar className="h-4 w-4" />
+              Comparativo Mensual — B/H Neta por Mes
+            </CardTitle>
+            <CardDescription>
+              Evolución mensual de cada colaborador · Los colores indican categoría (verde=mejor, amarillo=promedio, rojo=por debajo)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {monthlyChartData.length > 0 ? (
+              <div className="h-[400px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={monthlyChartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis
+                      dataKey="nombre"
+                      tick={{ fontSize: 9 }}
+                      tickLine={false}
+                      axisLine={false}
+                      interval={0}
+                      angle={-45}
+                      textAnchor="end"
+                      height={100}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 11 }}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <Tooltip content={<MonthlyTooltip />} />
+                    <Legend wrapperStyle={{ fontSize: 10, paddingTop: 10 }} iconType="circle" iconSize={8} />
+                    <ReferenceLine y={globalAvg} stroke="#eab308" strokeDasharray="6 3" label={{ value: "Prom", position: "insideTopRight", fill: "#eab308", fontSize: 10 }} />
+                    {monthLabels.map(function(label: string, i: number) {
+                      return (
+                        <Bar
+                          key={label}
+                          dataKey={label}
+                          name={label}
+                          fill={MONTH_BAR_COLORS[i % MONTH_BAR_COLORS.length]}
+                          maxBarSize={15}
+                          radius={[2, 2, 0, 0]}
+                        />
+                      );
+                    })}
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-[100px] flex items-center justify-center text-sm text-muted-foreground">
+                No hay datos mensuales
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Three sections: Top 10, Average 10, Below 10 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Top 10 */}
@@ -397,7 +491,7 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
                   <th className="text-xs font-semibold text-center p-2 w-8">#</th>
                   <th className="text-xs font-semibold text-left p-2">Personal</th>
                   <th className="text-xs font-semibold text-center p-2">B/H Neta</th>
-                  <th className="text-xs font-semibold text-center p-2">Dias</th>
+                  <th className="text-xs font-semibold text-center p-2">Meses</th>
                 </tr>
               </thead>
               <tbody>
@@ -407,7 +501,7 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
                       <td className="text-xs text-center p-2">{i + 1}</td>
                       <td className="text-xs font-medium p-2">{r.nombre}</td>
                       <td className="text-xs text-center p-2 font-medium text-emerald-600">{r.bh_neta}</td>
-                      <td className="text-xs text-center p-2">{r.dias}</td>
+                      <td className="text-xs text-center p-2">{r.meses}</td>
                     </tr>
                   );
                 })}
@@ -434,7 +528,7 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
                   <th className="text-xs font-semibold text-center p-2 w-8">#</th>
                   <th className="text-xs font-semibold text-left p-2">Personal</th>
                   <th className="text-xs font-semibold text-center p-2">B/H Neta</th>
-                  <th className="text-xs font-semibold text-center p-2">Dias</th>
+                  <th className="text-xs font-semibold text-center p-2">Meses</th>
                 </tr>
               </thead>
               <tbody>
@@ -444,7 +538,7 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
                       <td className="text-xs text-center p-2">{i + 1}</td>
                       <td className="text-xs font-medium p-2">{r.nombre}</td>
                       <td className="text-xs text-center p-2 font-medium text-amber-600">{r.bh_neta}</td>
-                      <td className="text-xs text-center p-2">{r.dias}</td>
+                      <td className="text-xs text-center p-2">{r.meses}</td>
                     </tr>
                   );
                 })}
@@ -471,7 +565,7 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
                   <th className="text-xs font-semibold text-center p-2 w-8">#</th>
                   <th className="text-xs font-semibold text-left p-2">Personal</th>
                   <th className="text-xs font-semibold text-center p-2">B/H Neta</th>
-                  <th className="text-xs font-semibold text-center p-2">Dias</th>
+                  <th className="text-xs font-semibold text-center p-2">Meses</th>
                 </tr>
               </thead>
               <tbody>
@@ -481,7 +575,7 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
                       <td className="text-xs text-center p-2">{i + 1}</td>
                       <td className="text-xs font-medium p-2">{r.nombre}</td>
                       <td className="text-xs text-center p-2 font-medium text-red-600">{r.bh_neta}</td>
-                      <td className="text-xs text-center p-2">{r.dias}</td>
+                      <td className="text-xs text-center p-2">{r.meses}</td>
                     </tr>
                   );
                 })}
@@ -494,15 +588,15 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
         </Card>
       </div>
 
-      {/* Evolution / Devolution of a Collaborator */}
+      {/* Evolution / Devolution of a Collaborator (by month) */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-base">
             <User className="h-4 w-4" />
-            Evolución de Colaborador
+            Evolución Mensual de Colaborador
           </CardTitle>
           <CardDescription>
-            Seleccione un colaborador para ver su evolución diaria de B/H Neta y B/H Bruta
+            Seleccione un colaborador para ver su evolución mensual de B/H Neta y B/H Bruta
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -523,9 +617,9 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
             </select>
             {selectedPerson && (
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                <span>B/H Neta promedio: <strong className={selectedPerson.category === "top" ? "text-emerald-600" : selectedPerson.category === "average" ? "text-amber-600" : "text-red-600"}>{selectedPerson.bh_neta}</strong></span>
+                <span>B/H Neta prom.: <strong className={selectedPerson.category === "top" ? "text-emerald-600" : selectedPerson.category === "average" ? "text-amber-600" : "text-red-600"}>{selectedPerson.bh_neta}</strong></span>
                 <span>Bultos: <strong>{selectedPerson.total_bultos.toLocaleString("es-AR")}</strong></span>
-                <span>Dias: <strong>{selectedPerson.dias}</strong></span>
+                <span>Meses: <strong>{selectedPerson.meses}</strong></span>
                 <span className={selectedPerson.category === "top" ? "text-emerald-600 font-semibold" : selectedPerson.category === "average" ? "text-amber-600 font-semibold" : "text-red-600 font-semibold"}>
                   {selectedPerson.category === "top" ? "▲ Mejores" : selectedPerson.category === "average" ? "● Promedio" : "▼ Por debajo"}
                 </span>
@@ -533,15 +627,15 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
             )}
           </div>
 
-          {selectedOperario && evolutionData.length > 0 ? (
+          {selectedOperario && evolutionChartData.length > 0 ? (
             <div className="space-y-4">
-              {/* Evolution line chart */}
+              {/* Evolution line chart by month */}
               <div className="h-[350px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={evolutionData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                  <LineChart data={evolutionChartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis
-                      dataKey="fechaLabel"
+                      dataKey="monthLabel"
                       tick={{ fontSize: 11 }}
                       tickLine={false}
                       axisLine={false}
@@ -553,40 +647,44 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
                     />
                     <Tooltip content={<EvolutionTooltip />} />
                     <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} iconType="circle" iconSize={8} />
-                    <ReferenceLine y={globalAvg} stroke="#eab308" strokeDasharray="6 3" label={{ value: "Prom: " + globalAvg, position: "insideTopRight", fill: "#eab308", fontSize: 10 }} />
-                    <Line type="monotone" dataKey="bh_neta" name="B/H Neta" stroke="#10b981" strokeWidth={2.5} dot={{ r: 4, fill: "#fff", stroke: "#10b981", strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                    <Line type="monotone" dataKey="bh_bruta" name="B/H Bruta" stroke="#6366f1" strokeWidth={2} dot={{ r: 3, fill: "#fff", stroke: "#6366f1", strokeWidth: 2 }} activeDot={{ r: 5 }} />
+                    <ReferenceLine y={globalAvg} stroke="#eab308" strokeDasharray="6 3" label={{ value: "Prom. Gral: " + globalAvg, position: "insideTopRight", fill: "#eab308", fontSize: 10 }} />
+                    <Line type="monotone" dataKey="avgBhNeta" name="Prom. Mensual" stroke="#eab308" strokeWidth={1.5} strokeDasharray="4 2" dot={false} />
+                    <Line type="monotone" dataKey="bh_neta" name="B/H Neta" stroke="#10b981" strokeWidth={2.5} dot={{ r: 5, fill: "#fff", stroke: "#10b981", strokeWidth: 2 }} activeDot={{ r: 7 }} />
+                    <Line type="monotone" dataKey="bh_bruta" name="B/H Bruta" stroke="#6366f1" strokeWidth={2} dot={{ r: 4, fill: "#fff", stroke: "#6366f1", strokeWidth: 2 }} activeDot={{ r: 6 }} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
 
-              {/* Daily detail table */}
+              {/* Monthly detail table */}
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b">
-                      <th className="text-xs font-semibold text-center p-2">Fecha</th>
+                      <th className="text-xs font-semibold text-center p-2">Mes</th>
                       <th className="text-xs font-semibold text-center p-2">Bultos</th>
-                      <th className="text-xs font-semibold text-center p-2">Hs. Brutas</th>
-                      <th className="text-xs font-semibold text-center p-2">Hs. Netas</th>
+                      <th className="text-xs font-semibold text-center p-2">Dias</th>
+                      <th className="text-xs font-semibold text-center p-2">Produccion</th>
                       <th className="text-xs font-semibold text-center p-2 text-blue-600">B/H Bruta</th>
                       <th className="text-xs font-semibold text-center p-2 text-emerald-600">B/H Neta</th>
-                      <th className="text-xs font-semibold text-center p-2">vs Prom.</th>
+                      <th className="text-xs font-semibold text-center p-2">Prom. Mes</th>
+                      <th className="text-xs font-semibold text-center p-2">vs Prom. Gral.</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {evolutionData.map(function(d: any, idx: number) {
-                      const diff = Math.round((d.bh_neta - globalAvg) * 10) / 10;
+                    {evolutionChartData.map(function(d: any, idx: number) {
+                      const diffGral = Math.round((d.bh_neta - globalAvg) * 10) / 10;
+                      const diffMes = d.avgBhNeta ? Math.round((d.bh_neta - d.avgBhNeta) * 10) / 10 : null;
                       return (
                         <tr key={idx} className="border-b hover:bg-muted/50">
-                          <td className="text-xs text-center p-2">{d.fechaLabel}</td>
-                          <td className="text-xs text-center p-2">{d.bultos.toLocaleString("es-AR")}</td>
-                          <td className="text-xs text-center p-2">{d.hs_brutas}</td>
-                          <td className="text-xs text-center p-2">{d.hs_netas}</td>
+                          <td className="text-xs text-center p-2 font-medium">{d.monthLabel}</td>
+                          <td className="text-xs text-center p-2">{d.total_bultos.toLocaleString("es-AR")}</td>
+                          <td className="text-xs text-center p-2">{d.dias}</td>
+                          <td className="text-xs text-center p-2">{d.produccion}</td>
                           <td className="text-xs text-center p-2 text-blue-600">{d.bh_bruta}</td>
-                          <td className="text-xs text-center p-2 text-emerald-600">{d.bh_neta}</td>
-                          <td className={"text-xs text-center p-2 font-medium " + (diff >= 0 ? "text-emerald-600" : "text-red-600")}>
-                            {diff >= 0 ? "+" : ""}{diff}
+                          <td className="text-xs text-center p-2 font-medium text-emerald-600">{d.bh_neta}</td>
+                          <td className="text-xs text-center p-2 text-amber-500">{d.avgBhNeta}</td>
+                          <td className={"text-xs text-center p-2 font-medium " + (diffGral >= 0 ? "text-emerald-600" : "text-red-600")}>
+                            {diffGral >= 0 ? "+" : ""}{diffGral}
                           </td>
                         </tr>
                       );
@@ -597,11 +695,12 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
             </div>
           ) : selectedOperario ? (
             <div className="h-[100px] flex items-center justify-center text-sm text-muted-foreground">
-              Cargando evolución...
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent mr-2" />
+              Cargando evolución mensual...
             </div>
           ) : (
             <div className="h-[100px] flex items-center justify-center text-sm text-muted-foreground">
-              Seleccione un colaborador para ver su evolución
+              Seleccione un colaborador para ver su evolución mensual
             </div>
           )}
         </CardContent>
@@ -623,11 +722,9 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
                 <th className="text-xs font-semibold text-left p-2 min-w-[180px]">Personal</th>
                 <th className="text-xs font-semibold text-center p-2">Operario</th>
                 <th className="text-xs font-semibold text-center p-2">Bultos</th>
-                <th className="text-xs font-semibold text-center p-2">Hs. Brutas</th>
-                <th className="text-xs font-semibold text-center p-2">Hs. Netas</th>
                 <th className="text-xs font-semibold text-center p-2 text-blue-600">B/H Bruta</th>
                 <th className="text-xs font-semibold text-center p-2 text-emerald-600">B/H Neta</th>
-                <th className="text-xs font-semibold text-center p-2">Dias</th>
+                <th className="text-xs font-semibold text-center p-2">Meses</th>
                 <th className="text-xs font-semibold text-center p-2">Categoria</th>
               </tr>
             </thead>
@@ -641,17 +738,15 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
                     <td className="text-xs font-medium p-2">{r.nombre}</td>
                     <td className="text-xs text-center p-2 font-mono">{r.operario}</td>
                     <td className="text-xs text-center p-2">{r.total_bultos.toLocaleString("es-AR")}</td>
-                    <td className="text-xs text-center p-2">{Math.round(r.total_hs_brutas * 100) / 100}</td>
-                    <td className="text-xs text-center p-2">{Math.round(r.total_hs_netas * 100) / 100}</td>
                     <td className="text-xs text-center p-2 text-blue-600">{r.bh_bruta}</td>
                     <td className="text-xs text-center p-2 font-medium text-emerald-600">{r.bh_neta}</td>
-                    <td className="text-xs text-center p-2">{r.dias}</td>
+                    <td className="text-xs text-center p-2">{r.meses}</td>
                     <td className={"text-xs text-center p-2 font-medium " + catColor}>{catIcon} {CATEGORY_LABELS[r.category as keyof typeof CATEGORY_LABELS]}</td>
                   </tr>
                 );
               })}
               {ranking.length === 0 && (
-                <tr><td colSpan={10} className="text-xs text-center p-4 text-muted-foreground">No hay datos</td></tr>
+                <tr><td colSpan={8} className="text-xs text-center p-4 text-muted-foreground">No hay datos</td></tr>
               )}
             </tbody>
           </table>
