@@ -109,7 +109,10 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
   const [fHasta, setFHasta] = useState("");
   const [fTurno, setFTurno] = useState("");
   const [fTipo, setFTipo] = useState("");
+  const [fActividad, setFActividad] = useState("");
+  const [fRankingSearch, setFRankingSearch] = useState("");
   const [shifts, setShifts] = useState<{ value: string; label: string }[]>([]);
+  const [activities, setActivities] = useState<string[]>([]);
 
   // Compare: selected operarios (up to 5)
   const [compareOperarios, setCompareOperarios] = useState<string[]>([]);
@@ -119,12 +122,13 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
   // Accordion: which ranking rows are expanded
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
-  // Fetch available shifts once
+  // Fetch available shifts and activities once
   useEffect(function() {
     fetch("/api/production/dates", { cache: "no-store" })
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (d && d.shifts) setShifts(d.shifts);
+        if (d && d.activities) setActivities(d.activities);
       })
       .catch(function() {});
   }, []);
@@ -144,8 +148,9 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
     if (toNum) params.set("dateTo", toNum);
     if (fTurno) params.set("turno", fTurno);
     if (fTipo) params.set("tipo", fTipo);
+    if (fActividad) params.set("actividad", fActividad);
     return params;
-  }, [fDesde, fHasta, fTurno, fTipo, dateToInt]);
+  }, [fDesde, fHasta, fTurno, fTipo, fActividad, dateToInt]);
 
   const fetchData = useCallback(function() {
     setError(false);
@@ -280,8 +285,8 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
     return rows;
   }, [top10, average10, below10, ranking]);
 
-  const hasFilters = fDesde || fHasta || fTurno || fTipo;
-  const clearFilters = function() { setFDesde(""); setFHasta(""); setFTurno(""); setFTipo(""); setCompareOperarios([]); setCompareSearch(""); };
+  const hasFilters = fDesde || fHasta || fTurno || fTipo || fActividad || fRankingSearch;
+  const clearFilters = function() { setFDesde(""); setFHasta(""); setFTurno(""); setFTipo(""); setFActividad(""); setFRankingSearch(""); setCompareOperarios([]); setCompareSearch(""); };
 
   if (error) return (
     <Card><CardContent className="p-8 text-center">
@@ -302,6 +307,15 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
   const topCount = ranking.filter(function(r: any) { return r.category === "top"; }).length;
   const avgCount = ranking.filter(function(r: any) { return r.category === "average"; }).length;
   const belowCount = ranking.filter(function(r: any) { return r.category === "below"; }).length;
+
+  // Filtered ranking for the search box
+  const filteredRanking = useMemo(function() {
+    if (!fRankingSearch.trim()) return ranking;
+    const q = fRankingSearch.trim().toUpperCase();
+    return ranking.filter(function(r: any) {
+      return r.nombre.toUpperCase().indexOf(q) >= 0 || r.operario.toUpperCase().indexOf(q) >= 0;
+    });
+  }, [ranking, fRankingSearch]);
 
   return (
     <div className="space-y-6">
@@ -339,6 +353,15 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
               <option value="EFECTIVO">Efectivo</option>
               <option value="EVENTUAL">Eventual</option>
             </select>
+            {activities.length > 0 && (
+              <select value={fActividad} onChange={function(e) { setFActividad(e.target.value); }}
+                className="text-xs border rounded px-2 py-1 bg-background">
+                <option value="">Todas las actividades</option>
+                {activities.map(function(a) {
+                  return <option key={a} value={a}>Actividad {a}</option>;
+                })}
+              </select>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -755,20 +778,37 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
           <div>
             <CardTitle className="flex items-center gap-2 text-sm">
               <BarChart3 className="h-4 w-4" />
-              Ranking Completo ({totalPeople} colaboradores)
+              Ranking Completo ({fRankingSearch.trim() ? filteredRanking.length + " de " + totalPeople : totalPeople} colaboradores)
             </CardTitle>
             <CardDescription className="text-xs mt-1">
               Haga clic en un colaborador para desplegar su evolución mensual
             </CardDescription>
           </div>
-          <div className="flex items-center gap-1">
-            <ExcelButton
-              rows={excelRows}
-              filename="Comparativo"
-              sheetName="Ranking"
-              colWidths={[14, 30, 10, 10, 10, 8]}
-            />
-            <PrintButton title="Comparativo" />
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 border rounded px-2 py-1 bg-background">
+              <Search className="h-3 w-3 text-muted-foreground" />
+              <input
+                type="text"
+                value={fRankingSearch}
+                onChange={function(e) { setFRankingSearch(e.target.value); }}
+                placeholder="Buscar colaborador..."
+                className="text-xs bg-transparent outline-none w-[160px]"
+              />
+              {fRankingSearch && (
+                <button onClick={function() { setFRankingSearch(""); }} className="text-muted-foreground hover:text-foreground">
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              <ExcelButton
+                rows={excelRows}
+                filename="Comparativo"
+                sheetName="Ranking"
+                colWidths={[14, 30, 10, 10, 10, 8]}
+              />
+              <PrintButton title="Comparativo" />
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0 overflow-x-auto">
@@ -789,7 +829,7 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
               </tr>
             </thead>
             <tbody>
-              {ranking.map(function(r: any, i: number) {
+              {filteredRanking.map(function(r: any, i: number) {
                 const catIcon = r.category === "top" ? "▲" : r.category === "average" ? "●" : "▼";
                 const catColor = r.category === "top" ? "text-emerald-600" : r.category === "average" ? "text-amber-600" : "text-red-600";
                 const isAdded = compareOperarios.indexOf(r.operario) >= 0;

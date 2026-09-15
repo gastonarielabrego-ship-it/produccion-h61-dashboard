@@ -53,6 +53,7 @@ export async function GET(request: Request) {
     const dateTo = url.searchParams.get("dateTo");
     const tipo = url.searchParams.get("tipo");
     const turno = url.searchParams.get("turno");
+    const actividad = url.searchParams.get("actividad");
     const operariosParam = url.searchParams.getAll("operario"); // multiple operarios for comparison
 
     // Build WHERE clause
@@ -61,6 +62,7 @@ export async function GET(request: Request) {
     if (dateFrom) { conditions.push("fecha >= $dateFrom"); params.dateFrom = Number(dateFrom); }
     if (dateTo) { conditions.push("fecha <= $dateTo"); params.dateTo = Number(dateTo); }
     if (turno) { conditions.push("turno = $turno"); params.turno = turno; }
+    if (actividad) { conditions.push("actividad = $actividad"); params.actividad = Number(actividad); }
     if (tipo === "EFECTIVO") {
       conditions.push("(CAST(SUBSTR(operario, 2) AS INTEGER) < 10247 OR operario IN (SELECT operario FROM nomina_override))");
     } else if (tipo === "EVENTUAL") {
