@@ -53,7 +53,7 @@ export async function GET(request: Request) {
     const dateTo = url.searchParams.get("dateTo");
     const tipo = url.searchParams.get("tipo");
     const turno = url.searchParams.get("turno");
-    const operarioParam = url.searchParams.get("operario"); // for evolution chart
+    const operariosParam = url.searchParams.getAll("operario"); // multiple operarios for comparison
 
     // Build WHERE clause
     const conditions: string[] = [];
@@ -298,25 +298,79 @@ export async function GET(request: Request) {
     }
     const monthlyChartData = Object.values(monthlyByPerson);
 
-    // ── 9. Evolution data for a specific collaborator (by month) ──
-    let evolution: any[] = [];
-    if (operarioParam) {
-      // Aggregate daily data by month for this operario
-      const personMonthly = monthly.filter(function(m) { return m.operario === operarioParam; });
-      personMonthly.sort(function(a, b) { return a.ym - b.ym; });
-      evolution = personMonthly.map(function(m) {
-        return {
-          ym: m.ym,
-          monthLabel: m.monthLabel,
-          total_bultos: m.total_bultos,
-          bh_bruta: m.bh_bruta,
-          bh_neta: m.bh_neta,
-          hs_brutas: m.total_hs_brutas,
-          hs_netas: m.total_hs_netas,
-          produccion: m.produccion,
-          dias: m.dias,
-        };
+    // ── 9. Evolution data for selected collaborators (by month) ──
+    // Returns one series per operario, merged by month for the comparison chart
+    let evolutionSeries: any[] = [];
+    if (operariosParam.length > 0) {
+      // Get monthly data for all selected operarios
+      const selectedMonthly = monthly.filter(function(m) {
+        return operariosParam.indexOf(m.operario) >= 0;
       });
+      // Group by operario
+      const byOperario: Record<string, any[]> = {};
+      for (let i = 0; i < selectedMonthly.length; i++) {
+        const m = selectedMonthly[i];
+        if (!byOperario[m.operario]) byOperario[m.operario] = [];
+        byOperario[m.operario].push(m);
+      }
+      // Build series
+      const oKeys = Object.keys(byOperario);
+      for (let i = 0; i < oKeys.length; i++) {
+        const operario = oKeys[i];
+        const rows = byOperario[operario];
+        rows.sort(function(a, b) { return a.ym - b.ym; });
+        evolutionSeries.push({
+          operario: operario,
+          nombre: rows[0].nombre,
+          category: "",
+          data: rows.map(function(m) {
+            return {
+              ym: m.ym,
+              monthLabel: m.monthLabel,
+              total_bultos: m.total_bultos,
+              bh_bruta: m.bh_bruta,
+              bh_neta: m.bh_neta,
+              produccion: m.produccion,
+              dias: m.dias,
+            };
+          }),
+        });
+      }
+      // Assign category
+      for (let i = 0; i < evolutionSeries.length; i++) {
+        const es = evolutionSeries[i];
+        const r = ranking.find(function(rr: any) { return rr.operario === es.operario; });
+        if (r) es.category = r.category;
+      }
+    }
+
+    // ── 9b. Distribution histogram ──
+    // Bucket B/H Neta values into ranges
+    const distribution: any[] = [];
+    if (ranking.length > 0) {
+      const minVal = ranking[ranking.length - 1].bh_neta;
+      const maxVal = ranking[0].bh_neta;
+      const range = maxVal - minVal;
+      const bucketCount = Math.min(12, Math.max(5, Math.ceil(range / 10)));
+      const bucketSize = range > 0 ? Math.ceil(range / bucketCount) : 10;
+      const baseVal = Math.floor(minVal / bucketSize) * bucketSize;
+      for (let b = 0; b < bucketCount; b++) {
+        const lo = baseVal + b * bucketSize;
+        const hi = lo + bucketSize;
+        const count = ranking.filter(function(r: any) { return r.bh_neta >= lo && r.bh_neta < hi; }).length;
+        const topCount = ranking.filter(function(r: any) { return r.bh_neta >= lo && r.bh_neta < hi && r.category === "top"; }).length;
+        const avgCount2 = ranking.filter(function(r: any) { return r.bh_neta >= lo && r.bh_neta < hi && r.category === "average"; }).length;
+        const belowCount2 = ranking.filter(function(r: any) { return r.bh_neta >= lo && r.bh_neta < hi && r.category === "below"; }).length;
+        distribution.push({
+          range: lo + "-" + hi,
+          lo: lo,
+          hi: hi,
+          count: count,
+          top: topCount,
+          average: avgCount2,
+          below: belowCount2,
+        });
+      }
     }
 
     // ── 10. Available months ──
@@ -348,9 +402,9 @@ export async function GET(request: Request) {
       stdDev: stdDev,
       avgLow: Math.round(avgLow * 10) / 10,
       avgHigh: Math.round(avgHigh * 10) / 10,
-      evolution: evolution,
+      evolutionSeries: evolutionSeries,
+      distribution: distribution,
       monthlyAvg: monthlyAvg,
-      monthlyChartData: monthlyChartData,
       monthLabels: monthLabels,
       totalPeople: ranking.length,
       dates: dates,
