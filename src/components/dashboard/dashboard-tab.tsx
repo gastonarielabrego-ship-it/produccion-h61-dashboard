@@ -11,6 +11,11 @@ function fetchNoCache(url: string) {
   return fetch(url, { cache: "no-store" });
 }
 
+// Parse JSON but return null if the response has an error field
+function safeJsonParse(r: Response) {
+  return r.json().then((data: any) => (data && data.error ? null : data));
+}
+
 interface DashboardTabProps {
   baseQuery: string;
   apiBase?: string;
@@ -29,10 +34,10 @@ export function DashboardTab({ baseQuery, apiBase = "/api/production" }: Dashboa
     const base = baseQuery ? `?${baseQuery}` : "";
 
     Promise.all([
-      fetchNoCache(`${effectiveBase}/hourly-combined${base}`).then((r) => r.json()).catch(() => null),
-      fetchNoCache(`${effectiveBase}/daily-combined${base}`).then((r) => r.json()).catch(() => null),
-      fetchNoCache(`${effectiveBase}/summary${base}`).then((r) => r.json()).catch(() => null),
-      fetchNoCache(`${effectiveBase}/by-shift${base}`).then((r) => r.json()).catch(() => null),
+      fetchNoCache(`${effectiveBase}/hourly-combined${base}`).then(safeJsonParse).catch(() => null),
+      fetchNoCache(`${effectiveBase}/daily-combined${base}`).then(safeJsonParse).catch(() => null),
+      fetchNoCache(`${effectiveBase}/summary${base}`).then(safeJsonParse).catch(() => null),
+      fetchNoCache(`${effectiveBase}/by-shift${base}`).then(safeJsonParse).catch(() => null),
     ]).then(([combinedHourly, daily, summary, activity]) => {
       setCombinedHourlyData(combinedHourly);
       setDailyData(daily);
