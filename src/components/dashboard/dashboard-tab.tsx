@@ -29,15 +29,17 @@ export function DashboardTab({ baseQuery, apiBase = "/api/production" }: Dashboa
     const base = baseQuery ? `?${baseQuery}` : "";
 
     Promise.all([
-      fetchNoCache(`${effectiveBase}/hourly-combined${base}`).then((r) => r.json()),
-      fetchNoCache(`${effectiveBase}/daily-combined${base}`).then((r) => r.json()),
-      fetchNoCache(`${effectiveBase}/summary${base}`).then((r) => r.json()),
-      fetchNoCache(`${effectiveBase}/by-shift${base}`).then((r) => r.json()),
+      fetchNoCache(`${effectiveBase}/hourly-combined${base}`).then((r) => r.json()).catch(() => null),
+      fetchNoCache(`${effectiveBase}/daily-combined${base}`).then((r) => r.json()).catch(() => null),
+      fetchNoCache(`${effectiveBase}/summary${base}`).then((r) => r.json()).catch(() => null),
+      fetchNoCache(`${effectiveBase}/by-shift${base}`).then((r) => r.json()).catch(() => null),
     ]).then(([combinedHourly, daily, summary, activity]) => {
       setCombinedHourlyData(combinedHourly);
       setDailyData(daily);
       setSummaryData(summary);
       setActivityData(activity);
+    }).catch(() => {
+      // All API calls failed — leave data as null (components show loading)
     });
   }, [baseQuery]);
 
