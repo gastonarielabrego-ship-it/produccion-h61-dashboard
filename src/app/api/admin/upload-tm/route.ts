@@ -1,4 +1,4 @@
-import { getClient } from "@/lib/turso";
+import { getClient } from "@/lib/neon";
 import { NextResponse } from "next/server";
 
 export const maxDuration = 60;
@@ -24,7 +24,7 @@ async function handleDelete(dates: number[]): Promise<{ message: string; deleted
   const client = getClient();
   if (dates.length === 0) return { message: "Sin fechas para borrar", deletedDates: [] };
 
-  const ph = dates.map((_, i) => `$d${i}`).join(",");
+  const ph = dates.map((_, i) => `$${i + 1}`).join(",");
   const dp: Record<string, number> = {};
   dates.forEach((d, i) => { dp[`d${i}`] = d; });
 
@@ -33,7 +33,7 @@ async function handleDelete(dates: number[]): Promise<{ message: string; deleted
     args: dp,
   });
 
-  return { message: `${result.rowsAffected ?? "?"} registros previos eliminados`, deletedDates: dates };
+  return { message: `${result.rowCount ?? "?"} registros previos eliminados`, deletedDates: dates };
 }
 
 async function handleInsert(rows: (string | number | null | undefined)[][]): Promise<{ inserted: number; elapsed: string }> {

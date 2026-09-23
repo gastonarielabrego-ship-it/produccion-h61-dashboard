@@ -1,31 +1,9 @@
-import { getClient } from "@/lib/turso";
+import { getClient } from "@/lib/neon";
 import { NextResponse } from "next/server";
 
 export const maxDuration = 60;
 
-function ensureTable() {
-  const client = getClient();
-  return client.batch([
-    { sql: `CREATE TABLE IF NOT EXISTS horas_extras_records (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      cod_empleado INTEGER NOT NULL DEFAULT 0,
-      empresa TEXT NOT NULL DEFAULT '',
-      nombre TEXT NOT NULL DEFAULT '',
-      sector TEXT NOT NULL DEFAULT '',
-      fecha INTEGER NOT NULL DEFAULT 0,
-      dia TEXT NOT NULL DEFAULT '',
-      hs_trabajadas INTEGER NOT NULL DEFAULT 0,
-      hs_extras_50 INTEGER NOT NULL DEFAULT 0,
-      hs_extras_100 INTEGER NOT NULL DEFAULT 0,
-      hs_noct_100 INTEGER NOT NULL DEFAULT 0,
-      hs_noc_trab INTEGER NOT NULL DEFAULT 0,
-      jornada TEXT NOT NULL DEFAULT ''
-    )` },
-    { sql: `CREATE INDEX IF NOT EXISTS idx_he_fecha ON horas_extras_records (fecha)` },
-    { sql: `CREATE INDEX IF NOT EXISTS idx_he_nombre ON horas_extras_records (nombre)` },
-    { sql: `CREATE INDEX IF NOT EXISTS idx_he_dia ON horas_extras_records (dia)` },
-  ]);
-}
+// Tables pre-created via Neon migration
 
 /** Parse time string "H:MM" or "HH:MM" to total minutes */
 function timeToMinutes(t: string | number | null | undefined): number {
@@ -103,16 +81,14 @@ export async function POST(request: Request) {
       if (dates.length === 0) return NextResponse.json({ message: "Sin fechas", deletedDates: [] });
       const client = getClient();
       const ph: string[] = [];
-      const dp: Record<string, number> = {};
       for (let i = 0; i < dates.length; i++) {
-        ph.push("$d" + i);
-        dp["d" + i] = dates[i];
+        ph.push(`$${i + 1}`);
       }
-      const result = await client.execute({
-        sql: "DELETE FROM horas_extras_records WHERE fecha IN (" + ph.join(",") + ")",
-        args: dp,
-      });
-      return NextResponse.json({ message: (result.rowsAffected ?? "?") + " registros eliminados", deletedDates: dates, elapsed: ((Date.now() - t0) / 1000).toFixed(1) + "s" });
+      const result = await client.execute(
+        "DELETE FROM horas_extras_records WHERE fecha IN (" + ph.join(",") + ")",
+        dates,
+      );
+      return NextResponse.json({ message: (result.rowCount ?? "?") + " registros eliminados", deletedDates: dates, elapsed: ((Date.now() - t0) / 1000).toFixed(1) + "s" });
     }
 
     if (action === "insert") {
@@ -173,10 +149,16 @@ export async function POST(request: Request) {
           phArr.push(PH);
           for (let k = 0; k < chunk[j].length; k++) flat.push(chunk[j][k]);
         }
-        await client.execute({
-          sql: "INSERT INTO horas_extras_records (cod_empleado, empresa, nombre, sector, fecha, dia, hs_trabajadas, hs_extras_50, hs_extras_100, hs_noct_100, hs_noc_trab, jornada) VALUES " + phArr.join(", "),
-          args: flat,
-        });
+        // Build PostgreSQL positional params
+        const pgPhArr: string[] = [];
+        const pgFlat: (string | number)[] = [];
+        const colsPerRow = 12;
+        for (let j = 0; j < chunk.length; j++) {
+          const rowPh = chunk[j].map((_, k) => `$${j * colsPerRow + k + 1}`).join(",");
+          pgPhArr.push(`(${rowPh})`);
+          for (let k = 0; k < chunk[j].length; k++) pgFlat.push(chunk[j][k]);
+        }
+        await client.execute("INSERT INTO horas_extras_records (cod_empleado, empresa, nombre, sector, fecha, dia, hs_trabajadas, hs_extras_50, hs_extras_100, hs_noct_100, hs_noc_trab, jornada) VALUES " + pgPhArr.join(", "), pgFlat);
         totalInserted += chunk.length;
       }
 

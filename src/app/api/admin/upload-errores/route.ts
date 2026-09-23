@@ -1,28 +1,9 @@
-import { getClient } from "@/lib/turso";
+import { getClient } from "@/lib/neon";
 import { NextResponse } from "next/server";
 
 export const maxDuration = 60;
 
-function ensureErroresTable() {
-  const client = getClient();
-  return client.batch([
-    { sql: `CREATE TABLE IF NOT EXISTS errores_records (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      fecha_prep INTEGER NOT NULL,
-      fecha_ctrl INTEGER NOT NULL,
-      id_operario TEXT NOT NULL DEFAULT '',
-      tipo_control TEXT NOT NULL DEFAULT '',
-      controlador TEXT NOT NULL DEFAULT '',
-      codigo_producto TEXT NOT NULL DEFAULT '',
-      producto TEXT NOT NULL DEFAULT '',
-      errores INTEGER NOT NULL DEFAULT 1,
-      motivo TEXT NOT NULL DEFAULT ''
-    )` },
-    { sql: `CREATE INDEX IF NOT EXISTS idx_errores_fecha ON errores_records (fecha_prep)` },
-    { sql: `CREATE INDEX IF NOT EXISTS idx_errores_controlador ON errores_records (controlador)` },
-    { sql: `CREATE INDEX IF NOT EXISTS idx_errores_motivo ON errores_records (motivo)` },
-  ]);
-}
+// Tables pre-created via Neon migration
 
 const PH = "(?,?,?,?,?,?,?,?,?)";
 
@@ -59,8 +40,7 @@ function dateToInt(d: string | number | null | undefined): number {
 export async function POST(request: Request) {
   const t0 = Date.now();
   try {
-    await ensureErroresTable();
-    const body = await request.json();
+        const body = await request.json();
     const action = body.action;
 
     if (action === "delete-all") {
@@ -75,17 +55,18 @@ export async function POST(request: Request) {
       const dates: number[] = body.dates || [];
       if (dates.length === 0) return NextResponse.json({ message: "Sin fechas", deletedDates: [] });
       const client = getClient();
+      // PostgreSQL: positional params
+      const dParams: number[] = [];
       const ph: string[] = [];
-      const dp: Record<string, number> = {};
       for (let i = 0; i < dates.length; i++) {
-        ph.push("$d" + i);
-        dp["d" + i] = dates[i];
+        dParams.push(dates[i]);
+        ph.push(`$${i + 1}`);
       }
-      const result = await client.execute({
-        sql: "DELETE FROM errores_records WHERE fecha_prep IN (" + ph.join(",") + ")",
-        args: dp,
-      });
-      return NextResponse.json({ message: (result.rowsAffected ?? "?") + " registros eliminados", deletedDates: dates, elapsed: ((Date.now() - t0) / 1000).toFixed(1) + "s" });
+      const result = await client.execute(
+        "DELETE FROM errores_records WHERE fecha_prep IN (" + ph.join(",") + ")",
+        dParams,
+      );
+      return NextResponse.json({ message: (result.rowCount ?? "?") + " registros eliminados", deletedDates: dates, elapsed: ((Date.now() - t0) / 1000).toFixed(1) + "s" });
     }
 
     if (action === "insert") {
@@ -183,7 +164,15 @@ export async function POST(request: Request) {
           phArr.push(PH);
           for (let k = 0; k < chunk[j].length; k++) flat.push(chunk[j][k]);
         }
-        await client.execute({ sql: "INSERT INTO errores_records (fecha_prep, fecha_ctrl, id_operario, tipo_control, controlador, codigo_producto, producto, errores, motivo) VALUES " + phArr.join(", "), args: flat });
+        // Build positional params for PostgreSQL
+        const pgPhArr: string[] = [];
+        const pgFlat: (string | number)[] = [];
+        for (let j = 0; j < chunk.length; j++) {
+          const rowPh = chunk[j].map((_, k) => `$${j * chunk[j].length + k + 1}`).join(",");
+          pgPhArr.push(`(${rowPh})`);
+          for (let k = 0; k < chunk[j].length; k++) pgFlat.push(chunk[j][k]);
+        }
+        await client.execute("INSERT INTO errores_records (fecha_prep, fecha_ctrl, id_operario, tipo_control, controlador, codigo_producto, producto, errores, motivo) VALUES " + pgPhArr.join(", "), pgFlat);
         totalInserted += chunk.length;
       }
 
@@ -199,8 +188,7 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
-    await ensureErroresTable();
-    const client = getClient();
+        const client = getClient();
     const result = await client.execute("SELECT COUNT(*) as cnt FROM errores_records");
     return NextResponse.json({ ok: true, count: Number(result.rows[0]?.cnt ?? 0) });
   } catch (error: any) {

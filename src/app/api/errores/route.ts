@@ -1,30 +1,10 @@
-import { getClient } from "@/lib/turso";
+import { getClient } from "@/lib/neon";
 import { NextResponse } from "next/server";
 
-async function ensureTable() {
-  const client = getClient();
-  return client.batch([
-    { sql: `CREATE TABLE IF NOT EXISTS errores_records (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      fecha_prep INTEGER NOT NULL,
-      fecha_ctrl INTEGER NOT NULL,
-      id_operario TEXT NOT NULL DEFAULT '',
-      tipo_control TEXT NOT NULL DEFAULT '',
-      controlador TEXT NOT NULL DEFAULT '',
-      codigo_producto TEXT NOT NULL DEFAULT '',
-      producto TEXT NOT NULL DEFAULT '',
-      errores INTEGER NOT NULL DEFAULT 1,
-      motivo TEXT NOT NULL DEFAULT ''
-    )` },
-    { sql: `CREATE INDEX IF NOT EXISTS idx_errores_fecha ON errores_records (fecha_prep)` },
-    { sql: `CREATE INDEX IF NOT EXISTS idx_errores_motivo ON errores_records (motivo)` },
-    { sql: `CREATE INDEX IF NOT EXISTS idx_errores_tipo_ctrl ON errores_records (tipo_control)` },
-  ]);
-}
+// Tables are pre-created via Neon migration script
 
 export async function GET(request: Request) {
   try {
-    await ensureTable();
     const client = getClient();
     const url = new URL(request.url);
 
@@ -32,18 +12,21 @@ export async function GET(request: Request) {
     const dateTo = url.searchParams.get("dateTo");
     const motivo = url.searchParams.get("motivo");
 
+    // Build WHERE clause (PostgreSQL: positional params)
     const conditions: string[] = [];
-    const params: Record<string, string | number> = {};
+    const params: (string | number)[] = [];
+    let pIdx = 1;
+    const addParam = (v: string | number): string => { params.push(v); return `$${pIdx++}`; };
 
-    if (dateFrom) { conditions.push("fecha_prep >= $df"); params.df = Number(dateFrom); }
-    if (dateTo) { conditions.push("fecha_prep <= $dt"); params.dt = Number(dateTo); }
-    if (motivo) { conditions.push("motivo = $motivo"); params.motivo = motivo; }
+    if (dateFrom) { conditions.push(`fecha_prep >= ${addParam(Number(dateFrom))}`); }
+    if (dateTo) { conditions.push(`fecha_prep <= ${addParam(Number(dateTo))}`); }
+    if (motivo) { conditions.push(`motivo = ${addParam(motivo)}`); }
 
     const where = conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
 
-    // Monthly summary (without controladores)
-    const monthlyResult = await client.execute({
-      sql: `SELECT
+    // Monthly summary
+    const monthlyResult = await client.execute(
+      `SELECT
         fecha_prep / 100 as month_key,
         COUNT(*) as total_errores,
         COUNT(DISTINCT fecha_prep) as dias,
@@ -51,12 +34,12 @@ export async function GET(request: Request) {
       FROM errores_records ${where}
       GROUP BY month_key
       ORDER BY month_key`,
-      args: params,
-    });
+      params,
+    );
 
     // FAL/SOB breakdown by month
-    const falSobResult = await client.execute({
-      sql: `SELECT
+    const falSobResult = await client.execute(
+      `SELECT
         fecha_prep / 100 as month_key,
         motivo,
         COUNT(*) as total,
@@ -64,36 +47,36 @@ export async function GET(request: Request) {
       FROM errores_records ${where}
       GROUP BY month_key, motivo
       ORDER BY month_key`,
-      args: params,
-    });
+      params,
+    );
 
     // By motivo summary
-    const motivoResult = await client.execute({
-      sql: `SELECT motivo, COUNT(*) as total, SUM(errores) as suma FROM errores_records ${where} GROUP BY motivo ORDER BY total DESC`,
-      args: params,
-    });
+    const motivoResult = await client.execute(
+      `SELECT motivo, COUNT(*) as total, SUM(errores) as suma FROM errores_records ${where} GROUP BY motivo ORDER BY total DESC`,
+      params,
+    );
 
     // Ranking by personal with FAL/SOB breakdown
-    const rankingResult = await client.execute({
-      sql: `SELECT tipo_control, motivo, COUNT(*) as total, SUM(errores) as suma FROM errores_records ${where} GROUP BY tipo_control, motivo ORDER BY tipo_control`,
-      args: params,
-    });
+    const rankingResult = await client.execute(
+      `SELECT tipo_control, motivo, COUNT(*) as total, SUM(errores) as suma FROM errores_records ${where} GROUP BY tipo_control, motivo ORDER BY tipo_control`,
+      params,
+    );
 
     // Daily data for chart
-    const dailyResult = await client.execute({
-      sql: `SELECT
+    const dailyResult = await client.execute(
+      `SELECT
         fecha_prep as date,
         COUNT(*) as total,
         SUM(errores) as suma
       FROM errores_records ${where}
       GROUP BY fecha_prep
       ORDER BY fecha_prep`,
-      args: params,
-    });
+      params,
+    );
 
-    // By motivo per month (FAL/SOB by month)
-    const motivoMonthResult = await client.execute({
-      sql: `SELECT
+    // By motivo per month
+    const motivoMonthResult = await client.execute(
+      `SELECT
         fecha_prep / 100 as month_key,
         motivo,
         COUNT(*) as total,
@@ -101,8 +84,8 @@ export async function GET(request: Request) {
       FROM errores_records ${where}
       GROUP BY month_key, motivo
       ORDER BY month_key, motivo`,
-      args: params,
-    });
+      params,
+    );
 
     const MONTH_NAMES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
@@ -123,7 +106,6 @@ export async function GET(request: Request) {
       });
     }
 
-    // Fill FAL/SOB per month from motivoMonthResult
     for (let i = 0; i < motivoMonthResult.rows.length; i++) {
       const row = motivoMonthResult.rows[i];
       const mk = Number(row.month_key);
@@ -148,7 +130,6 @@ export async function GET(request: Request) {
       });
     }
 
-    // Build ranking with FAL/SOB per person
     const rankingMap: Record<string, { nombre: string; total: number; suma: number; fal: number; sob: number }> = {};
     for (let i = 0; i < rankingResult.rows.length; i++) {
       const row = rankingResult.rows[i];
@@ -170,9 +151,7 @@ export async function GET(request: Request) {
     for (let i = 0; i < rankingKeys.length; i++) {
       ranking.push(rankingMap[rankingKeys[i]]);
     }
-    // Sort by suma DESC
     ranking.sort(function(a, b) { return b.suma - a.suma; });
-    // Top 30
     if (ranking.length > 30) ranking.length = 30;
 
     const daily: { date: number; total: number; suma: number }[] = [];

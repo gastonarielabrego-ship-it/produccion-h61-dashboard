@@ -1,21 +1,13 @@
-import { getClient } from "@/lib/turso";
+import { getClient } from "@/lib/neon";
 import { NextResponse } from "next/server";
 
-async function ensureTable() {
-  const client = getClient();
-  await client.execute({
-    sql: `CREATE TABLE IF NOT EXISTS nomina_override (operario TEXT PRIMARY KEY, nombre TEXT NOT NULL DEFAULT '', fecha_alta TEXT NOT NULL DEFAULT '')`,
-  });
-}
+// Table pre-created via Neon migration
 
 // GET: list all overrides
 export async function GET() {
   try {
-    await ensureTable();
     const client = getClient();
-    const result = await client.execute({
-      sql: "SELECT * FROM nomina_override ORDER BY nombre",
-    });
+    const result = await client.execute("SELECT * FROM nomina_override ORDER BY nombre");
     return NextResponse.json(result.rows);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -25,24 +17,20 @@ export async function GET() {
 // POST: add/delete operarios from efectivo override
 export async function POST(request: Request) {
   try {
-    await ensureTable();
     const client = getClient();
     const body = await request.json();
 
     if (body.action === "delete-all") {
-      await client.execute({ sql: "DELETE FROM nomina_override" });
+      await client.execute("DELETE FROM nomina_override");
       return NextResponse.json({ message: "Todos los overrides eliminados" });
     }
 
     if (body.action === "delete" && body.operario) {
-      await client.execute({
-        sql: "DELETE FROM nomina_override WHERE operario = ?",
-        args: [body.operario],
-      });
+      await client.execute("DELETE FROM nomina_override WHERE operario = $1", [body.operario]);
       return NextResponse.json({ message: "Override eliminado: " + body.operario });
     }
 
-    // Insert operarios
+    // Insert operarios (PostgreSQL: ON CONFLICT for upsert)
     const operarios: { operario: string; nombre: string }[] = body.operarios || [];
     if (operarios.length === 0) {
       return NextResponse.json({ error: "no operarios provided" }, { status: 400 });
@@ -52,10 +40,10 @@ export async function POST(request: Request) {
     let inserted = 0;
     for (let i = 0; i < operarios.length; i++) {
       const op = operarios[i];
-      await client.execute({
-        sql: "INSERT OR REPLACE INTO nomina_override (operario, nombre, fecha_alta) VALUES (?, ?, ?)",
-        args: [op.operario, op.nombre, today],
-      });
+      await client.execute(
+        "INSERT INTO nomina_override (operario, nombre, fecha_alta) VALUES ($1, $2, $3) ON CONFLICT (operario) DO UPDATE SET nombre = EXCLUDED.nombre, fecha_alta = EXCLUDED.fecha_alta",
+        [op.operario, op.nombre, today],
+      );
       inserted++;
     }
 

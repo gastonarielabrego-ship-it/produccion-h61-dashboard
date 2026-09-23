@@ -2,7 +2,7 @@ import {
   getAllRecords,
   getSourceTable,
   parseFilters,
-} from "@/lib/turso";
+} from "@/lib/neon";
 import { NextResponse } from "next/server";
 
 const SHIFT_LABELS: Record<string, string> = {

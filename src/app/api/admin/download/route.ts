@@ -1,4 +1,4 @@
-import { getClient } from "@/lib/turso";
+import { getClient } from "@/lib/neon";
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 
@@ -12,12 +12,7 @@ export async function GET() {
   try {
     const client = getClient();
 
-    await client.execute(`CREATE TABLE IF NOT EXISTS tiempos_muertos (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, fecha INTEGER NOT NULL,
-      turno TEXT NOT NULL, operario TEXT NOT NULL, nombre TEXT NOT NULL,
-      estado TEXT, motivo INTEGER, minutos INTEGER NOT NULL DEFAULT 0,
-      observacion TEXT, usuario_alta TEXT
-    )`);
+    // Tables pre-created via Neon migration
 
     const result = await client.execute("SELECT * FROM production_records ORDER BY fecha, turno, operario");
     const rows = result.rows;

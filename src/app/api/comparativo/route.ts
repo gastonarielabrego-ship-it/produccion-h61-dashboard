@@ -1,4 +1,4 @@
-import { getClient, ensureNominaOverrideTable } from "@/lib/turso";
+import { getClient, ensureNominaOverrideTable } from "@/lib/neon";
 import { NextResponse } from "next/server";
 
 // ── Shift span calculation (same as rendimientos) ──
@@ -56,37 +56,41 @@ export async function GET(request: Request) {
     const actividad = url.searchParams.get("actividad");
     const operariosParam = url.searchParams.getAll("operario"); // multiple operarios for comparison
 
-    // Build WHERE clause
+    // Build WHERE clause (PostgreSQL: positional params)
     const conditions: string[] = [];
-    const params: Record<string, string | number> = {};
-    if (dateFrom) { conditions.push("fecha >= $dateFrom"); params.dateFrom = Number(dateFrom); }
-    if (dateTo) { conditions.push("fecha <= $dateTo"); params.dateTo = Number(dateTo); }
-    if (turno) { conditions.push("turno = $turno"); params.turno = turno; }
-    if (actividad) { conditions.push("actividad = $actividad"); params.actividad = Number(actividad); }
+    const params: (string | number)[] = [];
+    let pIdx = 1;
+    const addParam = (v: string | number): string => { params.push(v); return `$${pIdx++}`; };
+    if (dateFrom) { conditions.push(`fecha >= ${addParam(Number(dateFrom))}`); }
+    if (dateTo) { conditions.push(`fecha <= ${addParam(Number(dateTo))}`); }
+    if (turno) { conditions.push(`turno = ${addParam(turno)}`); }
+    if (actividad) { conditions.push(`actividad = ${addParam(Number(actividad))}`); }
     if (tipo === "EFECTIVO") {
-      conditions.push("(CAST(SUBSTR(operario, 2) AS INTEGER) < 10247 OR operario IN (SELECT operario FROM nomina_override))");
+      conditions.push("(CAST(SUBSTRING(operario FROM 2) AS INTEGER) < 10247 OR operario IN (SELECT operario FROM nomina_override))");
     } else if (tipo === "EVENTUAL") {
-      conditions.push("(CAST(SUBSTR(operario, 2) AS INTEGER) >= 10247 AND operario NOT IN (SELECT operario FROM nomina_override))");
+      conditions.push("(CAST(SUBSTRING(operario FROM 2) AS INTEGER) >= 10247 AND operario NOT IN (SELECT operario FROM nomina_override))");
     }
     const where = conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
 
     // ── 1. Fetch production records ──
-    const result = await client.execute({
-      sql: `SELECT fecha, operario, nombre, total, hora_00, hora_01, hora_02, hora_03, hora_04, hora_05, hora_06, hora_07, hora_08, hora_09, hora_10, hora_11, hora_12, hora_13, hora_14, hora_15, hora_16, hora_17, hora_18, hora_19, hora_20, hora_21, hora_22, hora_23
+    const result = await client.execute(
+      `SELECT fecha, operario, nombre, total, hora_00, hora_01, hora_02, hora_03, hora_04, hora_05, hora_06, hora_07, hora_08, hora_09, hora_10, hora_11, hora_12, hora_13, hora_14, hora_15, hora_16, hora_17, hora_18, hora_19, hora_20, hora_21, hora_22, hora_23
         FROM production_records ${where} ORDER BY fecha, nombre`,
-      args: params,
-    });
+      params,
+    );
 
     // ── 2. Fetch tiempos muertos ──
-    const tmFilters: Record<string, string | number> = {};
+    const tmParams: (string | number)[] = [];
+    let tmIdx = 1;
+    const tmAddParam = (v: string | number): string => { tmParams.push(v); return `$${tmIdx++}`; };
     const tmConditions: string[] = [];
-    if (dateFrom) { tmConditions.push("fecha >= $dateFrom"); tmFilters.dateFrom = Number(dateFrom); }
-    if (dateTo) { tmConditions.push("fecha <= $dateTo"); tmFilters.dateTo = Number(dateTo); }
+    if (dateFrom) { tmConditions.push(`fecha >= ${tmAddParam(Number(dateFrom))}`); }
+    if (dateTo) { tmConditions.push(`fecha <= ${tmAddParam(Number(dateTo))}`); }
     const tmWhere = tmConditions.length > 0 ? "WHERE " + tmConditions.join(" AND ") : "";
-    const tmResult = await client.execute({
-      sql: `SELECT fecha, operario, SUM(minutos) as total_minutos FROM tiempos_muertos ${tmWhere} GROUP BY fecha, operario`,
-      args: tmFilters,
-    });
+    const tmResult = await client.execute(
+      `SELECT fecha, operario, SUM(minutos) as total_minutos FROM tiempos_muertos ${tmWhere} GROUP BY fecha, operario`,
+      tmParams,
+    );
     const tmMap: Record<string, number> = {};
     for (let i = 0; i < tmResult.rows.length; i++) {
       const row = tmResult.rows[i];
