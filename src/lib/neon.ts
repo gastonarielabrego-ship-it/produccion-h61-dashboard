@@ -56,7 +56,8 @@ function getSql(): NeonQueryFunction<false, false> {
       throw new Error("Missing DATABASE_URL env var");
     }
     // fetchConnectionCache: true enables HTTP pooling for serverless
-    _sql = neon(url, { fetchConnectionCache: true });
+    // connectionTimeout: 30s for larger queries
+    _sql = neon(url, { fetchConnectionCache: true, connectionTimeout: 30000 });
   }
   return _sql;
 }
