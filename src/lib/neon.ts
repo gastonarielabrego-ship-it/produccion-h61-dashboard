@@ -1,17 +1,12 @@
 /**
  * Neon PostgreSQL database layer for Producción H61 Dashboard
  * Replaces src/lib/turso.ts — same public API, PostgreSQL backend
- *
- * Key differences from Turso (SQLite):
- *   - Uses @neondatabase/serverless (HTTP-based, Vercel-edge compatible)
- *   - Named params ($name) → positional params ($1, $2, …)
- *   - SUBSTR() → SUBSTRING()
- *   - INSERT OR REPLACE → INSERT … ON CONFLICT DO UPDATE
- *   - client.batch() → individual queries (HTTP driver is stateless)
- *   - Tables are pre-created via migration (no auto-create on first request)
+ * 
+ * Uses node-postgres (pg) for reliable connection pooling and query execution
+ * on Vercel serverless functions.
  */
 
-import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import pg from "pg";
 
 // ─── Types ──────────────────────────────────────────────
 export interface HourlyDataPoint {
@@ -46,20 +41,24 @@ export type FilterOptions = {
   tipo?: string;
 };
 
-// ─── Singleton SQL function ─────────────────────────────
-let _sql: NeonQueryFunction<false, false> | null = null;
+// ─── Singleton Pool ─────────────────────────────────────
+let _pool: pg.Pool | null = null;
 
-function getSql(): NeonQueryFunction<false, false> {
-  if (!_sql) {
+function getPool(): pg.Pool {
+  if (!_pool) {
     const url = process.env.DATABASE_URL;
     if (!url) {
       throw new Error("Missing DATABASE_URL env var");
     }
-    // fetchConnectionCache: true enables HTTP pooling for serverless
-    // connectionTimeout: 30s for larger queries
-    _sql = neon(url, { fetchConnectionCache: true, connectionTimeout: 30000 });
+    _pool = new pg.Pool({
+      connectionString: url,
+      ssl: { rejectUnauthorized: false },
+      max: 5,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 15000,
+    });
   }
-  return _sql;
+  return _pool;
 }
 
 // ─── Row parser ─────────────────────────────────────────
@@ -128,8 +127,6 @@ function buildWhere(filters: FilterOptions): { sql: string; params: (string | nu
   }
   if (filters.tipo) {
     if (filters.tipo === "EFECTIVO") {
-      // SQLite: CAST(SUBSTR(operario, 2) AS INTEGER) < 10247
-      // PostgreSQL: CAST(SUBSTRING(operario FROM 2) AS INTEGER) < 10247
       conditions.push(`(CAST(SUBSTRING(operario FROM 2) AS INTEGER) < 10247 OR operario IN (SELECT operario FROM nomina_override))`);
     } else if (filters.tipo === "EVENTUAL") {
       conditions.push(`(CAST(SUBSTRING(operario FROM 2) AS INTEGER) >= 10247 AND operario NOT IN (SELECT operario FROM nomina_override))`);
@@ -140,9 +137,7 @@ function buildWhere(filters: FilterOptions): { sql: string; params: (string | nu
   return { sql, params };
 }
 
-// ─── No-op table ensure functions (tables pre-created via migration) ──
-// These are kept for API compatibility but do nothing since Neon schema
-// is managed via the create-neon-schema.js migration script.
+// ─── No-op table ensure (tables pre-created via migration) ──
 
 export async function ensureNominaOverrideTable() {
   // No-op: tables are pre-created in Neon via migration
@@ -151,14 +146,13 @@ export async function ensureNominaOverrideTable() {
 // ─── Public API (drop-in replacement for turso.ts) ──────
 
 export async function getAllRecords(filters?: FilterOptions, tableName = "production_records"): Promise<ProductionRecord[]> {
-  // Note: ensureClarkTable and ensureNominaOverrideTable are no-ops in Neon
-  const sql = getSql();
+  const pool = getPool();
   const { sql: whereSql, params } = buildWhere(filters ?? {});
 
   const query = `SELECT * FROM ${tableName} ${whereSql}`;
-  const result = await sql.unsafe(query, params);
+  const result = await pool.query(query, params);
 
-  return result.map(rowToRecord);
+  return result.rows.map(rowToRecord);
 }
 
 export function getSourceTable(request: Request): string {
@@ -190,8 +184,7 @@ export function parseFilters(request: Request): FilterOptions {
   return filters;
 }
 
-// Keep applyFilters for compatibility (some routes use it)
-// But with Neon it's more efficient to filter in the query
+// Keep applyFilters for compatibility
 export function applyFilters(
   records: ProductionRecord[],
   filters: FilterOptions
@@ -214,7 +207,7 @@ export function applyFilters(
 export async function getTMByDateOperario(
   filters?: FilterOptions
 ): Promise<Record<string, number>> {
-  const sql = getSql();
+  const pool = getPool();
   const conditions: string[] = [];
   const params: (string | number)[] = [];
   let paramIdx = 1;
@@ -233,9 +226,9 @@ export async function getTMByDateOperario(
   if (filters?.operario) { conditions.push(`operario = ${addParam(filters.operario)}`); }
   const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
   const query = `SELECT fecha, operario, SUM(minutos) as total_minutos FROM tiempos_muertos ${where} GROUP BY fecha, operario`;
-  const result = await sql.unsafe(query, params);
+  const result = await pool.query(query, params);
   const map: Record<string, number> = {};
-  for (const row of result) {
+  for (const row of result.rows) {
     map[`${row.fecha}:${row.operario}`] = Number(row.total_minutos) || 0;
   }
   return map;
@@ -244,7 +237,7 @@ export async function getTMByDateOperario(
 export async function getTMByDate(
   filters?: FilterOptions
 ): Promise<Record<number, number>> {
-  const sql = getSql();
+  const pool = getPool();
   const conditions: string[] = [];
   const params: (string | number)[] = [];
   let paramIdx = 1;
@@ -262,40 +255,38 @@ export async function getTMByDate(
   }
   const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
   const query = `SELECT fecha, SUM(minutos) as total_minutos FROM tiempos_muertos ${where} GROUP BY fecha`;
-  const result = await sql.unsafe(query, params);
+  const result = await pool.query(query, params);
   const map: Record<number, number> = {};
-  for (const row of result) {
+  for (const row of result.rows) {
     map[Number(row.fecha)] = Number(row.total_minutos) || 0;
   }
   return map;
 }
 
 // ─── Raw SQL access for routes that need it ─────────────
-// Provides the same interface as getClient() from turso.ts
-// but using the Neon serverless driver
 
 export interface NeonClient {
-  /** Execute a parameterized query */
   execute: (query: string, params?: (string | number | null)[]) => Promise<{ rows: Record<string, unknown>[]; rowCount: number }>;
-  /** Execute multiple queries in sequence (Neon HTTP is stateless, no true transactions) */
   batch: (queries: string[]) => Promise<{ rows: Record<string, unknown>[]; rowCount: number }[]>;
 }
 
 export function getClient(): NeonClient {
-  const sqlFn = getSql();
+  const pool = getPool();
   return {
     execute: async (query: string, params: (string | number | null)[] = []) => {
-      const result = await sqlFn.unsafe(query, params);
-      // Normalize to array of plain objects (same shape as libsql result.rows)
-      const rows = Array.isArray(result) ? result : [];
-      return { rows, rowCount: rows.length };
+      const result = await pool.query(query, params);
+      return { rows: result.rows as Record<string, unknown>[], rowCount: result.rowCount ?? 0 };
     },
     batch: async (queries: string[]) => {
       const results = [];
-      for (const q of queries) {
-        const result = await sqlFn.unsafe(q);
-        const rows = Array.isArray(result) ? result : [];
-        results.push({ rows, rowCount: rows.length });
+      const client = await pool.connect();
+      try {
+        for (const q of queries) {
+          const result = await client.query(q);
+          results.push({ rows: result.rows as Record<string, unknown>[], rowCount: result.rowCount ?? 0 });
+        }
+      } finally {
+        client.release();
       }
       return results;
     },
