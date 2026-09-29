@@ -64,7 +64,7 @@ const PH = "(?,?,?,?,?,?,?,?,?,?,?,?)";
 export async function POST(request: Request) {
   const t0 = Date.now();
   try {
-    await ensureTable();
+    // Tables pre-created via Neon migration — no ensureTable needed
     const body = await request.json();
     const action = body.action;
 
@@ -174,7 +174,7 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
-    await ensureTable();
+    // Tables pre-created via Neon migration
     const client = getClient();
     const result = await client.execute("SELECT COUNT(*) as cnt FROM horas_extras_records");
     return NextResponse.json({ ok: true, count: Number(result.rows[0]?.cnt ?? 0) });

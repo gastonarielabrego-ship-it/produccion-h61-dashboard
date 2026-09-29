@@ -196,7 +196,7 @@ export function AdminPanel({ onRefresh }: AdminPanelProps) {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".xlsx,.xls"
+            accept=".xlsx,.xls,.docx,.doc"
             onChange={handleFileChange}
             className="hidden"
           />

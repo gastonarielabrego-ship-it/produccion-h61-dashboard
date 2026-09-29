@@ -226,9 +226,9 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
 
   return (
     <>
-      <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleFileChange} className="hidden" />
-      <input ref={clarkInputRef} type="file" accept=".xlsx,.xls" onChange={handleClarkFileChange} className="hidden" />
-      <input ref={tmInputRef} type="file" accept=".xlsx,.xls" onChange={handleTMFileChange} className="hidden" />
+      <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.docx,.doc" onChange={handleFileChange} className="hidden" />
+      <input ref={clarkInputRef} type="file" accept=".xlsx,.xls,.docx,.doc" onChange={handleClarkFileChange} className="hidden" />
+      <input ref={tmInputRef} type="file" accept=".xlsx,.xls,.docx,.doc" onChange={handleTMFileChange} className="hidden" />
       <Button variant="outline" size="sm" onClick={() => !uploading && fileInputRef.current?.click()} disabled={!!uploading} className="gap-1.5 text-xs h-8">
         {uploading === "prep" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
         {uploading === "prep" ? "Cargando..." : "Preparación"}

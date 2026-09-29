@@ -205,7 +205,7 @@ export function ErroresTab() {
               <span className="text-xs font-medium">Cargar Errores de Preparacion</span>
             </div>
             <div className="flex items-center gap-2">
-              <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleUpload} className="hidden" />
+              <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.docx,.doc" onChange={handleUpload} className="hidden" />
               <button onClick={() => fileRef.current?.click()} disabled={uploading}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50">
                 <Upload className="h-3.5 w-3.5" />

@@ -3,10 +3,10 @@ import { NextResponse } from "next/server";
 
 export const maxDuration = 60;
 
-// ─── Chunked upload (same pattern as production) ───
+// ─── Chunked upload for clarkistas_records (Neon PostgreSQL) ───
 
 const COLS = "funcion, funcion_desc, fecha, turno, turno_desc, tarea, operario, nombre, actividad, circuito, tiempo_mue, total, hora_00, hora_01, hora_02, hora_03, hora_04, hora_05, hora_06, hora_07, hora_08, hora_09, hora_10, hora_11, hora_12, hora_13, hora_14, hora_15, hora_16, hora_17, hora_18, hora_19, hora_20, hora_21, hora_22, hora_23";
-const PH = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+const NUM_COLS = 36;
 
 const HEADER_FIXES: Record<string, string> = {
   NOIMBRE: "NOMBRE", NMBRE: "NOMBRE",
@@ -36,18 +36,28 @@ function getStr(row: (string | number | null | undefined)[], ci: number): string
   return v === null || v === undefined ? "" : String(v).trim();
 }
 
+// Build PostgreSQL positional placeholders for batch insert
+function buildBatchInsert(cols: number, batch: (string | number | null)[][]): { sql: string; params: (string | number | null)[] } {
+  const pgPhArr: string[] = [];
+  const pgFlat: (string | number | null)[] = [];
+  for (let j = 0; j < batch.length; j++) {
+    const rowPh = batch[j].map((_, k) => `$${j * cols + k + 1}`).join(",");
+    pgPhArr.push(`(${rowPh})`);
+    for (let k = 0; k < batch[j].length; k++) pgFlat.push(batch[j][k]);
+  }
+  return { sql: pgPhArr.join(", "), params: pgFlat };
+}
+
 async function handleDelete(dates: number[]): Promise<{ message: string; deletedDates: number[] }> {
   const client = getClient();
   if (dates.length === 0) return { message: "Sin fechas para borrar", deletedDates: [] };
 
-  const ph = dates.map((_, i) => `$${i + 1}`).join(",");
-  const dp: Record<string, number> = {};
-  dates.forEach((d, i) => { dp[`d${i}`] = d; });
-
-  const result = await client.execute({
-    sql: `DELETE FROM clarkistas_records WHERE fecha IN (${ph})`,
-    args: dp,
-  });
+  // PostgreSQL positional params
+  const placeholders = dates.map((_, i) => `$${i + 1}`).join(",");
+  const result = await client.execute(
+    `DELETE FROM clarkistas_records WHERE fecha IN (${placeholders})`,
+    dates,
+  );
 
   return { message: `${result.rowCount ?? "?"} registros previos eliminados`, deletedDates: dates };
 }
@@ -101,10 +111,20 @@ async function handleInsert(rows: (string | number | null | undefined)[][]): Pro
   if (allArgs.length === 0) throw new Error("No hay filas válidas en este bloque");
 
   const client = getClient();
-  const sql = `INSERT INTO clarkistas_records (${COLS}) VALUES ${allArgs.map(() => PH).join(", ")}`;
-  await client.execute({ sql, args: allArgs.flat() });
+  const CHUNK = 200;
+  let inserted = 0;
 
-  return { inserted: allArgs.length, elapsed: `${((Date.now() - t0) / 1000).toFixed(1)}s` };
+  for (let start = 0; start < allArgs.length; start += CHUNK) {
+    const batch = allArgs.slice(start, start + CHUNK);
+    const { sql: ph, params: flat } = buildBatchInsert(NUM_COLS, batch);
+    await client.execute(
+      `INSERT INTO clarkistas_records (${COLS}) VALUES ${ph}`,
+      flat,
+    );
+    inserted += batch.length;
+  }
+
+  return { inserted, elapsed: `${((Date.now() - t0) / 1000).toFixed(1)}s` };
 }
 
 export async function POST(request: Request) {
