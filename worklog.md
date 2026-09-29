@@ -177,3 +177,24 @@ Stage Summary:
 - Each ranking row is now expandable with monthly evolution detail
 - Trend indicators show if collaborators are improving or declining
 - API now returns monthlyCategoryCounts and personMonthly data
+---
+Task ID: 1
+Agent: main
+Task: Fix upload routes and allow Word document uploads
+
+Work Log:
+- Diagnosed missing /api/admin/upload route (main production upload)
+- Fixed upload-clarkistas: converted SQLite syntax ({ sql, args }) to PostgreSQL ($1, $2 positional params)
+- Fixed upload-tm: converted SQLite syntax to PostgreSQL
+- Fixed upload-horas-extras: removed undefined ensureTable() calls
+- Created /api/admin/upload/route.ts with proper Neon PostgreSQL syntax
+- Added .docx/.doc file type support to all upload inputs
+- Built and verified: all routes compile and work
+- Pushed to GitHub → Vercel auto-deployed
+
+Stage Summary:
+- /api/admin/upload now works (6054 production records)
+- upload-horas-extras fixed (31,096 records)
+- upload-clarkistas fixed (3,159 records) 
+- upload-tm fixed (1,418 records)
+- All file inputs now accept .xlsx, .xls, .csv, .docx, .doc
