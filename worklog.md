@@ -198,3 +198,22 @@ Stage Summary:
 - upload-clarkistas fixed (3,159 records) 
 - upload-tm fixed (1,418 records)
 - All file inputs now accept .xlsx, .xls, .csv, .docx, .doc
+---
+Task ID: 2
+Agent: main
+Task: Fix Rendimientos tab - EVENTUAL filter crash, Excel format, number consistency
+
+Work Log:
+- Diagnosed EVENTUAL filter crash: CAST(SUBSTRING(operario FROM 2) AS INTEGER) fails for VX-prefixed operarios
+- Fixed with safe CASE expression: only cast when substring is all digits, else 99999
+- Applied fix to: /api/rendimientos, /api/comparativo, and /lib/neon.ts
+- Added empty separator rows between collaborators in Excel export
+- Verified number consistency: Bultos match exactly (2,587,735)
+- TM difference explained: Summary includes all operarios, Rendimientos only those with production
+
+Stage Summary:
+- EVENTUAL filter now works (143 eventuales in Sep)
+- EFECTIVO filter works (123 efectivos in Sep)  
+- Combined filters work (turno + tipo)
+- Excel export now has blank rows between collaborators
+- Bultos totals match between Rendimientos and Summary
