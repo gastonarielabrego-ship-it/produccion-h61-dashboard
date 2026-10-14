@@ -90,11 +90,30 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
   }, [daily]);
 
   // Excel download data — same format as reference Excel
+  // Each person's section: header row → daily rows → total row → empty separator row
   const excelRows = useMemo(function() {
     const rows: any[] = [];
+    const emptyRow = {
+      Dia: "",
+      Operario: "",
+      Personal: "",
+      Bultos: "",
+      "Hs. Brutas": "",
+      "TM (hs)": "",
+      "Hs. Netas": "",
+      Produccion: "",
+      "B/H Bruta": "",
+      "B/H Neta": "",
+    };
+
     for (let i = 0; i < summaryRows.length; i++) {
       const s = summaryRows[i];
       const personDaily = dailyByPerson[s.nombre] || [];
+
+      // Add empty separator row BEFORE each person (except the first)
+      if (i > 0) {
+        rows.push({ ...emptyRow });
+      }
 
       // Header row per person
       rows.push({

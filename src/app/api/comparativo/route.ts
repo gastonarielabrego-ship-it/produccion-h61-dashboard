@@ -65,10 +65,12 @@ export async function GET(request: Request) {
     if (dateTo) { conditions.push(`fecha <= ${addParam(Number(dateTo))}`); }
     if (turno) { conditions.push(`turno = ${addParam(turno)}`); }
     if (actividad) { conditions.push(`actividad = ${addParam(Number(actividad))}`); }
+    // Safe operario number extraction: only cast if substring is all digits
+    const numExpr = "CASE WHEN SUBSTRING(operario FROM 2) ~ '^[0-9]+$' THEN CAST(SUBSTRING(operario FROM 2) AS INTEGER) ELSE 99999 END";
     if (tipo === "EFECTIVO") {
-      conditions.push("(CAST(SUBSTRING(operario FROM 2) AS INTEGER) < 10247 OR operario IN (SELECT operario FROM nomina_override))");
+      conditions.push(`(${numExpr} < 10247 OR operario IN (SELECT operario FROM nomina_override))`);
     } else if (tipo === "EVENTUAL") {
-      conditions.push("(CAST(SUBSTRING(operario FROM 2) AS INTEGER) >= 10247 AND operario NOT IN (SELECT operario FROM nomina_override))");
+      conditions.push(`(${numExpr} >= 10247 AND operario NOT IN (SELECT operario FROM nomina_override))`);
     }
     const where = conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
 
