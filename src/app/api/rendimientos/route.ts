@@ -58,6 +58,16 @@ function getDiaLabel(fecha: number): string {
   return String(day).padStart(2, "0") + "/" + String(month).padStart(2, "0") + " (" + dayName + ")";
 }
 
+// ── Determine tipo (EFECTIVO/EVENTUAL) from operario code ──
+const EFECTIVO_LIMIT = 10247;
+function getTipo(operario: string, overrideSet: Set<string>): string {
+  if (overrideSet.has(operario)) return "EFECTIVO";
+  // Extract numeric part: P12345 → 12345, VX1014 → 1014, @ → 0
+  const numStr = operario.replace(/\D/g, "");
+  const num = numStr.length > 0 ? parseInt(numStr, 10) : 99999;
+  return num > 0 && num < EFECTIVO_LIMIT ? "EFECTIVO" : "EVENTUAL";
+}
+
 export async function GET(request: Request) {
   try {
     await ensureNominaOverrideTable();
@@ -68,7 +78,8 @@ export async function GET(request: Request) {
     const tipo = url.searchParams.get("tipo");
     const turno = url.searchParams.get("turno");
 
-    // Build WHERE clause (PostgreSQL: positional params)
+    // Build WHERE clause (PostgreSQL: positional params) — WITHOUT tipo filter
+    // Tipo is applied in JS after fetching, to avoid complex SQL that crashes with edge-case operarios
     const conditions: string[] = [];
     const params: (string | number)[] = [];
     let pIdx = 1;
@@ -76,16 +87,14 @@ export async function GET(request: Request) {
     if (dateFrom) { conditions.push(`fecha >= ${addParam(Number(dateFrom))}`); }
     if (dateTo) { conditions.push(`fecha <= ${addParam(Number(dateTo))}`); }
     if (turno) { conditions.push(`turno = ${addParam(turno)}`); }
-    // Safe operario number extraction: only cast if the substring is all digits
-    // VX1014 → substring is "X1014" → not numeric → treat as eventual (99999)
-    // P12345 → substring is "12345" → numeric → cast normally
-    const numExpr = "CASE WHEN SUBSTRING(operario FROM 2) ~ '^[0-9]+$' THEN CAST(SUBSTRING(operario FROM 2) AS INTEGER) ELSE 99999 END";
-    if (tipo === "EFECTIVO") {
-      conditions.push(`(${numExpr} < 10247 OR operario IN (SELECT operario FROM nomina_override))`);
-    } else if (tipo === "EVENTUAL") {
-      conditions.push(`(${numExpr} >= 10247 AND operario NOT IN (SELECT operario FROM nomina_override))`);
-    }
     const where = conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
+
+    // ── 0. Fetch nomina_override for tipo classification ──
+    const overrideResult = await client.execute("SELECT operario FROM nomina_override");
+    const overrideSet = new Set<string>();
+    for (let i = 0; i < overrideResult.rows.length; i++) {
+      overrideSet.add(String(overrideResult.rows[i].operario));
+    }
 
     // ── 1. Fetch all production records in date range ──
     const result = await client.execute(
@@ -102,6 +111,14 @@ export async function GET(request: Request) {
     if (dateFrom) { tmConditions.push(`fecha >= ${tmAddParam(Number(dateFrom))}`); }
     if (dateTo) { tmConditions.push(`fecha <= ${tmAddParam(Number(dateTo))}`); }
     const tmWhere = tmConditions.length > 0 ? "WHERE " + tmConditions.join(" AND ") : "";
+
+    // Also fetch detailed TM records for gaps/events section
+    const tmDetailResult = await client.execute(
+      `SELECT fecha, operario, motivo, minutos, observacion FROM tiempos_muertos ${tmWhere} ORDER BY fecha, minutos DESC`,
+      tmParams,
+    );
+
+    // TM summary per (date, operario)
     const tmResult = await client.execute(
       `SELECT fecha, operario, SUM(minutos) as total_minutos FROM tiempos_muertos ${tmWhere} GROUP BY fecha, operario`,
       tmParams,
@@ -113,8 +130,14 @@ export async function GET(request: Request) {
     }
 
     // ── 3. Aggregate per (fecha, operario, nombre) ──
-    // Key: "fecha:operario" → { nombre, bultos, activeHours[] }
-    const personDateMap: Record<string, { operario: string; nombre: string; bultos: number; activeHours: number[] }> = {};
+    // Key: "fecha:operario" → { nombre, bultos, activeHours[], hourlyBultos[] }
+    const personDateMap: Record<string, {
+      operario: string;
+      nombre: string;
+      bultos: number;
+      activeHours: number[];
+      hourlyBultos: number[]; // bultos per hour (0-23)
+    }> = {};
 
     for (let i = 0; i < result.rows.length; i++) {
       const row = result.rows[i];
@@ -122,20 +145,26 @@ export async function GET(request: Request) {
       const operario = String(row.operario || "");
       const nombre = String(row.nombre || "");
       const total = Number(row.total) || 0;
+
+      // Apply tipo filter in JS (safe, avoids SQL crash with edge-case operarios)
+      if (tipo && getTipo(operario, overrideSet) !== tipo) continue;
+
       if (fecha <= 0 || !operario) continue;
 
       const key = fecha + ":" + operario;
       if (!personDateMap[key]) {
-        personDateMap[key] = { operario: operario, nombre: nombre, bultos: 0, activeHours: [] };
+        personDateMap[key] = { operario: operario, nombre: nombre, bultos: 0, activeHours: [], hourlyBultos: new Array(24).fill(0) };
       }
       const entry = personDateMap[key];
       entry.bultos += total;
 
-      // Collect hours with qty > 0
+      // Collect hours with qty > 0 and hourly bultos
       for (let h = 0; h <= 23; h++) {
         const col = "hora_" + String(h).padStart(2, "0");
-        if (Number(row[col]) > 0) {
+        const qty = Number(row[col]) || 0;
+        if (qty > 0) {
           entry.activeHours.push(h);
+          entry.hourlyBultos[h] += qty;
         }
       }
     }
@@ -154,7 +183,6 @@ export async function GET(request: Request) {
       const hsBrutas = calcHorasBrutas(entry.activeHours);
       const tmMin = tmMap[key] || 0;
       const tmHsRaw = Math.round((tmMin / 60) * 100) / 100;
-      const produccion = bultos;
       const bhBruta = hsBrutas > 0 ? Math.round((bultos / hsBrutas) * 10) / 10 : 0;
       // If TM >= 80% of hsBrutas, TM data is unreliable — use B/H Bruta as B/H Neta
       let bhNeta: number;
@@ -168,6 +196,17 @@ export async function GET(request: Request) {
         bhNeta = hsNetas > 0 ? Math.round((bultos / hsNetas) * 10) / 10 : bhBruta;
       }
 
+      // Build hourly gaps/events for this person-date
+      const hourlyEvents: any[] = [];
+      for (let h = 0; h < 24; h++) {
+        const b = entry.hourlyBultos[h];
+        hourlyEvents.push({
+          hora: h,
+          bultos: b,
+          tipo: b > 0 ? "evento" : "gap",
+        });
+      }
+
       daily.push({
         operario: entry.operario,
         nombre: entry.nombre,
@@ -177,9 +216,10 @@ export async function GET(request: Request) {
         hs_brutas: hsBrutas,
         tm_hs: tmHs,
         hs_netas: hsNetas,
-        produccion: produccion,
+        produccion: bultos,
         bh_bruta: bhBruta,
         bh_neta: bhNeta,
+        hourlyEvents: hourlyEvents,
       });
     }
 
@@ -190,7 +230,59 @@ export async function GET(request: Request) {
       return a.fecha - b.fecha;
     });
 
-    // ── 5. Summary per person ──
+    // ── 5. Build gaps/events list sorted by horario (time) ──
+    // Each entry: { fecha, dia, nombre, operario, hora, bultos, tipo: "evento"|"gap" }
+    const gapsEvents: any[] = [];
+    for (let i = 0; i < daily.length; i++) {
+      const d = daily[i];
+      for (let h = 0; h < d.hourlyEvents.length; h++) {
+        const ev = d.hourlyEvents[h];
+        // Only include hours that are within the shift span (active hours + gaps between them)
+        // Include all hours with production OR gaps between first and last active hour
+        if (d.hs_brutas > 0 && ev.bultos > 0) {
+          gapsEvents.push({
+            fecha: d.fecha,
+            dia: d.dia,
+            nombre: d.nombre,
+            operario: d.operario,
+            hora: ev.hora,
+            bultos: ev.bultos,
+            tipo: "evento",
+          });
+        }
+      }
+    }
+    // Sort by fecha, then hora (chronological by schedule)
+    gapsEvents.sort(function(a, b) {
+      if (a.fecha !== b.fecha) return a.fecha - b.fecha;
+      return a.hora - b.hora;
+    });
+
+    // ── 6. Build TM events (tiempos muertos detail) sorted by horario ──
+    const tmEvents: any[] = [];
+    for (let i = 0; i < tmDetailResult.rows.length; i++) {
+      const row = tmDetailResult.rows[i];
+      const operario = String(row.operario || "");
+      // Apply tipo filter
+      if (tipo && getTipo(operario, overrideSet) !== tipo) continue;
+
+      const fecha = Number(row.fecha);
+      tmEvents.push({
+        fecha: fecha,
+        dia: getDiaLabel(fecha),
+        operario: operario,
+        motivo: Number(row.motivo) || 0,
+        minutos: Number(row.minutos) || 0,
+        observacion: String(row.observacion || ""),
+      });
+    }
+    // Sort by fecha (chronological), then minutos DESC (longest gaps first within same day)
+    tmEvents.sort(function(a, b) {
+      if (a.fecha !== b.fecha) return a.fecha - b.fecha;
+      return b.minutos - a.minutos;
+    });
+
+    // ── 7. Summary per person ──
     const summaryMap: Record<string, { operario: string; nombre: string; total_bultos: number; total_hs_brutas: number; total_tm: number; total_hs_netas: number; dias: number }> = {};
     for (let i = 0; i < daily.length; i++) {
       const d = daily[i];
@@ -228,7 +320,7 @@ export async function GET(request: Request) {
       });
     }
 
-    // ── 6. Grand totals ──
+    // ── 8. Grand totals ──
     let totalBultos = 0;
     let totalHsBrutas = 0;
     let totalTm = 0;
@@ -249,7 +341,7 @@ export async function GET(request: Request) {
     totalTm = Math.round(totalTm * 100) / 100;
     totalHsNetas = Math.round(totalHsNetas * 100) / 100;
 
-    // ── 7. Available dates ──
+    // ── 9. Available dates ──
     const dates: any[] = [];
     const sortedDates = Array.from(dateSet).sort(function(a, b) { return a - b; });
     for (let i = 0; i < sortedDates.length; i++) {
@@ -261,6 +353,8 @@ export async function GET(request: Request) {
       daily: daily,
       summary: summary,
       dates: dates,
+      gapsEvents: gapsEvents,
+      tmEvents: tmEvents,
       totals: {
         totalBultos: totalBultos,
         totalHsBrutas: totalHsBrutas,

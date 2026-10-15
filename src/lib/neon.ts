@@ -125,9 +125,10 @@ function buildWhere(filters: FilterOptions): { sql: string; params: (string | nu
   if (filters.operario) {
     conditions.push(`operario = ${addParam(filters.operario)}`);
   }
-    // Safe operario number extraction: only cast if substring is all digits
-    // VX1014 → "X1014" → not numeric → treat as eventual (99999)
-    const numExpr = "CASE WHEN SUBSTRING(operario FROM 2) ~ '^[0-9]+$' THEN CAST(SUBSTRING(operario FROM 2) AS INTEGER) ELSE 99999 END";
+    // Safe operario number extraction: handle edge cases (@, *DFT, single-char, etc.)
+    // Only process operarios with length >= 2 whose second char onward is all digits
+    // For others (short, non-numeric suffix), treat as EVENTUAL (99999)
+    const numExpr = "CASE WHEN LENGTH(operario) >= 2 AND SUBSTRING(operario FROM 2) ~ '^[0-9]+$' THEN CAST(SUBSTRING(operario FROM 2) AS INTEGER) ELSE 99999 END";
     if (filters.tipo === "EFECTIVO") {
       conditions.push(`(${numExpr} < 10247 OR operario IN (SELECT operario FROM nomina_override))`);
     } else if (filters.tipo === "EVENTUAL") {
