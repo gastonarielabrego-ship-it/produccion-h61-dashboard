@@ -217,3 +217,29 @@ Stage Summary:
 - Combined filters work (turno + tipo)
 - Excel export now has blank rows between collaborators
 - Bultos totals match between Rendimientos and Summary
+
+---
+Task ID: 1
+Agent: main
+Task: Fix rendimientos tab - eventuales crash, Excel numbers, gaps/events by horario
+
+Work Log:
+- Analyzed rendimientos-tab.tsx and /api/rendimientos/route.ts
+- Found eventuales filter crash caused by SUBSTRING(operario FROM 2) on edge-case operarios (@, *DFT)
+- Fixed by moving tipo filter to JS-side in rendimientos API route
+- Added LENGTH(operario) >= 2 guard in neon.ts buildWhere for safer SQL
+- Fixed Excel TOTAL Produccion: changed from bultos/dias (average) to total bultos (sum)
+- Added gaps/events section with "Gaps / Eventos" toggle button
+- Gaps/events sorted chronologically by horario (fecha, hora) not by magnitude
+- Added tiempos muertos detail view sorted by fecha
+- Added dedicated Excel exports for gaps/events and TM events
+- Verified empty separator rows between collaborators in Excel download
+- Deployed to Vercel production
+
+Stage Summary:
+- EVENTUAL filter no longer crashes (tested with 208 eventual operarios)
+- EFECTIVO filter works correctly (181 efectivo operarios)
+- Gaps/events properly sorted by horario (verified chronological order)
+- Excel TOTAL Produccion now shows sum of bultos, consistent with daily rows
+- TM events shown with motivo code, minutos, and observacion
+- Deployed at https://produccion-h61-dashboard.vercel.app
