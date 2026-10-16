@@ -112,12 +112,6 @@ export async function GET(request: Request) {
     if (dateTo) { tmConditions.push(`fecha <= ${tmAddParam(Number(dateTo))}`); }
     const tmWhere = tmConditions.length > 0 ? "WHERE " + tmConditions.join(" AND ") : "";
 
-    // Also fetch detailed TM records for gaps/events section
-    const tmDetailResult = await client.execute(
-      `SELECT fecha, operario, motivo, minutos, observacion FROM tiempos_muertos ${tmWhere} ORDER BY fecha, minutos DESC`,
-      tmParams,
-    );
-
     // TM summary per (date, operario)
     const tmResult = await client.execute(
       `SELECT fecha, operario, SUM(minutos) as total_minutos FROM tiempos_muertos ${tmWhere} GROUP BY fecha, operario`,
@@ -130,13 +124,12 @@ export async function GET(request: Request) {
     }
 
     // ── 3. Aggregate per (fecha, operario, nombre) ──
-    // Key: "fecha:operario" → { nombre, bultos, activeHours[], hourlyBultos[] }
+    // Key: "fecha:operario" → { nombre, bultos, activeHours[] }
     const personDateMap: Record<string, {
       operario: string;
       nombre: string;
       bultos: number;
       activeHours: number[];
-      hourlyBultos: number[]; // bultos per hour (0-23)
     }> = {};
 
     for (let i = 0; i < result.rows.length; i++) {
@@ -153,18 +146,16 @@ export async function GET(request: Request) {
 
       const key = fecha + ":" + operario;
       if (!personDateMap[key]) {
-        personDateMap[key] = { operario: operario, nombre: nombre, bultos: 0, activeHours: [], hourlyBultos: new Array(24).fill(0) };
+        personDateMap[key] = { operario: operario, nombre: nombre, bultos: 0, activeHours: [] };
       }
       const entry = personDateMap[key];
       entry.bultos += total;
 
-      // Collect hours with qty > 0 and hourly bultos
+      // Collect hours with qty > 0
       for (let h = 0; h <= 23; h++) {
         const col = "hora_" + String(h).padStart(2, "0");
-        const qty = Number(row[col]) || 0;
-        if (qty > 0) {
+        if (Number(row[col]) > 0) {
           entry.activeHours.push(h);
-          entry.hourlyBultos[h] += qty;
         }
       }
     }
@@ -196,17 +187,6 @@ export async function GET(request: Request) {
         bhNeta = hsNetas > 0 ? Math.round((bultos / hsNetas) * 10) / 10 : bhBruta;
       }
 
-      // Build hourly gaps/events for this person-date
-      const hourlyEvents: any[] = [];
-      for (let h = 0; h < 24; h++) {
-        const b = entry.hourlyBultos[h];
-        hourlyEvents.push({
-          hora: h,
-          bultos: b,
-          tipo: b > 0 ? "evento" : "gap",
-        });
-      }
-
       daily.push({
         operario: entry.operario,
         nombre: entry.nombre,
@@ -219,7 +199,6 @@ export async function GET(request: Request) {
         produccion: bultos,
         bh_bruta: bhBruta,
         bh_neta: bhNeta,
-        hourlyEvents: hourlyEvents,
       });
     }
 
@@ -230,59 +209,7 @@ export async function GET(request: Request) {
       return a.fecha - b.fecha;
     });
 
-    // ── 5. Build gaps/events list sorted by horario (time) ──
-    // Each entry: { fecha, dia, nombre, operario, hora, bultos, tipo: "evento"|"gap" }
-    const gapsEvents: any[] = [];
-    for (let i = 0; i < daily.length; i++) {
-      const d = daily[i];
-      for (let h = 0; h < d.hourlyEvents.length; h++) {
-        const ev = d.hourlyEvents[h];
-        // Only include hours that are within the shift span (active hours + gaps between them)
-        // Include all hours with production OR gaps between first and last active hour
-        if (d.hs_brutas > 0 && ev.bultos > 0) {
-          gapsEvents.push({
-            fecha: d.fecha,
-            dia: d.dia,
-            nombre: d.nombre,
-            operario: d.operario,
-            hora: ev.hora,
-            bultos: ev.bultos,
-            tipo: "evento",
-          });
-        }
-      }
-    }
-    // Sort by fecha, then hora (chronological by schedule)
-    gapsEvents.sort(function(a, b) {
-      if (a.fecha !== b.fecha) return a.fecha - b.fecha;
-      return a.hora - b.hora;
-    });
-
-    // ── 6. Build TM events (tiempos muertos detail) sorted by horario ──
-    const tmEvents: any[] = [];
-    for (let i = 0; i < tmDetailResult.rows.length; i++) {
-      const row = tmDetailResult.rows[i];
-      const operario = String(row.operario || "");
-      // Apply tipo filter
-      if (tipo && getTipo(operario, overrideSet) !== tipo) continue;
-
-      const fecha = Number(row.fecha);
-      tmEvents.push({
-        fecha: fecha,
-        dia: getDiaLabel(fecha),
-        operario: operario,
-        motivo: Number(row.motivo) || 0,
-        minutos: Number(row.minutos) || 0,
-        observacion: String(row.observacion || ""),
-      });
-    }
-    // Sort by fecha (chronological), then minutos DESC (longest gaps first within same day)
-    tmEvents.sort(function(a, b) {
-      if (a.fecha !== b.fecha) return a.fecha - b.fecha;
-      return b.minutos - a.minutos;
-    });
-
-    // ── 7. Summary per person ──
+    // ── 5. Summary per person ──
     const summaryMap: Record<string, { operario: string; nombre: string; total_bultos: number; total_hs_brutas: number; total_tm: number; total_hs_netas: number; dias: number }> = {};
     for (let i = 0; i < daily.length; i++) {
       const d = daily[i];
@@ -320,7 +247,7 @@ export async function GET(request: Request) {
       });
     }
 
-    // ── 8. Grand totals ──
+    // ── 6. Grand totals ──
     let totalBultos = 0;
     let totalHsBrutas = 0;
     let totalTm = 0;
@@ -341,7 +268,7 @@ export async function GET(request: Request) {
     totalTm = Math.round(totalTm * 100) / 100;
     totalHsNetas = Math.round(totalHsNetas * 100) / 100;
 
-    // ── 9. Available dates ──
+    // ── 7. Available dates ──
     const dates: any[] = [];
     const sortedDates = Array.from(dateSet).sort(function(a, b) { return a - b; });
     for (let i = 0; i < sortedDates.length; i++) {
@@ -353,8 +280,6 @@ export async function GET(request: Request) {
       daily: daily,
       summary: summary,
       dates: dates,
-      gapsEvents: gapsEvents,
-      tmEvents: tmEvents,
       totals: {
         totalBultos: totalBultos,
         totalHsBrutas: totalHsBrutas,

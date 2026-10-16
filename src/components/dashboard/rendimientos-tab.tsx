@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Filter, X, TrendingUp, Clock, Users, AlertTriangle, BarChart3 } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Filter, X, TrendingUp, Users } from "lucide-react";
 import { ExcelButton } from "./excel-button";
 import { PrintButton } from "./print-button";
 
@@ -18,9 +18,6 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
   const [fTurno, setFTurno] = useState("");
   const [fTipo, setFTipo] = useState("");
   const [shifts, setShifts] = useState<{ value: string; label: string }[]>([]);
-
-  // Gaps/Events tab
-  const [showGaps, setShowGaps] = useState(false);
 
   // Fetch available shifts once
   useEffect(function() {
@@ -59,8 +56,6 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
   const summary = data ? (data.summary || []) : [];
   const daily = data ? (data.daily || []) : [];
   const totals = data ? (data.totals || {}) : {};
-  const gapsEvents = data ? (data.gapsEvents || []) : [];
-  const tmEvents = data ? (data.tmEvents || []) : [];
 
   const summaryRows = useMemo(function() {
     return summary.map(function(r: any) {
@@ -168,82 +163,6 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
     return rows;
   }, [summaryRows, dailyByPerson]);
 
-  // Gaps/Events Excel data — sorted by horario (chronological)
-  const gapsExcelRows = useMemo(function() {
-    // Group by person, then show chronological hourly events
-    const rows: any[] = [];
-    const emptyRow = {
-      Dia: "", Hora: "", Personal: "", Bultos: "", Tipo: "",
-    };
-
-    // Group gapsEvents by nombre
-    const byPerson: Record<string, any[]> = {};
-    for (let i = 0; i < gapsEvents.length; i++) {
-      const g = gapsEvents[i];
-      const n = g.nombre;
-      if (!byPerson[n]) byPerson[n] = [];
-      byPerson[n].push(g);
-    }
-
-    const personNames = Object.keys(byPerson).sort();
-    for (let p = 0; p < personNames.length; p++) {
-      const name = personNames[p];
-      const events = byPerson[name];
-
-      if (p > 0) {
-        rows.push({ ...emptyRow });
-      }
-
-      // Header
-      rows.push({
-        Dia: "Dia",
-        Hora: "Hora",
-        Personal: name,
-        Bultos: "Bultos",
-        Tipo: "Tipo",
-      });
-
-      // Group by fecha
-      const byFecha: Record<number, any[]> = {};
-      for (let i = 0; i < events.length; i++) {
-        const f = events[i].fecha;
-        if (!byFecha[f]) byFecha[f] = [];
-        byFecha[f].push(events[i]);
-      }
-
-      const fechas = Object.keys(byFecha).map(Number).sort(function(a, b) { return a - b; });
-      for (let fi = 0; fi < fechas.length; fi++) {
-        const fecha = fechas[fi];
-        const dayEvents = byFecha[fecha];
-        // Already sorted by hora from API
-        for (let ei = 0; ei < dayEvents.length; ei++) {
-          const e = dayEvents[ei];
-          rows.push({
-            Dia: e.dia,
-            Hora: String(e.hora).padStart(2, "0") + ":00",
-            Personal: name,
-            Bultos: e.bultos,
-            Tipo: e.tipo === "evento" ? "Produccion" : "Gap",
-          });
-        }
-      }
-    }
-    return rows;
-  }, [gapsEvents]);
-
-  // TM Events Excel data
-  const tmExcelRows = useMemo(function() {
-    return tmEvents.map(function(e: any) {
-      return {
-        Dia: e.dia,
-        Operario: e.operario,
-        "Cod. Motivo": e.motivo,
-        Minutos: e.minutos,
-        Observacion: e.observacion || "",
-      };
-    });
-  }, [tmEvents]);
-
   const hasFilters = fDesde || fHasta || fTurno || fTipo;
   const clearFilters = function() { setFDesde(""); setFHasta(""); setFTurno(""); setFTipo(""); };
 
@@ -302,14 +221,7 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
               <option value="EVENTUAL">Eventual</option>
             </select>
 
-            {/* Gaps/Events toggle */}
-            <button
-              onClick={function() { setShowGaps(!showGaps); }}
-              className={"flex items-center gap-1 px-2 py-1 text-xs rounded border " + (showGaps ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border hover:bg-muted")}
-            >
-              <Clock className="h-3 w-3" />
-              Gaps / Eventos
-            </button>
+
           </div>
         </CardContent>
       </Card>
@@ -353,116 +265,6 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
           </CardContent>
         </Card>
       </div>
-
-      {/* Gaps & Events Section — sorted by horario (chronological) */}
-      {showGaps && (
-        <>
-          {/* Production Events by Hour */}
-          <Card>
-            <CardHeader className="flex flex-row items-start justify-between space-y-0">
-              <div>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Clock className="h-4 w-4" />
-                  Eventos de Produccion por Horario
-                </CardTitle>
-                <CardDescription>Produccion por hora ordenada cronologicamente (no de mayor a menor)</CardDescription>
-              </div>
-              <div className="flex items-center gap-1">
-                <ExcelButton
-                  rows={gapsExcelRows}
-                  filename="rendimientos-eventos-horario"
-                  sheetName="Eventos"
-                  colWidths={[16, 8, 30, 10, 12]}
-                />
-                <PrintButton title="Eventos por Horario" />
-              </div>
-            </CardHeader>
-            <CardContent className="p-0 overflow-x-auto max-h-[500px] overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-card z-10">
-                  <tr className="border-b">
-                    <th className="text-xs font-semibold text-center p-2">Dia</th>
-                    <th className="text-xs font-semibold text-center p-2">Hora</th>
-                    <th className="text-xs font-semibold text-left p-2 sticky left-0 bg-card min-w-[200px]">Personal</th>
-                    <th className="text-xs font-semibold text-center p-2">Bultos</th>
-                    <th className="text-xs font-semibold text-center p-2">Tipo</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {gapsEvents.map(function(ev: any, idx: number) {
-                    const isEvento = ev.tipo === "evento";
-                    return (
-                      <tr key={idx} className={"border-b " + (isEvento ? "hover:bg-muted/50" : "bg-red-50/50 hover:bg-red-50")}>
-                        <td className="text-xs text-center p-2">{ev.dia}</td>
-                        <td className="text-xs text-center p-2 font-mono">{String(ev.hora).padStart(2, "0")}:00</td>
-                        <td className="text-xs font-medium p-2 sticky left-0 bg-card">{ev.nombre}</td>
-                        <td className={"text-xs text-center p-2 " + (isEvento ? "font-medium" : "")}>{ev.bultos}</td>
-                        <td className={"text-xs text-center p-2 " + (isEvento ? "text-emerald-600" : "text-red-500")}>
-                          {isEvento ? "Produccion" : "Gap"}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {gapsEvents.length === 0 && (
-                    <tr><td colSpan={5} className="text-xs text-center p-4 text-muted-foreground">Sin datos para los filtros seleccionados</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </CardContent>
-          </Card>
-
-          {/* Tiempos Muertos (Gaps) by Horario */}
-          <Card>
-            <CardHeader className="flex flex-row items-start justify-between space-y-0">
-              <div>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <AlertTriangle className="h-4 w-4 text-red-500" />
-                  Tiempos Muertos por Horario
-                </CardTitle>
-                <CardDescription>Gaps registrados ordenados cronologicamente por horario de inicio</CardDescription>
-              </div>
-              <div className="flex items-center gap-1">
-                <ExcelButton
-                  rows={tmExcelRows}
-                  filename="tiempos-muertos-horario"
-                  sheetName="TM Horario"
-                  colWidths={[16, 14, 12, 10, 30]}
-                />
-                <PrintButton title="Tiempos Muertos por Horario" />
-              </div>
-            </CardHeader>
-            <CardContent className="p-0 overflow-x-auto max-h-[400px] overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-card z-10">
-                  <tr className="border-b">
-                    <th className="text-xs font-semibold text-center p-2">Dia</th>
-                    <th className="text-xs font-semibold text-center p-2">Operario</th>
-                    <th className="text-xs font-semibold text-center p-2">Motivo</th>
-                    <th className="text-xs font-semibold text-center p-2">Minutos</th>
-                    <th className="text-xs font-semibold text-left p-2">Observacion</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tmEvents.map(function(ev: any, idx: number) {
-                    return (
-                      <tr key={idx} className="border-b hover:bg-red-50/50">
-                        <td className="text-xs text-center p-2">{ev.dia}</td>
-                        <td className="text-xs text-center p-2 font-mono">{ev.operario}</td>
-                        <td className="text-xs text-center p-2">{ev.motivo}</td>
-                        <td className="text-xs text-center p-2 text-red-500 font-medium">{ev.minutos}</td>
-                        <td className="text-xs p-2 text-muted-foreground">{ev.observacion || "—"}</td>
-                      </tr>
-                    );
-                  })}
-                  {tmEvents.length === 0 && (
-                    <tr><td colSpan={5} className="text-xs text-center p-4 text-muted-foreground">Sin tiempos muertos registrados</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </CardContent>
-          </Card>
-        </>
-      )}
 
       {/* Summary Table */}
       <Card>
