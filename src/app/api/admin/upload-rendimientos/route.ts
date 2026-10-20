@@ -97,7 +97,7 @@ export async function POST(request: Request) {
 
         if (batch.length >= CHUNK) {
           const { sql: ph, params: flat } = buildBatchInsert(10, batch);
-          await client.execute("INSERT INTO rendimientos_record (nombre, dia, fecha, bultos, hs_brutas, tm_hs, hs_netas, produccion, bh_bruta, bh_neta) VALUES " + ph, flat);
+          await client.execute("INSERT INTO rendimientos_records (nombre, dia, fecha, bultos, hs_brutas, tm_hs, hs_netas, produccion, bh_bruta, bh_neta) VALUES " + ph, flat);
           inserted += batch.length;
           batch = [];
         }
@@ -105,7 +105,7 @@ export async function POST(request: Request) {
 
       if (batch.length > 0) {
         const { sql: ph, params: flat } = buildBatchInsert(10, batch);
-        await client.execute("INSERT INTO rendimientos_record (nombre, dia, fecha, bultos, hs_brutas, tm_hs, hs_netas, produccion, bh_bruta, bh_neta) VALUES " + ph, flat);
+        await client.execute("INSERT INTO rendimientos_records (nombre, dia, fecha, bultos, hs_brutas, tm_hs, hs_netas, produccion, bh_bruta, bh_neta) VALUES " + ph, flat);
         inserted += batch.length;
       }
 
