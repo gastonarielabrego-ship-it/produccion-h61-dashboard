@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const dynamic = 'force-dynamic';
+
 // Allowed endpoints to proxy
 const ALLOWED = new Set([
   "by-circuit",
@@ -23,7 +25,7 @@ export async function GET(
   const endpoint = slug.join("/");
 
   if (!ALLOWED.has(endpoint)) {
-    return NextResponse.json({ error: "Endpoint not found" }, { status: 404 });
+    return NextResponse.json({ error: "Endpoint not found" }, { status: 404 , headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   }
 
   const url = new URL(request.url);
@@ -34,8 +36,8 @@ export async function GET(
   try {
     const res = await fetch(productionUrl);
     const data = await res.json();
-    return NextResponse.json(data, { status: res.status });
+    return NextResponse.json(data, { status: res.status , headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 , headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   }
 }

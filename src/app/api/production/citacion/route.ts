@@ -6,6 +6,8 @@ import {
 } from "@/lib/neon";
 import { NextResponse } from "next/server";
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: Request) {
   try {
     const filters = parseFilters(request);
@@ -123,9 +125,9 @@ export async function GET(request: Request) {
       };
     });
 
-    return NextResponse.json({ dates, operators });
+    return NextResponse.json({ dates, operators }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   } catch (error) {
     console.error("Error fetching citacion:", error);
-    return NextResponse.json({ error: "Error fetching citacion" }, { status: 500 });
+    return NextResponse.json({ error: "Error fetching citacion" }, { status: 500 , headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   }
 }

@@ -7,6 +7,8 @@ import {
 } from "@/lib/neon";
 import { NextResponse } from "next/server";
 
+export const dynamic = 'force-dynamic';
+
 const MONTH_NAMES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
 export async function GET(request: Request) {
@@ -90,9 +92,9 @@ export async function GET(request: Request) {
       };
     });
 
-    return NextResponse.json({ monthlyData });
+    return NextResponse.json({ monthlyData }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   } catch (error) {
     console.error("Error fetching monthly summary:", error);
-    return NextResponse.json({ error: "Error fetching monthly summary" }, { status: 500 });
+    return NextResponse.json({ error: "Error fetching monthly summary" }, { status: 500 , headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   }
 }

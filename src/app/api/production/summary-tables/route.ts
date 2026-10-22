@@ -7,6 +7,8 @@ import {
 } from "@/lib/neon";
 import { NextResponse } from "next/server";
 
+export const dynamic = 'force-dynamic';
+
 const MONTH_NAMES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
 // ── Helper: compute shift span + start/end hours, handling midnight wrap-around ──
@@ -379,10 +381,10 @@ export async function GET(request: Request) {
       dayHeatmap,
       collaboratorHeatmap,
       filteredOperatorName,
-    });
+    }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   } catch (error) {
     console.error("Error fetching summary tables:", error);
     const msg = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: "Error fetching summary tables", detail: msg }, { status: 500 });
+    return NextResponse.json({ error: "Error fetching summary tables", detail: msg }, { status: 500 , headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   }
 }

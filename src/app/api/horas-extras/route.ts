@@ -1,6 +1,8 @@
 import { getClient } from "@/lib/neon";
 import { NextResponse } from "next/server";
 
+export const dynamic = 'force-dynamic';
+
 // Tables pre-created via Neon migration
 
 function roundMinutesToHours(minutes: number): number {
@@ -154,9 +156,9 @@ export async function GET(request: Request) {
     for (let i = 0; i < datesResult.rows.length; i++) { const f = Number(datesResult.rows[i].fecha ?? 0); datesList.push(f); monthsSet[String(Math.floor(f / 100))] = true; }
     const monthsList = Object.keys(monthsSet).map(Number).sort();
 
-    return NextResponse.json({ ranking, distribution, byEmpresa, daily, monthly, totals: { totalHE: grandTotalHE, totalMins: grandTotalMins, he50: grandTotal50, he100: grandTotal100, noct100: grandTotalNoct }, dates: datesList, months: monthsList });
+    return NextResponse.json({ ranking, distribution, byEmpresa, daily, monthly, totals: { totalHE: grandTotalHE, totalMins: grandTotalMins, he50: grandTotal50, he100: grandTotal100, noct100: grandTotalNoct }, dates: datesList, months: monthsList }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   } catch (error: any) {
     console.error("Horas extras query error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 , headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   }
 }

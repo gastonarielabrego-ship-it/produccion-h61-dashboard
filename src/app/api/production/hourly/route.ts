@@ -5,6 +5,8 @@ import {
 } from "@/lib/neon";
 import { NextResponse } from "next/server";
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: Request) {
   try {
     const filters = parseFilters(request);
@@ -43,12 +45,9 @@ export async function GET(request: Request) {
       grandTotal,
       hourlyData,
       circuitData,
-    });
+    }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   } catch (error) {
     console.error("Error fetching hourly production:", error);
-    return NextResponse.json(
-      { error: "Error fetching production data" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Error fetching production data" }, { status: 500 , headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   }
 }

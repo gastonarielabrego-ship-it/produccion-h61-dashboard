@@ -1,6 +1,8 @@
 import { getClient } from "@/lib/neon";
 import { NextResponse } from "next/server";
 
+export const dynamic = 'force-dynamic';
+
 // Tables are pre-created via Neon migration script
 
 export async function GET(request: Request) {
@@ -164,10 +166,10 @@ export async function GET(request: Request) {
       });
     }
 
-    return NextResponse.json({ monthly, byMotivo, ranking, daily });
+    return NextResponse.json({ monthly, byMotivo, ranking, daily }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   } catch (error) {
     console.error("Errores API error:", error);
     const msg = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: msg }, { status: 500 , headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   }
 }

@@ -5,6 +5,8 @@ import {
 } from "@/lib/neon";
 import { NextResponse } from "next/server";
 
+export const dynamic = 'force-dynamic';
+
 const ACTIVITY_COLORS: Record<string, string> = {
   "2": "#10b981",
   "4": "#6366f1",
@@ -85,12 +87,9 @@ export async function GET(request: Request) {
       avgHourly,
       totalBultos,
       totalMisiones: Object.values(opHourly).reduce((max, s) => Math.max(max, s.size), 0),
-    });
+    }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   } catch (error) {
     console.error("Error fetching by-activity:", error);
-    return NextResponse.json(
-      { error: "Error fetching activity data" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Error fetching activity data" }, { status: 500 , headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   }
 }

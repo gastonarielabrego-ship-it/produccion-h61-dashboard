@@ -7,6 +7,8 @@ import {
 } from "@/lib/neon";
 import { NextResponse } from "next/server";
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: Request) {
   try {
     const filters = parseFilters(request);
@@ -124,12 +126,9 @@ export async function GET(request: Request) {
       shiftData,
       dateData,
       funcionData,
-    });
+    }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   } catch (error) {
     console.error("Error fetching summary:", error);
-    return NextResponse.json(
-      { error: "Error fetching summary" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Error fetching summary" }, { status: 500 , headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   }
 }

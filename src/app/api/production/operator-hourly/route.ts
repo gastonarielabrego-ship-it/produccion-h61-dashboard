@@ -5,15 +5,14 @@ import {
 } from "@/lib/neon";
 import { NextResponse } from "next/server";
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const operario = url.searchParams.get("operario");
     if (!operario) {
-      return NextResponse.json(
-        { error: "operario param required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "operario param required" }, { status: 400 , headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
     }
 
     // Optional hour range filter (used by Franjas)
@@ -111,12 +110,9 @@ export async function GET(request: Request) {
       hourlyData,
       circuitBreakdown,
       shiftBreakdown,
-    });
+    }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   } catch (error) {
     console.error("Error fetching operator hourly:", error);
-    return NextResponse.json(
-      { error: "Error fetching operator detail" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Error fetching operator detail" }, { status: 500 , headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   }
 }

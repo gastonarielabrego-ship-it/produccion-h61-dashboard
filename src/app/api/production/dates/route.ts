@@ -4,6 +4,8 @@ import {
 } from "@/lib/neon";
 import { NextResponse } from "next/server";
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: Request) {
   try {
     // Always fetch ALL records for filter dropdowns (no user filters applied)
@@ -40,12 +42,9 @@ export async function GET(request: Request) {
     for (const d of dates) monthSet.add(Math.floor(d / 100));
     const months = Array.from(monthSet).sort((a, b) => b - a); // most recent first
 
-    return NextResponse.json({ dates, circuits, activities, shifts, functions, operators, months });
+    return NextResponse.json({ dates, circuits, activities, shifts, functions, operators, months }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   } catch (error) {
     console.error("Error fetching filters:", error);
-    return NextResponse.json(
-      { error: "Error fetching filters" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Error fetching filters" }, { status: 500 , headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   }
 }

@@ -1,6 +1,8 @@
 import { getClient, ensureNominaOverrideTable } from "@/lib/neon";
 import { NextResponse } from "next/server";
 
+export const dynamic = 'force-dynamic';
+
 // ── Shift span calculation (same as rendimientos) ──
 function calcHorasBrutas(hoursArr: number[]): number {
   const n = hoursArr.length;
@@ -479,8 +481,8 @@ export async function GET(request: Request) {
       monthLabels: monthLabels,
       totalPeople: ranking.length,
       dates: dates,
-    });
+    }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 , headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   }
 }

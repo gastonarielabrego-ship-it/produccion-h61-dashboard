@@ -5,6 +5,8 @@ import {
 } from "@/lib/neon";
 import { NextResponse } from "next/server";
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: Request) {
   try {
     const filters = parseFilters(request);
@@ -142,12 +144,9 @@ export async function GET(request: Request) {
       operators6,
       operators10,
       operators18,
-    });
+    }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   } catch (error) {
     console.error("Error fetching franjas:", error);
-    return NextResponse.json(
-      { error: "Error fetching franjas data" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Error fetching franjas data" }, { status: 500 , headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   }
 }

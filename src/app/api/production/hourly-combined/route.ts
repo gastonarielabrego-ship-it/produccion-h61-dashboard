@@ -5,6 +5,8 @@ import {
 } from "@/lib/neon";
 import { NextResponse } from "next/server";
 
+export const dynamic = 'force-dynamic';
+
 const SHIFT_LABELS: Record<string, string> = {
   M: "Mañana",
   T: "Tarde",
@@ -86,12 +88,9 @@ export async function GET(request: Request) {
       hourlyData,
       circuitData,
       shifts: shiftTotals,
-    });
+    }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   } catch (error) {
     console.error("Error fetching hourly combined:", error);
-    return NextResponse.json(
-      { error: "Error fetching combined hourly data" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Error fetching combined hourly data" }, { status: 500 , headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   }
 }

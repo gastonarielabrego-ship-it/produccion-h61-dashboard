@@ -1,6 +1,8 @@
 import { getClient } from "@/lib/neon";
 import { NextResponse } from "next/server";
 
+export const dynamic = 'force-dynamic';
+
 // Tables pre-created via Neon migration
 
 export async function GET() {
@@ -19,8 +21,8 @@ export async function GET() {
       months.push(Number(monthsResult.rows[i].month_key));
     }
 
-    return NextResponse.json({ dates, months });
+    return NextResponse.json({ dates, months }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   } catch (error: any) {
-    return NextResponse.json({ dates: [], months: [], error: error.message }, { status: 500 });
+    return NextResponse.json({ dates: [], months: [], error: error.message }, { status: 500 , headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   }
 }
