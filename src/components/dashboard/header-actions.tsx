@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Upload, FileDown, CheckCircle2, AlertCircle, Loader2, Timer } from "lucide-react";
+import { Upload, FileDown, CheckCircle2, AlertCircle, Loader2, Timer, Coffee } from "lucide-react";
 import * as XLSX from "xlsx";
 
 interface HeaderActionsProps {
@@ -10,7 +10,7 @@ interface HeaderActionsProps {
   onRefreshClarkistas?: () => void;
 }
 
-type UploadingLabel = "prep" | "clark" | "tm";
+type UploadingLabel = "prep" | "clark" | "tm" | "ti";
 
 /** Rows per chunk — each INSERT = 1 SQL statement, must finish under Vercel 10s */
 const CHUNK_SIZE = 200;
@@ -25,6 +25,7 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
   const fileInputRef = useRef<HTMLInputElement>(null);
   const clarkInputRef = useRef<HTMLInputElement>(null);
   const tmInputRef = useRef<HTMLInputElement>(null);
+  const tiInputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const startTimer = useCallback(() => {
@@ -214,6 +215,11 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
     if (file) handleChunkedUpload(file, "/api/admin/upload-tm", "tm", onRefresh);
     if (tmInputRef.current) tmInputRef.current.value = "";
   };
+  const handleTIFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleChunkedUpload(file, "/api/admin/upload", "ti", onRefresh);
+    if (tiInputRef.current) tiInputRef.current.value = "";
+  };
 
   const formatTime = (sec: number) => {
     if (sec < 60) return `${sec}s`;
@@ -229,6 +235,7 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
       <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.docx,.doc" onChange={handleFileChange} className="hidden" />
       <input ref={clarkInputRef} type="file" accept=".xlsx,.xls,.docx,.doc" onChange={handleClarkFileChange} className="hidden" />
       <input ref={tmInputRef} type="file" accept=".xlsx,.xls,.docx,.doc" onChange={handleTMFileChange} className="hidden" />
+      <input ref={tiInputRef} type="file" accept=".xlsx,.xls,.docx,.doc" onChange={handleTIFileChange} className="hidden" />
       <Button variant="outline" size="sm" onClick={() => !uploading && fileInputRef.current?.click()} disabled={!!uploading} className="gap-1.5 text-xs h-8">
         {uploading === "prep" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
         {uploading === "prep" ? "Cargando..." : "Preparación"}
@@ -240,6 +247,10 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
       <Button variant="outline" size="sm" onClick={() => !uploading && tmInputRef.current?.click()} disabled={!!uploading} className="gap-1.5 text-xs h-8 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700">
         {uploading === "tm" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Timer className="h-3.5 w-3.5" />}
         {uploading === "tm" ? "Cargando..." : "T. Muertos"}
+      </Button>
+      <Button variant="outline" size="sm" onClick={() => !uploading && tiInputRef.current?.click()} disabled={!!uploading} className="gap-1.5 text-xs h-8 text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700">
+        {uploading === "ti" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Coffee className="h-3.5 w-3.5" />}
+        {uploading === "ti" ? "Cargando..." : "T. Intermedio"}
       </Button>
       <Button variant="outline" size="sm" onClick={handleDownload} disabled={isDownloading} className="gap-1.5 text-xs h-8">
         {isDownloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
