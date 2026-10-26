@@ -6,11 +6,12 @@ import { DashboardTab } from "@/components/dashboard/dashboard-tab";
 import { TimeWindowTable } from "@/components/dashboard/time-window-table";
 import { HeaderActions } from "@/components/dashboard/header-actions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BarChart3, Clock, Table2, Cog, Target, TrendingUp, GitCompare } from "lucide-react";
+import { BarChart3, Clock, Table2, Cog, Target, TrendingUp, GitCompare, Briefcase } from "lucide-react";
 import { SummaryTab } from "@/components/dashboard/summary-tab";
 import { CitacionTab } from "@/components/dashboard/citacion-tab";
 import { RendimientosTab } from "@/components/dashboard/rendimientos-tab";
 import { ComparativoTab } from "@/components/dashboard/comparativo-tab";
+import { SeguimientoRRHHTab } from "@/components/dashboard/seguimiento-rrhh-tab";
 
 const API_PRODUCTION = "/api/production";
 
@@ -91,13 +92,16 @@ export default function Home() {
             <TabsTrigger value="rendimientos" className="gap-1.5">
               <TrendingUp className="h-3.5 w-3.5" /> Rendimientos
             </TabsTrigger>
+            <TabsTrigger value="rrhh" className="gap-1.5">
+              <Briefcase className="h-3.5 w-3.5" /> RRHH
+            </TabsTrigger>
             <TabsTrigger value="comparativo" className="gap-1.5">
               <GitCompare className="h-3.5 w-3.5" /> Comparativo
             </TabsTrigger>
           </TabsList>
 
           {/* Preparación filter bar — hidden for Clarkistas, Rendimientos, Comparativo (they have their own filters) */}
-          {!isClarkistas && activeTab !== "rendimientos" && activeTab !== "comparativo" && (
+          {!isClarkistas && activeTab !== "rendimientos" && activeTab !== "rrhh" && activeTab !== "comparativo" && (
             <FilterBar filters={filters} filterState={filterState} setFilterState={setFilterState} title="Preparación" showTipo />
           )}
 
@@ -121,6 +125,11 @@ export default function Home() {
           {/* Rendimientos */}
           <TabsContent value="rendimientos" className="mt-6">
             <RendimientosTab refreshKey={refreshKey} />
+          </TabsContent>
+
+          {/* Seguimiento Productividad RRHH */}
+          <TabsContent value="rrhh" className="mt-6">
+            <SeguimientoRRHHTab refreshKey={refreshKey} />
           </TabsContent>
 
           {/* Comparativo */}

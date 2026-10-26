@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Upload, FileDown, CheckCircle2, AlertCircle, Loader2, Timer } from "lucide-react";
+import { Upload, FileDown, CheckCircle2, AlertCircle, Loader2, Timer, Users } from "lucide-react";
 import * as XLSX from "xlsx";
 
 interface HeaderActionsProps {
@@ -10,7 +10,7 @@ interface HeaderActionsProps {
   onRefreshClarkistas?: () => void;
 }
 
-type UploadingLabel = "prep" | "clark" | "tm";
+type UploadingLabel = "prep" | "clark" | "tm" | "nom";
 
 /** Rows per chunk — each INSERT = 1 SQL statement, must finish under Vercel 10s */
 const CHUNK_SIZE = 200;
@@ -25,6 +25,7 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
   const fileInputRef = useRef<HTMLInputElement>(null);
   const clarkInputRef = useRef<HTMLInputElement>(null);
   const tmInputRef = useRef<HTMLInputElement>(null);
+  const nomInputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const startTimer = useCallback(() => {
@@ -214,6 +215,75 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
     if (file) handleChunkedUpload(file, "/api/admin/upload-tm", "tm", onRefresh);
     if (tmInputRef.current) tmInputRef.current.value = "";
   };
+  const handleNomFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (nomInputRef.current) nomInputRef.current.value = "";
+    if (!file) return;
+
+    setUploading("nom");
+    startTimer();
+    const endpoint = "/api/admin/upload-nomina";
+    try {
+      // WARMUP
+      setUploadStatus("Preparando servidor...");
+      await warmup(endpoint);
+
+      // Parse Excel
+      setUploadStatus(`Leyendo Excel... (${(file.size / 1024).toFixed(0)} KB)`);
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const allRows: (string | number | null | undefined)[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+      if (allRows.length < 2) {
+        showToast("error", "El archivo tiene datos insuficientes");
+        return;
+      }
+
+      const header = allRows[0];
+      const dataRows = allRows.slice(1);
+      const totalRows = dataRows.length;
+
+      // Delete ALL previous records (no date filter for nomina)
+      setUploadStatus("Paso 1/2: Eliminando nómina previa...");
+      const delResult = await apiPost(endpoint, { action: "delete" });
+      if (!delResult.ok) {
+        showToast("error", `Error al eliminar: ${delResult.data.error}`);
+        return;
+      }
+
+      // INSERT in chunks
+      const totalChunks = Math.ceil(totalRows / CHUNK_SIZE);
+      setProgress({ current: 0, total: totalChunks });
+
+      let totalInserted = 0;
+      for (let c = 0; c < totalChunks; c++) {
+        const start = c * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, totalRows);
+        const chunkRows = [header, ...dataRows.slice(start, end)];
+
+        setUploadStatus(`Paso 2/2: Bloque ${c + 1}/${totalChunks} (filas ${start + 1}-${end} de ${totalRows})...`);
+        setProgress({ current: c + 1, total: totalChunks });
+
+        const insResult = await apiPost(endpoint, { action: "insert", rows: chunkRows });
+        if (!insResult.ok) {
+          showToast("error", `Bloque ${c + 1} falló: ${insResult.data.error}. Se insertaron ${totalInserted.toLocaleString("es-AR")} filas antes del error.`);
+          return;
+        }
+        totalInserted += insResult.data.inserted || 0;
+      }
+
+      showToast("success", `${totalInserted.toLocaleString("es-AR")} registros de nómina cargados en ${totalChunks} bloques`);
+      setTimeout(() => onRefresh?.(), 2000);
+    } catch (err: any) {
+      showToast("error", `Error: ${err.message || "inesperado"}`);
+    } finally {
+      stopTimer();
+      setUploading(null);
+      setUploadStatus("");
+      setProgress({ current: 0, total: 0 });
+    }
+  };
 
   const formatTime = (sec: number) => {
     if (sec < 60) return `${sec}s`;
@@ -229,6 +299,7 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
       <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.docx,.doc" onChange={handleFileChange} className="hidden" />
       <input ref={clarkInputRef} type="file" accept=".xlsx,.xls,.docx,.doc" onChange={handleClarkFileChange} className="hidden" />
       <input ref={tmInputRef} type="file" accept=".xlsx,.xls,.docx,.doc" onChange={handleTMFileChange} className="hidden" />
+      <input ref={nomInputRef} type="file" accept=".xlsx,.xls,.docx,.doc" onChange={handleNomFileChange} className="hidden" />
       <Button variant="outline" size="sm" onClick={() => !uploading && fileInputRef.current?.click()} disabled={!!uploading} className="gap-1.5 text-xs h-8">
         {uploading === "prep" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
         {uploading === "prep" ? "Cargando..." : "Preparación"}
@@ -240,6 +311,10 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
       <Button variant="outline" size="sm" onClick={() => !uploading && tmInputRef.current?.click()} disabled={!!uploading} className="gap-1.5 text-xs h-8 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700">
         {uploading === "tm" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Timer className="h-3.5 w-3.5" />}
         {uploading === "tm" ? "Cargando..." : "T. Muertos"}
+      </Button>
+      <Button variant="outline" size="sm" onClick={() => !uploading && nomInputRef.current?.click()} disabled={!!uploading} className="gap-1.5 text-xs h-8 text-violet-600 border-violet-200 hover:bg-violet-50 hover:text-violet-700">
+        {uploading === "nom" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Users className="h-3.5 w-3.5" />}
+        {uploading === "nom" ? "Cargando..." : "Nómina"}
       </Button>
       <Button variant="outline" size="sm" onClick={handleDownload} disabled={isDownloading} className="gap-1.5 text-xs h-8">
         {isDownloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
