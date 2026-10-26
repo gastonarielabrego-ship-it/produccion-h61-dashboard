@@ -1,6 +1,7 @@
 import {
   getAllRecords,
   getSourceTable,
+  getClient,
 } from "@/lib/neon";
 import { NextResponse } from "next/server";
 
@@ -22,6 +23,24 @@ export async function GET(request: Request) {
       value,
       label,
     }));
+
+    // ── Virtual "Intermedio" turno: detect records with first activity at hour 09 ──
+    // If any record has hora_09 > 0 AND all hours 0-8 = 0, add "I" / "Intermedio" as a shift option
+    let hasIntermedio = false;
+    for (const r of records) {
+      const hasHour09 = r.hourlyData.some((h) => h.hour === 9 && h.quantity > 0);
+      const hasBefore09 = r.hourlyData.some((h) => h.hour < 9 && h.quantity > 0);
+      if (hasHour09 && !hasBefore09) {
+        hasIntermedio = true;
+        break;
+      }
+    }
+    if (hasIntermedio) {
+      // Only add if not already present (avoid duplicates if DB already has "I")
+      if (!shifts.some((s) => s.value === "I")) {
+        shifts.push({ value: "I", label: "Intermedio" });
+      }
+    }
 
     const funcMap = new Map<string, string>();
     for (const r of records) funcMap.set(r.funcion, r.funcionDesc);

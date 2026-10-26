@@ -88,7 +88,10 @@ export async function GET(request: Request) {
     const addParam = (v: string | number): string => { params.push(v); return `$${pIdx++}`; };
     if (dateFrom) { conditions.push(`fecha >= ${addParam(Number(dateFrom))}`); }
     if (dateTo) { conditions.push(`fecha <= ${addParam(Number(dateTo))}`); }
-    if (turno) { conditions.push(`turno = ${addParam(turno)}`); }
+    // For turno="I" (Intermedio), we filter in JS after fetching (based on hourly data)
+    // For regular turnos, we filter in SQL
+    const isIntermedio = turno === "I";
+    if (turno && !isIntermedio) { conditions.push(`turno = ${addParam(turno)}`); }
     const where = conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
 
     // ── 0. Fetch nomina_override for tipo classification ──
@@ -143,6 +146,13 @@ export async function GET(request: Request) {
 
       // Apply tipo filter in JS (safe, avoids SQL crash with edge-case operarios)
       if (tipo && getTipo(operario, overrideSet) !== tipo) continue;
+
+      // Apply Intermedio turno filter in JS: first activity at hour 09 (pikeo from 9:00hs)
+      if (isIntermedio) {
+        const hora09 = Number(row.hora_09) || 0;
+        const hasBefore09 = (Number(row.hora_00) || 0) + (Number(row.hora_01) || 0) + (Number(row.hora_02) || 0) + (Number(row.hora_03) || 0) + (Number(row.hora_04) || 0) + (Number(row.hora_05) || 0) + (Number(row.hora_06) || 0) + (Number(row.hora_07) || 0) + (Number(row.hora_08) || 0);
+        if (hora09 <= 0 || hasBefore09 > 0) continue;
+      }
 
       if (fecha <= 0 || !operario) continue;
 

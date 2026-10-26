@@ -110,7 +110,13 @@ function buildWhere(filters: FilterOptions): { sql: string; params: (string | nu
     }
   }
   if (filters.turno) {
-    conditions.push(`turno = ${addParam(filters.turno)}`);
+    if (filters.turno === "I") {
+      // Virtual "Intermedio" turno: detected by first activity at hour 09 (pikeo from 9:00hs)
+      // hora_09 > 0 AND all hours before 9 are 0
+      conditions.push(`(hora_09 > 0 AND hora_00 = 0 AND hora_01 = 0 AND hora_02 = 0 AND hora_03 = 0 AND hora_04 = 0 AND hora_05 = 0 AND hora_06 = 0 AND hora_07 = 0 AND hora_08 = 0)`);
+    } else {
+      conditions.push(`turno = ${addParam(filters.turno)}`);
+    }
   }
   if (filters.circuito && filters.circuito.length > 0) {
     const placeholders = filters.circuito.map((c) => addParam(c));
@@ -195,7 +201,16 @@ export function applyFilters(
     if (filters.date && r.date !== Number(filters.date)) return false;
     if (filters.dateFrom && r.date < Number(filters.dateFrom)) return false;
     if (filters.dateTo && r.date > Number(filters.dateTo)) return false;
-    if (filters.turno && r.turno !== filters.turno) return false;
+    if (filters.turno) {
+      if (filters.turno === "I") {
+        // Virtual "Intermedio": first activity at hour 09
+        const hasHour09 = r.hourlyData.some((h) => h.hour === 9 && h.quantity > 0);
+        const hasBefore09 = r.hourlyData.some((h) => h.hour < 9 && h.quantity > 0);
+        if (!hasHour09 || hasBefore09) return false;
+      } else {
+        if (r.turno !== filters.turno) return false;
+      }
+    }
     if (filters.circuito && filters.circuito.length > 0 && !filters.circuito.includes(r.circuito)) return false;
     if (filters.actividad && String(r.actividad) !== filters.actividad) return false;
     if (filters.funcion && r.funcion !== filters.funcion) return false;
