@@ -265,3 +265,28 @@ Stage Summary:
 - Fixed MISSING /api/admin/upload route that was causing Preparación uploads to fail with 404
 - All 5 upload buttons working: Preparación, Clarkistas, T. Muertos, T. Intermedio, Informe
 - Tab uses /api/rendimientos with turno=I pre-applied filter
+
+---
+Task ID: 6
+Agent: main
+Task: Turno Intermedio as virtual filter (detected by first pikeo at 9:00hs) - deploy and verify
+
+Work Log:
+- Changed approach: Intermedio is NOT a DB turno code, it's a VIRTUAL filter detected by hourly data
+- Modified neon.ts buildWhere(): when turno="I", uses SQL condition (hora_09 > 0 AND hora_00..hora_08 = 0) instead of turno='I'
+- Modified neon.ts applyFilters(): same logic for in-memory filtering
+- Modified /api/production/dates: auto-detects Intermedio records and adds {value:"I", label:"Intermedio"} to shifts array
+- Modified /api/rendimientos: when turno=I, skips SQL turno filter and applies JS-side hourly filter after fetching
+- Updated turno-intermedio-tab.tsx: simplified, uses same /api/rendimientos?turno=I endpoint
+- Fixed missing closing parenthesis in rendimientos route
+- Deployed to Vercel via git push
+- Verified: API /api/production/dates shows I=Intermedio in shifts dropdown
+- Verified: API /api/rendimientos?turno=I returns 202 personas, 277,269 bultos, B/H Neta=35.1
+- Verified: All 6 upload API routes respond correctly (5 x 200, 1 x 405 expected)
+
+Stage Summary:
+- Intermedio is now a FILTER option in the Turno dropdown, available on ALL tabs
+- Auto-detected: records where hora_09 is the first active hour (hours 0-8 are zero)
+- 202 workers classified as Intermedio across 137 days
+- T. Intermedio tab still exists as a monitoring shortcut with pre-applied turno=I filter
+- All upload buttons verified working on production
