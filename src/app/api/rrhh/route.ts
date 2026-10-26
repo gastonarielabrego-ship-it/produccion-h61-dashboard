@@ -61,7 +61,7 @@ export async function GET(request: Request) {
     const nomAddParam = (v: string | number): string => { nomParams.push(v); return `$${nIdx++}`; };
     if (jornada) { nomConditions.push(`jornada = ${nomAddParam(jornada)}`); }
     if (perfil) { nomConditions.push(`perfil = ${nomAddParam(perfil)}`); }
-    if (soloActivos) { nomConditions.push(`activo = '*'`); }
+    if (soloActivos) { nomConditions.push(`(activo = '*' OR activo = '1')`); }
     const nomWhere = nomConditions.length > 0 ? "WHERE " + nomConditions.join(" AND ") : "";
 
     const nomResult = await client.execute(

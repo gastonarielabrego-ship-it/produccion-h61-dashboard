@@ -17,7 +17,7 @@ export function SeguimientoRRHHTab({ refreshKey }: SeguimientoRRHHTabProps) {
   const [fHasta, setFHasta] = useState("");
   const [fJornada, setFJornada] = useState("");
   const [fPerfil, setFPerfil] = useState("");
-  const [fSoloActivos, setFSoloActivos] = useState(true);
+  const [fSoloActivos, setFSoloActivos] = useState(false);
   const [expandedPerson, setExpandedPerson] = useState<string | null>(null);
 
   const dateToInt = useCallback(function(dateStr: string): string {
