@@ -86,21 +86,21 @@ async function handleInsertLegacy(rows: (string | number | null | undefined)[][]
   const colIdx: Record<string, number> = {};
   header.forEach((h, i) => { colIdx[h] = i; });
 
-  const codEmpCol = colIdx["CODIGO DE EMPLEADO"] ?? colIdx["CODIGO_EMPLEADO"] ?? -1;
+  const codEmpCol = colIdx["CÓDIGO DE EMPLEADO"] ?? colIdx["CODIGO DE EMPLEADO"] ?? colIdx["CODIGO_EMPLEADO"] ?? -1;
   const nombreCol = colIdx["APELLIDOS, NOMBRE"] ?? colIdx["NOMBRE"] ?? colIdx["APELLIDOS NOMBRE"] ?? -1;
   const jornadaCol = colIdx["JORNADA"] ?? -1;
   const usuarioCol = colIdx["USUARIO"] ?? -1;
   const perfilCol = colIdx["PERFIL"] ?? -1;
   const sectorCol = colIdx["SECTOR"] ?? -1;
   const activoCol = colIdx["ACTIVO"] ?? -1;
-  const fechaAltaCol = colIdx["DIAS"] ?? -1;
+  const fechaAltaCol = colIdx["DÍAS"] ?? colIdx["DIAS"] ?? -1;
   const hoyCol = colIdx["HOY"] ?? -1;
   const fechaBajaCol = colIdx["FECHA DE BAJA"] ?? hoyCol ?? -1;
   const motivoBajaCol = colIdx["MOTIVO DE BAJA"] ?? -1;
   const anioCol = colIdx["AÑO"] ?? colIdx["ANIO"] ?? -1;
-  const nacCol = colIdx["NACIMIENTO"] ?? -1;
+  const nacCol = colIdx["NACIMIENTO"] ?? colIdx["NACIMIENTO "] ?? -1;
   const edadCol = colIdx["EDAD"] ?? -1;
-  const primMedCol = colIdx["PRIMERA MEDICION"] ?? colIdx["PRIMERA MEDICIÓN"] ?? -1;
+  const primMedCol = colIdx["PRIMERA MEDICION"] ?? colIdx["PRIMERA MEDICIÓN"] ?? colIdx["PRIMERA MEDICIÓN "] ?? -1;
   const diasActivosCol = colIdx["DIAS ACTIVOS"] ?? -1;
 
   if (usuarioCol < 0) {
@@ -114,8 +114,13 @@ async function handleInsertLegacy(rows: (string | number | null | undefined)[][]
     const usuario = getStr(row, usuarioCol);
     if (!usuario) continue;
 
+    const codigoEmpleado = getVal(row, codEmpCol);
+    const diasActivos = getVal(row, diasActivosCol);
+    const anio = getVal(row, anioCol);
+    const edad = getVal(row, edadCol);
+
     allArgs.push([
-      getVal(row, codEmpCol) > 0 ? getVal(row, codEmpCol) : null,
+      codigoEmpleado > 0 ? codigoEmpleado : 0,           // NOT NULL integer
       getStr(row, nombreCol),
       getStr(row, jornadaCol),
       usuario,
@@ -125,10 +130,10 @@ async function handleInsertLegacy(rows: (string | number | null | undefined)[][]
       parseDate(getStr(row, fechaAltaCol)),
       parseDate(getStr(row, fechaBajaCol)),
       getStr(row, motivoBajaCol),
-      getVal(row, diasActivosCol) > 0 ? getVal(row, diasActivosCol) : null,
-      getVal(row, anioCol) > 0 ? getVal(row, anioCol) : null,
+      diasActivos > 0 ? diasActivos : 0,                 // NOT NULL integer
+      anio > 0 ? anio : 0,                              // NOT NULL integer
       parseDate(getStr(row, nacCol)),
-      getVal(row, edadCol) > 0 ? getVal(row, edadCol) : null,
+      edad > 0 ? Math.round(edad) : 0,                   // NOT NULL integer, round float ages
       parseDate(getStr(row, primMedCol)),
     ]);
   }

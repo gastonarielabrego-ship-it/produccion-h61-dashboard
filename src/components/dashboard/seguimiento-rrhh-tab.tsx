@@ -56,6 +56,7 @@ export function SeguimientoRRHHTab({ refreshKey }: SeguimientoRRHHTabProps) {
     if (j === "TM") return "Mañana";
     if (j === "TT") return "Tarde";
     if (j === "TN") return "Noche";
+    if (j === "TI") return "Intermedio";
     return j;
   };
 
@@ -69,7 +70,7 @@ export function SeguimientoRRHHTab({ refreshKey }: SeguimientoRRHHTabProps) {
         "Nombre": p.nombre,
         "Jornada": jornadaLabel(p.jornada),
         "Perfil": p.perfil,
-        "Activo": p.activo === "*" ? "Sí" : "No",
+        "Activo": p.activo === "*" || p.activo === "1" ? "Sí" : "No",
         "Días Trab.": p.diasTrabajados,
         "Bultos": p.totalBultos,
         "Hs. Brutas": p.totalHsBrutas,
@@ -128,12 +129,14 @@ export function SeguimientoRRHHTab({ refreshKey }: SeguimientoRRHHTabProps) {
               <option value="TM">Mañana</option>
               <option value="TT">Tarde</option>
               <option value="TN">Noche</option>
+              <option value="TI">Intermedio</option>
             </select>
 
             <select value={fPerfil} onChange={function(e) { setFPerfil(e.target.value); }}
               className="text-xs border rounded px-2 py-1 bg-background">
               <option value="">Todos los perfiles</option>
               <option value="ENTREVISTA">Entrevista</option>
+              <option value="REINGRESO">Reingreso</option>
               <option value="XD">XD</option>
               <option value="MM">MM</option>
             </select>
@@ -241,11 +244,12 @@ export function SeguimientoRRHHTab({ refreshKey }: SeguimientoRRHHTabProps) {
                           p.jornada === "TM" ? "bg-amber-100 text-amber-800" :
                           p.jornada === "TT" ? "bg-blue-100 text-blue-800" :
                           p.jornada === "TN" ? "bg-purple-100 text-purple-800" :
+                          p.jornada === "TI" ? "bg-teal-100 text-teal-800" :
                           "bg-gray-100 text-gray-800"
                         }`}>{jornadaLabel(p.jornada)}</span>
                       </td>
                       <td className="text-xs text-center p-2">{p.perfil}</td>
-                      <td className="text-xs text-center p-2">{p.activo === "*" ? "✓" : ""}</td>
+                      <td className="text-xs text-center p-2">{p.activo === "*" || p.activo === "1" ? "✓" : ""}</td>
                       <td className="text-xs text-center p-2">{p.totalBultos.toLocaleString("es-AR")}</td>
                       <td className="text-xs text-center p-2">{p.totalHsBrutas}</td>
                       <td className="text-xs text-center p-2">{p.totalTm}</td>

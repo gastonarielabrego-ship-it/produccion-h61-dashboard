@@ -267,21 +267,21 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
       const colIdx: Record<string, number> = {};
       header.forEach((h, i) => { colIdx[h] = i; });
 
-      const codEmpCol = colIdx["CODIGO DE EMPLEADO"] ?? colIdx["CODIGO_EMPLEADO"] ?? -1;
+      const codEmpCol = colIdx["CÓDIGO DE EMPLEADO"] ?? colIdx["CODIGO DE EMPLEADO"] ?? colIdx["CODIGO_EMPLEADO"] ?? -1;
       const nombreCol = colIdx["APELLIDOS, NOMBRE"] ?? colIdx["NOMBRE"] ?? colIdx["APELLIDOS NOMBRE"] ?? -1;
       const jornadaCol = colIdx["JORNADA"] ?? -1;
       const usuarioCol = colIdx["USUARIO"] ?? -1;
       const perfilCol = colIdx["PERFIL"] ?? -1;
       const sectorCol = colIdx["SECTOR"] ?? -1;
       const activoCol = colIdx["ACTIVO"] ?? -1;
-      const fechaAltaCol = colIdx["DIAS"] ?? -1;
+      const fechaAltaCol = colIdx["DÍAS"] ?? colIdx["DIAS"] ?? -1;
       const hoyCol = colIdx["HOY"] ?? -1;
       const fechaBajaCol = colIdx["FECHA DE BAJA"] ?? hoyCol ?? -1;
       const motivoBajaCol = colIdx["MOTIVO DE BAJA"] ?? -1;
       const anioCol = colIdx["AÑO"] ?? colIdx["ANIO"] ?? -1;
-      const nacCol = colIdx["NACIMIENTO"] ?? -1;
+      const nacCol = colIdx["NACIMIENTO"] ?? colIdx["NACIMIENTO "] ?? -1;
       const edadCol = colIdx["EDAD"] ?? -1;
-      const primMedCol = colIdx["PRIMERA MEDICION"] ?? colIdx["PRIMERA MEDICIÓN"] ?? -1;
+      const primMedCol = colIdx["PRIMERA MEDICION"] ?? colIdx["PRIMERA MEDICIÓN"] ?? colIdx["PRIMERA MEDICIÓN "] ?? -1;
       const diasActivosCol = colIdx["DIAS ACTIVOS"] ?? -1;
 
       if (usuarioCol < 0) {
@@ -305,7 +305,7 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
         const edad = getVal(row, edadCol);
 
         mappedRows.push([
-          codigoEmpleado > 0 ? codigoEmpleado : null,
+          codigoEmpleado > 0 ? codigoEmpleado : 0,  // NOT NULL integer
           getStr(row, nombreCol),
           getStr(row, jornadaCol),
           usuario,
@@ -315,17 +315,30 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
           parseDate(getStr(row, fechaAltaCol)),
           parseDate(getStr(row, fechaBajaCol)),
           getStr(row, motivoBajaCol),
-          diasActivos > 0 ? diasActivos : null,
-          anio > 0 ? anio : null,
+          diasActivos > 0 ? diasActivos : 0,  // NOT NULL integer
+          anio > 0 ? anio : 0,               // NOT NULL integer
           parseDate(getStr(row, nacCol)),
-          edad > 0 ? edad : null,
+          edad > 0 ? Math.round(edad) : 0,    // NOT NULL integer, round float ages
           parseDate(getStr(row, primMedCol)),
         ]);
       }
 
-      if (mappedRows.length === 0) {
+      // Deduplicate by usuario — keep last occurrence (most recent entry)
+      const seenUsuarios = new Map<string, number>();
+      for (let i = 0; i < mappedRows.length; i++) {
+        const usuario = String(mappedRows[i][3]); // column 3 = usuario
+        seenUsuarios.set(usuario, i);
+      }
+      const uniqueRows = Array.from(seenUsuarios.values()).sort((a, b) => a - b).map(i => mappedRows[i]);
+
+      if (uniqueRows.length === 0) {
         showToast("error", "No se encontraron filas válidas con USUARIO");
         return;
+      }
+
+      const dupCount = mappedRows.length - uniqueRows.length;
+      if (dupCount > 0) {
+        console.log(`Nómina: ${dupCount} duplicados eliminados, ${uniqueRows.length} filas únicas`);
       }
 
       // Delete ALL previous records (no date filter for nomina)
@@ -339,16 +352,16 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
       // ── INSERT pre-parsed rows in smaller chunks (50 rows) ──
       // Smaller chunks = faster per request = less chance of Vercel timeout
       const NOM_CHUNK = 50;
-      const totalChunks = Math.ceil(mappedRows.length / NOM_CHUNK);
+      const totalChunks = Math.ceil(uniqueRows.length / NOM_CHUNK);
       setProgress({ current: 0, total: totalChunks });
 
       let totalInserted = 0;
       for (let c = 0; c < totalChunks; c++) {
         const start = c * NOM_CHUNK;
-        const end = Math.min(start + NOM_CHUNK, mappedRows.length);
-        const chunk = mappedRows.slice(start, end);
+        const end = Math.min(start + NOM_CHUNK, uniqueRows.length);
+        const chunk = uniqueRows.slice(start, end);
 
-        setUploadStatus(`Paso 2/2: Bloque ${c + 1}/${totalChunks} (filas ${start + 1}-${end} de ${mappedRows.length})...`);
+        setUploadStatus(`Paso 2/2: Bloque ${c + 1}/${totalChunks} (filas ${start + 1}-${end} de ${uniqueRows.length})...`);
         setProgress({ current: c + 1, total: totalChunks });
 
         // Use "insert-parsed" action — server skips header mapping entirely
