@@ -4,10 +4,9 @@ import { NextResponse } from "next/server";
 export const maxDuration = 60;
 
 // ─── Chunked upload for production_records (Neon PostgreSQL) ───
-// This is the main upload endpoint used by the "Preparación" and "T. Intermedio" buttons.
 
-const COLS = "funcion, funcion_desc, fecha, turno, turno_desc, operario, nombre, actividad, circuito, tiempo_mue, total, hora_00, hora_01, hora_02, hora_03, hora_04, hora_05, hora_06, hora_07, hora_08, hora_09, hora_10, hora_11, hora_12, hora_13, hora_14, hora_15, hora_16, hora_17, hora_18, hora_19, hora_20, hora_21, hora_22, hora_23";
-const NUM_COLS = 35;
+const COLS = "funcion, funcion_desc, fecha, turno, turno_desc, tarea, operario, nombre, actividad, circuito, tiempo_mue, total, hora_00, hora_01, hora_02, hora_03, hora_04, hora_05, hora_06, hora_07, hora_08, hora_09, hora_10, hora_11, hora_12, hora_13, hora_14, hora_15, hora_16, hora_17, hora_18, hora_19, hora_20, hora_21, hora_22, hora_23";
+const NUM_COLS = 36;
 
 const HEADER_FIXES: Record<string, string> = {
   NOIMBRE: "NOMBRE", NMBRE: "NOMBRE",
@@ -81,6 +80,7 @@ async function handleInsert(rows: (string | number | null | undefined)[][]): Pro
     hourCols.push(colIdx[`HORA_${String(h).padStart(2, "0")}`] ?? -1);
   }
 
+  const tareaCol = colIdx["TAREA"];
   const allArgs: (string | number | null)[][] = [];
 
   for (let i = 1; i < rows.length; i++) {
@@ -95,6 +95,7 @@ async function handleInsert(rows: (string | number | null | undefined)[][]): Pro
       fecha,
       getStr(row, colIdx["TURNO"]),
       getStr(row, colIdx["TURNO_DESC"]),
+      tareaCol !== undefined ? (getStr(row, tareaCol) || null) : null,
       getStr(row, colIdx["OPERARIO"]),
       getStr(row, colIdx["NOMBRE"]),
       getVal(row, colIdx["ACTIVIDAD"]),
@@ -144,7 +145,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ error: "Acción inválida. Usar: delete | insert" }, { status: 400 });
   } catch (error: any) {
-    console.error("Upload production error:", error);
+    console.error("Upload production_records error:", error);
     return NextResponse.json(
       { error: error.message || "Error al procesar", elapsed: `${((Date.now() - t0) / 1000).toFixed(1)}s` },
       { status: 500 }
