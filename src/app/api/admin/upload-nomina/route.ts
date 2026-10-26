@@ -3,30 +3,13 @@ import { NextResponse } from "next/server";
 
 export const maxDuration = 60;
 
-// ─── Chunked upload for nomina_eventuales (Neon PostgreSQL) ───
+// ─── Optimized chunked upload for nomina_eventuales (Neon PostgreSQL) ───
+// Supports TWO insert modes:
+//   action: "insert-parsed"  →  pre-mapped rows (browser already parsed columns)
+//   action: "insert"         →  legacy raw rows (backward compat)
 
 const COLS = "codigo_empleado, nombre, jornada, usuario, perfil, sector, activo, fecha_alta, fecha_baja, motivo_baja, dias_activos, anio, nacimiento, edad, primera_medicion";
 const NUM_COLS = 15;
-
-function getVal(row: (string | number | null | undefined)[], ci: number): number {
-  if (ci < 0 || ci >= row.length) return 0;
-  const v = row[ci];
-  return v === null || v === undefined ? 0 : Number(v) || 0;
-}
-
-function getStr(row: (string | number | null | undefined)[], ci: number): string {
-  if (ci < 0 || ci >= row.length) return "";
-  const v = row[ci];
-  return v === null || v === undefined ? "" : String(v).trim();
-}
-
-// Parse date like "2025/5/5" to "2025-05-05"
-function parseDate(val: string): string {
-  if (!val || val === "*") return "";
-  const parts = val.split("/");
-  if (parts.length !== 3) return val;
-  return `${parts[0]}-${parts[1].padStart(2, "0")}-${parts[2].padStart(2, "0")}`;
-}
 
 function buildBatchInsert(cols: number, batch: (string | number | null)[][]): { sql: string; params: (string | number | null)[] } {
   const pgPhArr: string[] = [];
@@ -39,23 +22,70 @@ function buildBatchInsert(cols: number, batch: (string | number | null)[][]): { 
   return { sql: pgPhArr.join(", "), params: pgFlat };
 }
 
+const UPSERT_SQL = `INSERT INTO nomina_eventuales (${COLS}) VALUES ` +
+  `@PH ON CONFLICT (usuario) DO UPDATE SET nombre=EXCLUDED.nombre, jornada=EXCLUDED.jornada, perfil=EXCLUDED.perfil, sector=EXCLUDED.sector, activo=EXCLUDED.activo, fecha_alta=EXCLUDED.fecha_alta, fecha_baja=EXCLUDED.fecha_baja, motivo_baja=EXCLUDED.motivo_baja, dias_activos=EXCLUDED.dias_activos, anio=EXCLUDED.anio, nacimiento=EXCLUDED.nacimiento, edad=EXCLUDED.edad, primera_medicion=EXCLUDED.primera_medicion, codigo_empleado=EXCLUDED.codigo_empleado`;
+
 async function handleDelete(): Promise<{ message: string }> {
   const client = getClient();
   const result = await client.execute("DELETE FROM nomina_eventuales");
   return { message: `${result.rowCount ?? "?"} registros previos eliminados` };
 }
 
-async function handleInsert(rows: (string | number | null | undefined)[][]): Promise<{ inserted: number; elapsed: string }> {
+/**
+ * FAST INSERT: pre-parsed rows from browser.
+ * Each row is already a 15-element array matching the DB column order.
+ * No header parsing needed — just build SQL and execute.
+ */
+async function handleInsertParsed(rows: (string | number | null)[][]): Promise<{ inserted: number; elapsed: string }> {
+  const t0 = Date.now();
+  if (!rows || rows.length === 0) throw new Error("No hay filas para insertar");
+
+  const client = getClient();
+  let inserted = 0;
+
+  // Process in sub-batches of 100 to stay well under Vercel timeout
+  const BATCH = 100;
+  for (let start = 0; start < rows.length; start += BATCH) {
+    const batch = rows.slice(start, start + BATCH);
+    const { sql: ph, params: flat } = buildBatchInsert(NUM_COLS, batch as (string | number | null)[][]);
+    await client.execute(UPSERT_SQL.replace("@PH", ph), flat);
+    inserted += batch.length;
+  }
+
+  return { inserted, elapsed: `${((Date.now() - t0) / 1000).toFixed(1)}s` };
+}
+
+/**
+ * LEGACY INSERT: raw Excel rows with header — kept for backward compat.
+ * Browser sends [header, ...dataRows] and server maps columns.
+ */
+function getVal(row: (string | number | null | undefined)[], ci: number): number {
+  if (ci < 0 || ci >= row.length) return 0;
+  const v = row[ci];
+  return v === null || v === undefined ? 0 : Number(v) || 0;
+}
+
+function getStr(row: (string | number | null | undefined)[], ci: number): string {
+  if (ci < 0 || ci >= row.length) return "";
+  const v = row[ci];
+  return v === null || v === undefined ? "" : String(v).trim();
+}
+
+function parseDate(val: string): string {
+  if (!val || val === "*") return "";
+  const parts = val.split("/");
+  if (parts.length !== 3) return val;
+  return `${parts[0]}-${parts[1].padStart(2, "0")}-${parts[2].padStart(2, "0")}`;
+}
+
+async function handleInsertLegacy(rows: (string | number | null | undefined)[][]): Promise<{ inserted: number; elapsed: string }> {
   const t0 = Date.now();
   if (!rows || rows.length < 2) throw new Error("Datos insuficientes para insertar");
 
   const header = rows[0].map((c) => String(c ?? "").toUpperCase().trim());
-
-  // Map header names to indices — handle various column name formats
   const colIdx: Record<string, number> = {};
   header.forEach((h, i) => { colIdx[h] = i; });
 
-  // Known column name variations
   const codEmpCol = colIdx["CODIGO DE EMPLEADO"] ?? colIdx["CODIGO_EMPLEADO"] ?? -1;
   const nombreCol = colIdx["APELLIDOS, NOMBRE"] ?? colIdx["NOMBRE"] ?? colIdx["APELLIDOS NOMBRE"] ?? -1;
   const jornadaCol = colIdx["JORNADA"] ?? -1;
@@ -63,9 +93,8 @@ async function handleInsert(rows: (string | number | null | undefined)[][]): Pro
   const perfilCol = colIdx["PERFIL"] ?? -1;
   const sectorCol = colIdx["SECTOR"] ?? -1;
   const activoCol = colIdx["ACTIVO"] ?? -1;
-  const diasCol = colIdx["DIAS"] ?? colIdx["DIAS ACTIVOS"] ?? -1;
-  const fechaAltaCol = colIdx["DIAS"] ?? -1; // "Días" column is actually start date
-  const hoyCol = colIdx["HOY"] ?? -1;  // HOY is actually the end/baja date
+  const fechaAltaCol = colIdx["DIAS"] ?? -1;
+  const hoyCol = colIdx["HOY"] ?? -1;
   const fechaBajaCol = colIdx["FECHA DE BAJA"] ?? hoyCol ?? -1;
   const motivoBajaCol = colIdx["MOTIVO DE BAJA"] ?? -1;
   const anioCol = colIdx["AÑO"] ?? colIdx["ANIO"] ?? -1;
@@ -85,53 +114,35 @@ async function handleInsert(rows: (string | number | null | undefined)[][]): Pro
     const usuario = getStr(row, usuarioCol);
     if (!usuario) continue;
 
-    const codigoEmpleado = getVal(row, codEmpCol);
-    const nombre = getStr(row, nombreCol);
-    const jornada = getStr(row, jornadaCol);
-    const perfil = getStr(row, perfilCol);
-    const sector = getStr(row, sectorCol);
-    const activo = getStr(row, activoCol);
-    const fechaAlta = parseDate(getStr(row, fechaAltaCol));
-    const fechaBaja = parseDate(getStr(row, fechaBajaCol));
-    const motivoBaja = getStr(row, motivoBajaCol);
-    const diasActivos = getVal(row, diasActivosCol);
-    const anio = getVal(row, anioCol);
-    const nacimiento = parseDate(getStr(row, nacCol));
-    const edad = getVal(row, edadCol);
-    const primeraMedicion = parseDate(getStr(row, primMedCol));
-
     allArgs.push([
-      codigoEmpleado > 0 ? codigoEmpleado : null,
-      nombre,
-      jornada,
+      getVal(row, codEmpCol) > 0 ? getVal(row, codEmpCol) : null,
+      getStr(row, nombreCol),
+      getStr(row, jornadaCol),
       usuario,
-      perfil,
-      sector,
-      activo,
-      fechaAlta,
-      fechaBaja,
-      motivoBaja,
-      diasActivos > 0 ? diasActivos : null,
-      anio > 0 ? anio : null,
-      nacimiento,
-      edad > 0 ? edad : null,
-      primeraMedicion,
+      getStr(row, perfilCol),
+      getStr(row, sectorCol),
+      getStr(row, activoCol),
+      parseDate(getStr(row, fechaAltaCol)),
+      parseDate(getStr(row, fechaBajaCol)),
+      getStr(row, motivoBajaCol),
+      getVal(row, diasActivosCol) > 0 ? getVal(row, diasActivosCol) : null,
+      getVal(row, anioCol) > 0 ? getVal(row, anioCol) : null,
+      parseDate(getStr(row, nacCol)),
+      getVal(row, edadCol) > 0 ? getVal(row, edadCol) : null,
+      parseDate(getStr(row, primMedCol)),
     ]);
   }
 
   if (allArgs.length === 0) throw new Error("No hay filas válidas en este bloque");
 
   const client = getClient();
-  const CHUNK = 200;
+  const CHUNK = 100;
   let inserted = 0;
 
   for (let start = 0; start < allArgs.length; start += CHUNK) {
     const batch = allArgs.slice(start, start + CHUNK);
     const { sql: ph, params: flat } = buildBatchInsert(NUM_COLS, batch);
-    await client.execute(
-      `INSERT INTO nomina_eventuales (${COLS}) VALUES ${ph} ON CONFLICT (usuario) DO UPDATE SET nombre=EXCLUDED.nombre, jornada=EXCLUDED.jornada, perfil=EXCLUDED.perfil, sector=EXCLUDED.sector, activo=EXCLUDED.activo, fecha_alta=EXCLUDED.fecha_alta, fecha_baja=EXCLUDED.fecha_baja, motivo_baja=EXCLUDED.motivo_baja, dias_activos=EXCLUDED.dias_activos, anio=EXCLUDED.anio, nacimiento=EXCLUDED.nacimiento, edad=EXCLUDED.edad, primera_medicion=EXCLUDED.primera_medicion, codigo_empleado=EXCLUDED.codigo_empleado`,
-      flat,
-    );
+    await client.execute(UPSERT_SQL.replace("@PH", ph), flat);
     inserted += batch.length;
   }
 
@@ -149,12 +160,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ ...result, elapsed: `${((Date.now() - t0) / 1000).toFixed(1)}s` });
     }
 
-    if (action === "insert") {
-      const result = await handleInsert(body.rows);
+    if (action === "insert-parsed") {
+      const result = await handleInsertParsed(body.rows);
       return NextResponse.json(result);
     }
 
-    return NextResponse.json({ error: "Acción inválida. Usar: delete | insert" }, { status: 400 });
+    if (action === "insert") {
+      const result = await handleInsertLegacy(body.rows);
+      return NextResponse.json(result);
+    }
+
+    return NextResponse.json({ error: "Acción inválida. Usar: delete | insert | insert-parsed" }, { status: 400 });
   } catch (error: any) {
     console.error("Upload nomina error:", error);
     return NextResponse.json(

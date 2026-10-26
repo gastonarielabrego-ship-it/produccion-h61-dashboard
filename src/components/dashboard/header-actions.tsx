@@ -61,11 +61,11 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
     }
   };
 
-  /** Send one POST API request — NO retry, fail fast to show real error */
-  const apiPost = async (endpoint: string, body: Record<string, unknown>): Promise<{ ok: boolean; data: any }> => {
+  /** Send one POST API request with configurable timeout (default 25s) */
+  const apiPost = async (endpoint: string, body: Record<string, unknown>, timeoutMs = 25000): Promise<{ ok: boolean; data: any }> => {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 20000);
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -80,7 +80,7 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
 
       return { ok: res.ok, data };
     } catch (err: any) {
-      if (err.name === "AbortError") return { ok: false, data: { error: "Timeout 20s — Vercel cortó la petición" } };
+      if (err.name === "AbortError") return { ok: false, data: { error: `Timeout ${(timeoutMs/1000).toFixed(0)}s — Vercel cortó la petición` } };
       return { ok: false, data: { error: err.message || "Error de red" } };
     }
   };
@@ -223,14 +223,36 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
     setUploading("nom");
     startTimer();
     const endpoint = "/api/admin/upload-nomina";
-    try {
-      // WARMUP
-      setUploadStatus("Preparando servidor...");
-      await warmup(endpoint);
 
-      // Parse Excel
-      setUploadStatus(`Leyendo Excel... (${(file.size / 1024).toFixed(0)} KB)`);
-      const buffer = await file.arrayBuffer();
+    // ── Browser-side helpers ──
+    const getVal = (row: (string | number | null | undefined)[], ci: number): number => {
+      if (ci < 0 || ci >= row.length) return 0;
+      const v = row[ci];
+      return v === null || v === undefined ? 0 : Number(v) || 0;
+    };
+    const getStr = (row: (string | number | null | undefined)[], ci: number): string => {
+      if (ci < 0 || ci >= row.length) return "";
+      const v = row[ci];
+      return v === null || v === undefined ? "" : String(v).trim();
+    };
+    const parseDate = (val: string): string => {
+      if (!val || val === "*") return "";
+      const parts = val.split("/");
+      if (parts.length !== 3) return val;
+      return `${parts[0]}-${parts[1].padStart(2, "0")}-${parts[2].padStart(2, "0")}`;
+    };
+
+    try {
+      // WARMUP + parse Excel in parallel
+      setUploadStatus("Preparando servidor y leyendo Excel...");
+      const bufferPromise = file.arrayBuffer();
+      const [warmupOk] = await Promise.all([
+        warmup(endpoint),
+        bufferPromise,
+      ]);
+
+      const buffer = await bufferPromise;
+      setUploadStatus(`Parseando Excel... (${(file.size / 1024).toFixed(0)} KB)`);
       const wb = XLSX.read(buffer, { type: "array" });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const allRows: (string | number | null | undefined)[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
@@ -240,9 +262,71 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
         return;
       }
 
-      const header = allRows[0];
+      // ── Map header columns ONCE in the browser ──
+      const header = allRows[0].map((c) => String(c ?? "").toUpperCase().trim());
+      const colIdx: Record<string, number> = {};
+      header.forEach((h, i) => { colIdx[h] = i; });
+
+      const codEmpCol = colIdx["CODIGO DE EMPLEADO"] ?? colIdx["CODIGO_EMPLEADO"] ?? -1;
+      const nombreCol = colIdx["APELLIDOS, NOMBRE"] ?? colIdx["NOMBRE"] ?? colIdx["APELLIDOS NOMBRE"] ?? -1;
+      const jornadaCol = colIdx["JORNADA"] ?? -1;
+      const usuarioCol = colIdx["USUARIO"] ?? -1;
+      const perfilCol = colIdx["PERFIL"] ?? -1;
+      const sectorCol = colIdx["SECTOR"] ?? -1;
+      const activoCol = colIdx["ACTIVO"] ?? -1;
+      const fechaAltaCol = colIdx["DIAS"] ?? -1;
+      const hoyCol = colIdx["HOY"] ?? -1;
+      const fechaBajaCol = colIdx["FECHA DE BAJA"] ?? hoyCol ?? -1;
+      const motivoBajaCol = colIdx["MOTIVO DE BAJA"] ?? -1;
+      const anioCol = colIdx["AÑO"] ?? colIdx["ANIO"] ?? -1;
+      const nacCol = colIdx["NACIMIENTO"] ?? -1;
+      const edadCol = colIdx["EDAD"] ?? -1;
+      const primMedCol = colIdx["PRIMERA MEDICION"] ?? colIdx["PRIMERA MEDICIÓN"] ?? -1;
+      const diasActivosCol = colIdx["DIAS ACTIVOS"] ?? -1;
+
+      if (usuarioCol < 0) {
+        showToast("error", `Falta columna USUARIO. Encontradas: ${header.filter(Boolean).join(", ")}`);
+        return;
+      }
+
+      // ── Pre-map ALL rows to DB column format in the browser ──
+      // Each row becomes a 15-element array matching the DB schema
+      setUploadStatus("Mapeando columnas...");
       const dataRows = allRows.slice(1);
-      const totalRows = dataRows.length;
+      const mappedRows: (string | number | null)[][] = [];
+
+      for (const row of dataRows) {
+        const usuario = getStr(row, usuarioCol);
+        if (!usuario) continue;
+
+        const codigoEmpleado = getVal(row, codEmpCol);
+        const diasActivos = getVal(row, diasActivosCol);
+        const anio = getVal(row, anioCol);
+        const edad = getVal(row, edadCol);
+
+        mappedRows.push([
+          codigoEmpleado > 0 ? codigoEmpleado : null,
+          getStr(row, nombreCol),
+          getStr(row, jornadaCol),
+          usuario,
+          getStr(row, perfilCol),
+          getStr(row, sectorCol),
+          getStr(row, activoCol),
+          parseDate(getStr(row, fechaAltaCol)),
+          parseDate(getStr(row, fechaBajaCol)),
+          getStr(row, motivoBajaCol),
+          diasActivos > 0 ? diasActivos : null,
+          anio > 0 ? anio : null,
+          parseDate(getStr(row, nacCol)),
+          edad > 0 ? edad : null,
+          parseDate(getStr(row, primMedCol)),
+        ]);
+      }
+
+      if (mappedRows.length === 0) {
+        showToast("error", "No se encontraron filas válidas con USUARIO");
+        return;
+      }
 
       // Delete ALL previous records (no date filter for nomina)
       setUploadStatus("Paso 1/2: Eliminando nómina previa...");
@@ -252,25 +336,36 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
         return;
       }
 
-      // INSERT in chunks
-      const totalChunks = Math.ceil(totalRows / CHUNK_SIZE);
+      // ── INSERT pre-parsed rows in smaller chunks (50 rows) ──
+      // Smaller chunks = faster per request = less chance of Vercel timeout
+      const NOM_CHUNK = 50;
+      const totalChunks = Math.ceil(mappedRows.length / NOM_CHUNK);
       setProgress({ current: 0, total: totalChunks });
 
       let totalInserted = 0;
       for (let c = 0; c < totalChunks; c++) {
-        const start = c * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, totalRows);
-        const chunkRows = [header, ...dataRows.slice(start, end)];
+        const start = c * NOM_CHUNK;
+        const end = Math.min(start + NOM_CHUNK, mappedRows.length);
+        const chunk = mappedRows.slice(start, end);
 
-        setUploadStatus(`Paso 2/2: Bloque ${c + 1}/${totalChunks} (filas ${start + 1}-${end} de ${totalRows})...`);
+        setUploadStatus(`Paso 2/2: Bloque ${c + 1}/${totalChunks} (filas ${start + 1}-${end} de ${mappedRows.length})...`);
         setProgress({ current: c + 1, total: totalChunks });
 
-        const insResult = await apiPost(endpoint, { action: "insert", rows: chunkRows });
+        // Use "insert-parsed" action — server skips header mapping entirely
+        const insResult = await apiPost(endpoint, { action: "insert-parsed", rows: chunk });
+
         if (!insResult.ok) {
-          showToast("error", `Bloque ${c + 1} falló: ${insResult.data.error}. Se insertaron ${totalInserted.toLocaleString("es-AR")} filas antes del error.`);
-          return;
+          // Retry once on failure
+          setUploadStatus(`Reintentando bloque ${c + 1}...`);
+          const retryResult = await apiPost(endpoint, { action: "insert-parsed", rows: chunk });
+          if (!retryResult.ok) {
+            showToast("error", `Bloque ${c + 1} falló: ${insResult.data.error}. Se insertaron ${totalInserted.toLocaleString("es-AR")} filas antes del error.`);
+            return;
+          }
+          totalInserted += retryResult.data.inserted || 0;
+        } else {
+          totalInserted += insResult.data.inserted || 0;
         }
-        totalInserted += insResult.data.inserted || 0;
       }
 
       showToast("success", `${totalInserted.toLocaleString("es-AR")} registros de nómina cargados en ${totalChunks} bloques`);
