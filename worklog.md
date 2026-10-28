@@ -290,3 +290,33 @@ Stage Summary:
 - 202 workers classified as Intermedio across 137 days
 - T. Intermedio tab still exists as a monitoring shortcut with pre-applied turno=I filter
 - All upload buttons verified working on production
+
+---
+Task ID: 7
+Agent: main
+Task: RRHH tab loads extremely slow (stuck loading) - performance fix
+
+Work Log:
+- User reported: RRHH tab stays loading a very long time when opening reports
+- Diagnosed /api/rrhh: hourly breakdown loop was O(opKeys x 24 x prodRows) =
+  10,656 person-days x 24 hours x 67,353 rows = ~17.2 BILLION iterations (~60-90s CPU)
+  Each person-day re-scanned ALL production rows 24 times to build the hourly array
+- Measured on production Neon DB: 494 nomina users -> 67,353 raw production rows,
+  old projected pipeline ~74-86s; also 3 sequential DB queries and 25MB payload
+- FIX 1: production query now aggregates in SQL: GROUP BY fecha, operario with
+  SUM(hora_XX) + SUM(CASE WHEN hora_XX > 0 THEN 1 ELSE 0 END) AS act_hora_XX
+  (act_ flags preserve exact "hour active in any raw row" semantics) -> 67K rows -> 10.6K
+- FIX 2: hourly array accumulated in single JS pass (no nested re-scan)
+- FIX 3: production + tiempos_muertos queries run in parallel (Promise.all)
+- FIX 4: NeonClient.execute widened to accept string[] params (operario = ANY($1))
+- Correctness: benchmarked old vs new logic against production data:
+  10,656 person-days compared, 0 mismatches (bultos, hs_brutas, hourly all identical)
+- Payload fetched from DB: 25MB -> 9.2MB
+- Deployed to Vercel via git push (commit f05c002)
+- Verified production: /api/rrhh full report 200 OK in 1.6-2.0s (was 80-90s+),
+  filtered query 0.7s, hourly sums match bultos exactly
+
+Stage Summary:
+- RRHH tab now loads in ~2s with FULL history and no filters (previously minutes/timeout)
+- Response shape unchanged - frontend needed no changes
+- Hourly drill-down per person-day still shows exact same numbers
