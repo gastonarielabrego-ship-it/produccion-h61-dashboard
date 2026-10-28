@@ -1,59 +1,55 @@
 import {
-  getAllRecords,
+  getPool,
   getSourceTable,
-  getClient,
 } from "@/lib/neon";
 import { NextResponse } from "next/server";
 
 export const dynamic = 'force-dynamic';
 
+// PERF: filter metadata now comes from 7 tiny SQL queries in parallel
+// (DISTINCT / GROUP BY) instead of fetching every raw row (~128K) into Node.
 export async function GET(request: Request) {
   try {
-    // Always fetch ALL records for filter dropdowns (no user filters applied)
     const tableName = getSourceTable(request);
-    const records = await getAllRecords(undefined, tableName);
+    const pool = getPool();
 
-    const dates = [...new Set(records.map((r) => r.date))].sort();
-    const circuits = [...new Set(records.map((r) => r.circuito))].sort();
-    const activities = [...new Set(records.map((r) => String(r.actividad)))].sort((a, b) => Number(a) - Number(b));
+    const intermedioCond = `hora_09 > 0 AND hora_00 = 0 AND hora_01 = 0 AND hora_02 = 0 AND hora_03 = 0 AND hora_04 = 0 AND hora_05 = 0 AND hora_06 = 0 AND hora_07 = 0 AND hora_08 = 0`;
 
-    const shiftMap = new Map<string, string>();
-    for (const r of records) shiftMap.set(r.turno, r.turnoDesc);
-    const shifts = Array.from(shiftMap.entries()).map(([value, label]) => ({
-      value,
-      label,
+    const [datesRes, circuitsRes, activitiesRes, shiftsRes, intermedioRes, functionsRes, operatorsRes] = await Promise.all([
+      pool.query(`SELECT DISTINCT fecha FROM ${tableName} ORDER BY fecha`),
+      pool.query(`SELECT DISTINCT circuito FROM ${tableName} ORDER BY circuito`),
+      pool.query(`SELECT DISTINCT actividad FROM ${tableName} ORDER BY actividad`),
+      pool.query(`SELECT turno, MAX(turno_desc) AS td FROM ${tableName} GROUP BY turno ORDER BY (ARRAY_AGG(ctid ORDER BY ctid))[1]`),
+      pool.query(`SELECT EXISTS(SELECT 1 FROM ${tableName} WHERE ${intermedioCond}) AS has_intermedio`),
+      pool.query(`SELECT funcion, MAX(funcion_desc) AS fd FROM ${tableName} GROUP BY funcion ORDER BY (ARRAY_AGG(ctid ORDER BY ctid))[1]`),
+      pool.query(`SELECT operario, (ARRAY_AGG(nombre ORDER BY id DESC))[1] AS nombre FROM ${tableName} GROUP BY operario`),
+    ]);
+
+    const dates = (datesRes.rows as Record<string, unknown>[]).map((r) => Number(r.fecha)).sort((a, b) => a - b);
+    const circuits = (circuitsRes.rows as Record<string, unknown>[]).map((r) => String(r.circuito ?? "")).sort();
+    const activities = (activitiesRes.rows as Record<string, unknown>[])
+      .map((r) => String(r.actividad ?? ""))
+      .sort((a, b) => Number(a) - Number(b));
+
+    const shifts = (shiftsRes.rows as Record<string, unknown>[]).map((r) => ({
+      value: String(r.turno ?? ""),
+      label: String(r.td ?? r.turno ?? ""),
     }));
 
-    // ── Virtual "Intermedio" turno: detect records with first activity at hour 09 ──
-    // If any record has hora_09 > 0 AND all hours 0-8 = 0, add "I" / "Intermedio" as a shift option
-    let hasIntermedio = false;
-    for (const r of records) {
-      const hasHour09 = r.hourlyData.some((h) => h.hour === 9 && h.quantity > 0);
-      const hasBefore09 = r.hourlyData.some((h) => h.hour < 9 && h.quantity > 0);
-      if (hasHour09 && !hasBefore09) {
-        hasIntermedio = true;
-        break;
-      }
-    }
-    if (hasIntermedio) {
-      // Only add if not already present (avoid duplicates if DB already has "I")
-      if (!shifts.some((s) => s.value === "I")) {
-        shifts.push({ value: "I", label: "Intermedio" });
-      }
+    // ── Virtual "Intermedio" turno: records with first activity at hour 09 ──
+    const hasIntermedio = Boolean(intermedioRes.rows[0]?.has_intermedio);
+    if (hasIntermedio && !shifts.some((s) => s.value === "I")) {
+      shifts.push({ value: "I", label: "Intermedio" });
     }
 
-    const funcMap = new Map<string, string>();
-    for (const r of records) funcMap.set(r.funcion, r.funcionDesc);
-    const functions = Array.from(funcMap.entries()).map(([value, label]) => ({
-      value,
-      label,
+    const functions = (functionsRes.rows as Record<string, unknown>[]).map((r) => ({
+      value: String(r.funcion ?? ""),
+      label: String(r.fd ?? r.funcion ?? ""),
     }));
 
     // Operators: unique (operario, nombre) sorted by nombre
-    const opMap = new Map<string, string>();
-    for (const r of records) opMap.set(r.operario, r.nombre);
-    const operators = Array.from(opMap.entries())
-      .map(([value, label]) => ({ value, label }))
+    const operators = (operatorsRes.rows as Record<string, unknown>[])
+      .map((r) => ({ value: String(r.operario ?? ""), label: String(r.nombre ?? "") }))
       .sort((a, b) => a.label.localeCompare(b.label));
 
     // Months: unique YYYYMM from dates, with labels
