@@ -1,5 +1,5 @@
 import {
-  getAllRecords,
+  getAggRecords,
   getSourceTable,
   parseFilters,
   getTMByDateOperario,
@@ -8,45 +8,21 @@ import { NextResponse } from "next/server";
 
 export const dynamic = 'force-dynamic';
 
+// PERF: SQL GROUP BY (fecha, operario) + parallel TM query.
+// Days with no activity are omitted from each operator's `days` array
+// (the frontend treats missing days as zeros) — cuts the payload ~75%.
 export async function GET(request: Request) {
   try {
     const filters = parseFilters(request);
     const tableName = getSourceTable(request);
-    const [records, tmByDateOp] = await Promise.all([
-      getAllRecords(filters, tableName),
+    const [rows, tmByDateOp] = await Promise.all([
+      getAggRecords(filters, tableName),
       getTMByDateOperario(filters),
     ]);
 
-    // Group by (operario, date)
-    const opDateMap: Record<string, {
-      operario: string;
-      nombre: string;
-      date: number;
-      bultos: number;
-      activeSlots: Set<string>; // unique (operario, hour) — but per operator it's just hour
-    }> = {};
-
-    for (const r of records) {
-      const key = `${r.operario}:${r.date}`;
-      if (!opDateMap[key]) {
-        opDateMap[key] = {
-          operario: r.operario,
-          nombre: r.nombre,
-          date: r.date,
-          bultos: 0,
-          activeSlots: new Set(),
-        };
-      }
-      const entry = opDateMap[key];
-      entry.bultos += r.total;
-      for (const hd of r.hourlyData) {
-        if (hd.quantity > 0) entry.activeSlots.add(String(hd.hour));
-      }
-    }
-
     // Collect all dates sorted
     const dateSet = new Set<number>();
-    for (const key in opDateMap) dateSet.add(opDateMap[key].date);
+    for (const r of rows) dateSet.add(r.fecha);
     const dates = Array.from(dateSet).sort((a, b) => a - b);
 
     // Collect all operators with their total B/H Neta for sorting
@@ -55,18 +31,45 @@ export async function GET(request: Request) {
     const opTotalBultos: Record<string, number> = {};
     const opTotalNetas: Record<string, number> = {};
 
-    for (const key in opDateMap) {
-      const e = opDateMap[key];
-      opNameMap[e.operario] = e.nombre;
+    type DayDetail = {
+      date: number;
+      brutas: number;
+      tmHoras: number;
+      netas: number;
+      bultos: number;
+      bhNeta: number;
+    };
 
-      const tmMinutos = tmByDateOp[`${e.date}:${e.operario}`] || 0;
+    const opDaysMap: Record<string, DayDetail[]> = {};
+
+    for (const r of rows) {
+      if (!r.operario) continue;
+      opNameMap[r.operario] = r.nombre;
+
+      const tmMinutos = tmByDateOp[`${r.fecha}:${r.operario}`] || 0;
       const tmHoras = tmMinutos / 60;
-      const brutas = e.activeSlots.size;
+      let brutas = 0;
+      for (let h = 0; h <= 23; h++) {
+        if (r.act[h]) brutas++;
+      }
       const netas = Math.round((brutas - tmHoras) * 100) / 100;
-      const bhNeta = netas > 0 ? Math.round((e.bultos / netas) * 10) / 10 : 0;
+      const bhNeta = netas > 0 ? Math.round((r.total / netas) * 10) / 10 : 0;
 
-      opTotalBultos[e.operario] = (opTotalBultos[e.operario] || 0) + e.bultos;
-      opTotalNetas[e.operario] = (opTotalNetas[e.operario] || 0) + netas;
+      opTotalBultos[r.operario] = (opTotalBultos[r.operario] || 0) + r.total;
+      opTotalNetas[r.operario] = (opTotalNetas[r.operario] || 0) + netas;
+
+      // Omit days with no activity and no TM (they were zero-filled before)
+      if (brutas > 0 || r.total > 0 || tmMinutos !== 0) {
+        if (!opDaysMap[r.operario]) opDaysMap[r.operario] = [];
+        opDaysMap[r.operario].push({
+          date: r.fecha,
+          brutas,
+          tmHoras: Math.round(tmHoras * 100) / 100,
+          netas,
+          bultos: r.total,
+          bhNeta,
+        });
+      }
     }
 
     // Calculate overall B/H Neta per operator (weighted by net hours)
@@ -81,31 +84,8 @@ export async function GET(request: Request) {
       (a, b) => opBHNetaMap[b] - opBHNetaMap[a]
     );
 
-    // Build per-operator, per-date detail
-    type DayDetail = {
-      date: number;
-      brutas: number;
-      tmHoras: number;
-      netas: number;
-      bultos: number;
-      bhNeta: number;
-    };
-
     const operators = sortedOps.map((op) => {
-      const dayDetails: DayDetail[] = dates.map((d) => {
-        const key = `${op}:${d}`;
-        const e = opDateMap[key];
-        if (!e) {
-          return { date: d, brutas: 0, tmHoras: 0, netas: 0, bultos: 0, bhNeta: 0 };
-        }
-        const tmMinutos = tmByDateOp[`${d}:${op}`] || 0;
-        const tmHoras = Math.round((tmMinutos / 60) * 100) / 100;
-        const brutas = e.activeSlots.size;
-        const netas = Math.round((brutas - tmHoras) * 100) / 100;
-        const bultos = e.bultos;
-        const bhNeta = netas > 0 ? Math.round((bultos / netas) * 10) / 10 : 0;
-        return { date: d, brutas, tmHoras, netas, bultos, bhNeta };
-      });
+      const dayDetails = (opDaysMap[op] || []).sort((a, b) => a.date - b.date);
 
       const totalBultos = dayDetails.reduce((s, d) => s + d.bultos, 0);
       const totalNetas = dayDetails.reduce((s, d) => s + d.netas, 0);

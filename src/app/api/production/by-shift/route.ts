@@ -1,5 +1,6 @@
 import {
-  getAllRecords,
+  getPool,
+  buildWhere,
   getSourceTable,
   parseFilters,
 } from "@/lib/neon";
@@ -19,38 +20,47 @@ export function getActivityColor(key: string): string {
   return ACTIVITY_COLORS[key] || "#64748b";
 }
 
+// PERF: aggregation pushed into SQL — 2 small grouped queries in parallel
+// instead of fetching every raw row (up to ~128K) into Node.
 export async function GET(request: Request) {
   try {
     const filters = parseFilters(request);
     const tableName = getSourceTable(request);
-    const records = await getAllRecords(filters, tableName);
+    const pool = getPool();
+    const { sql: whereSql, params } = buildWhere(filters);
+
+    const hourCols = Array.from({ length: 24 }, (_, h) => `hora_${String(h).padStart(2, "0")}`);
+    const sumExprs = hourCols.map((col, h) => `COALESCE(SUM(${col}), 0) AS h${h}`);
+    const missionExprs = hourCols.map((col, h) =>
+      `COUNT(DISTINCT CASE WHEN ${col} > 0 THEN fecha::text || ':' || operario END)::int AS m${h}`
+    );
+
+    const [actRes, overallRes] = await Promise.all([
+      pool.query(
+        `SELECT actividad, ${sumExprs.join(", ")}
+         FROM ${tableName} ${whereSql} GROUP BY actividad`,
+        params,
+      ),
+      pool.query(
+        `SELECT ${missionExprs.join(", ")}
+         FROM ${tableName} ${whereSql}`,
+        params,
+      ),
+    ]);
 
     // 1. Bultos per hour per activity (for stacked bars)
-    const actHourly: Record<string, Record<number, number>> = {};
+    const actHourly: Record<string, number[]> = {};
+    for (const r of actRes.rows as Record<string, unknown>[]) {
+      const actKey = String(r.actividad ?? 0);
+      const sums: number[] = [];
+      for (let h = 0; h <= 23; h++) sums.push(Number(r["h" + h]) || 0);
+      actHourly[actKey] = sums;
+    }
 
     // 2. Active operators per hour (for line)
-    const opHourly: Record<number, Set<string>> = {};
-    for (let h = 0; h <= 23; h++) opHourly[h] = new Set();
-
-    // 3. Bultos per hour total (for total bar)
-    const totalHourly: Record<number, number> = {};
-    for (let h = 0; h <= 23; h++) totalHourly[h] = 0;
-
-    for (const record of records) {
-      const actKey = String(record.actividad || 0);
-      if (!actHourly[actKey]) {
-        const obj: Record<number, number> = {};
-        for (let h = 0; h <= 23; h++) obj[h] = 0;
-        actHourly[actKey] = obj;
-      }
-      for (const hd of record.hourlyData) {
-        if (hd.quantity > 0) {
-          actHourly[actKey][hd.hour] += hd.quantity;
-          opHourly[hd.hour].add(`${record.date}:${record.operario}`);
-          totalHourly[hd.hour] += hd.quantity;
-        }
-      }
-    }
+    const overall = overallRes.rows[0] || {};
+    const opHourly: number[] = [];
+    for (let h = 0; h <= 23; h++) opHourly.push(Number(overall["m" + h]) || 0);
 
     const activities = Object.keys(actHourly).sort((a, b) => Number(a) - Number(b));
 
@@ -64,7 +74,7 @@ export async function GET(request: Request) {
       for (const act of activities) {
         point[`Actividad ${act}`] = actHourly[act][h];
       }
-      point["Operarios"] = opHourly[h].size;
+      point["Operarios"] = opHourly[h];
       hourlyData.push(point);
     }
 
@@ -72,21 +82,25 @@ export async function GET(request: Request) {
     const activityTotals = activities.map((act) => ({
       actividad: act,
       label: `Actividad ${act}`,
-      total: Object.values(actHourly[act]).reduce((sum, v) => sum + v, 0),
+      total: actHourly[act].reduce((sum, v) => sum + v, 0),
       color: getActivityColor(act),
     }));
 
     // Average bultos per hour (for reference line)
-    const totalBultos = Object.values(totalHourly).reduce((s, v) => s + v, 0);
-    const activeHours = Object.values(totalHourly).filter((v) => v > 0).length;
-    const avgHourly = activeHours > 0 ? Math.round(totalBultos / activeHours) : 0;
+    const overallHourly = new Array(24).fill(0);
+    for (const act of activities) {
+      for (let h = 0; h <= 23; h++) overallHourly[h] += actHourly[act][h];
+    }
+    const totalBultosFinal = overallHourly.reduce((s, v) => s + v, 0);
+    const activeHoursFinal = overallHourly.filter((v) => v > 0).length;
+    const avgHourly = activeHoursFinal > 0 ? Math.round(totalBultosFinal / activeHoursFinal) : 0;
 
     return NextResponse.json({
       activities: activityTotals,
       hourlyData,
       avgHourly,
-      totalBultos,
-      totalMisiones: Object.values(opHourly).reduce((max, s) => Math.max(max, s.size), 0),
+      totalBultos: totalBultosFinal,
+      totalMisiones: Math.max(...opHourly, 0),
     }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   } catch (error) {
     console.error("Error fetching by-activity:", error);

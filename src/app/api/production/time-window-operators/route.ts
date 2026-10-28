@@ -1,5 +1,5 @@
 import {
-  getAllRecords,
+  getAggRecords,
   getSourceTable,
   parseFilters,
 } from "@/lib/neon";
@@ -7,11 +7,12 @@ import { NextResponse } from "next/server";
 
 export const dynamic = 'force-dynamic';
 
+// PERF: SQL GROUP BY (fecha, operario) instead of fetching every raw row.
 export async function GET(request: Request) {
   try {
     const filters = parseFilters(request);
     const tableName = getSourceTable(request);
-    const records = await getAllRecords(filters, tableName);
+    const rows = await getAggRecords(filters, tableName);
 
     const window6Hours = new Set([6, 7, 8, 9]);     // 6-10 hs
     const window1Hours = new Set([10, 11, 12, 13]);  // 10-14 hs
@@ -19,16 +20,16 @@ export async function GET(request: Request) {
 
     const nameMap: Record<string, string> = {};
 
-    // Step 1: Find the true first active hour per (date, operario) across ALL their records
+    // Step 1: true first active hour per (date, operario)
     const firstHourMap: Record<string, number> = {};
 
-    for (const r of records) {
-      const key = `${r.date}:${r.operario}`;
+    for (const r of rows) {
+      const key = `${r.fecha}:${r.operario}`;
       nameMap[r.operario] = r.nombre;
       let recordFirst = -1;
-      for (const hd of r.hourlyData) {
-        if (hd.quantity > 0) {
-          recordFirst = hd.hour;
+      for (let h = 0; h <= 23; h++) {
+        if (r.act[h]) {
+          recordFirst = h;
           break;
         }
       }
@@ -58,21 +59,17 @@ export async function GET(request: Request) {
     let bultos10_14 = 0;
     let bultos18_22 = 0;
 
-    // Track which eligible (date, operario) actually produced in the window
     const produced6 = new Set<string>();
     const produced10 = new Set<string>();
     const produced18 = new Set<string>();
 
-    for (const r of records) {
-      const key = `${r.date}:${r.operario}`;
+    for (const r of rows) {
+      const key = `${r.fecha}:${r.operario}`;
 
-      // Window 6-10: only eligible (first hour < 6)
       if (eligible6.has(key)) {
         let q = 0;
-        for (const hd of r.hourlyData) {
-          if (window6Hours.has(hd.hour)) {
-            q += hd.quantity;
-          }
+        for (let h = 0; h <= 23; h++) {
+          if (window6Hours.has(h)) q += r.hora[h];
         }
         if (q > 0) {
           produced6.add(key);
@@ -81,13 +78,10 @@ export async function GET(request: Request) {
         }
       }
 
-      // Window 10-14: only eligible (first hour = 10)
       if (eligible10.has(key)) {
         let q = 0;
-        for (const hd of r.hourlyData) {
-          if (window1Hours.has(hd.hour)) {
-            q += hd.quantity;
-          }
+        for (let h = 0; h <= 23; h++) {
+          if (window1Hours.has(h)) q += r.hora[h];
         }
         if (q > 0) {
           produced10.add(key);
@@ -96,13 +90,10 @@ export async function GET(request: Request) {
         }
       }
 
-      // Window 18-22: only eligible (first hour = 18)
       if (eligible18.has(key)) {
         let q = 0;
-        for (const hd of r.hourlyData) {
-          if (window2Hours.has(hd.hour)) {
-            q += hd.quantity;
-          }
+        for (let h = 0; h <= 23; h++) {
+          if (window2Hours.has(h)) q += r.hora[h];
         }
         if (q > 0) {
           produced18.add(key);
@@ -118,6 +109,7 @@ export async function GET(request: Request) {
     const misiones18 = produced18.size;
 
     // Build full operator list sorted by bultos (only those with production)
+    // Ties broken by operario code for deterministic order
     const buildList = (bultosMap: Record<string, number>) =>
       Object.entries(bultosMap)
         .map(([operario, total]) => ({
@@ -125,7 +117,7 @@ export async function GET(request: Request) {
           nombre: nameMap[operario] || operario,
           total,
         }))
-        .sort((a, b) => b.total - a.total);
+        .sort((a, b) => b.total - a.total || (a.operario < b.operario ? -1 : 1));
 
     const operators6 = buildList(opBultos6);
     const operators10 = buildList(opBultos10);

@@ -81,47 +81,61 @@ export async function GET(request: Request) {
     const turno = url.searchParams.get("turno");
 
     // Build WHERE clause (PostgreSQL: positional params) — WITHOUT tipo filter
-    // Tipo is applied in JS after fetching, to avoid complex SQL that crashes with edge-case operarios
+    // Tipo is applied in JS after fetching (per-operario attribute), to avoid
+    // complex SQL that crashes with edge-case operarios
     const conditions: string[] = [];
     const params: (string | number)[] = [];
     let pIdx = 1;
     const addParam = (v: string | number): string => { params.push(v); return `$${pIdx++}`; };
     if (dateFrom) { conditions.push(`fecha >= ${addParam(Number(dateFrom))}`); }
     if (dateTo) { conditions.push(`fecha <= ${addParam(Number(dateTo))}`); }
-    // For turno="I" (Intermedio), we filter in JS after fetching (based on hourly data)
-    // For regular turnos, we filter in SQL
+    // For turno="I" (Intermedio), the per-row virtual filter is applied in SQL
+    // (rows where the first activity is at hour 09) — identical to the previous
+    // JS-side per-row check. For regular turnos, filter in SQL.
     const isIntermedio = turno === "I";
     if (turno && !isIntermedio) { conditions.push(`turno = ${addParam(turno)}`); }
+    if (isIntermedio) {
+      conditions.push(`(hora_09 > 0 AND hora_00 = 0 AND hora_01 = 0 AND hora_02 = 0 AND hora_03 = 0 AND hora_04 = 0 AND hora_05 = 0 AND hora_06 = 0 AND hora_07 = 0 AND hora_08 = 0)`);
+    }
     const where = conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
 
-    // ── 0. Fetch nomina_override for tipo classification ──
-    const overrideResult = await client.execute("SELECT operario FROM nomina_override");
+    // PERF: aggregation pushed into SQL (GROUP BY fecha, operario) — ~128K raw
+    // rows become ~30-40K aggregated rows before transfer; all 3 queries parallel.
+    const hourSel: string[] = [];
+    for (let h = 0; h <= 23; h++) {
+      const col = "hora_" + String(h).padStart(2, "0");
+      hourSel.push(`COALESCE(SUM(${col}), 0) AS h${h}, COALESCE(SUM(CASE WHEN ${col} > 0 THEN 1 ELSE 0 END), 0) AS a${h}`);
+    }
+
+    const [aggResult, overrideResult, tmResult] = await Promise.all([
+      client.execute(
+        `SELECT fecha, operario, MIN(nombre) AS nombre, COALESCE(SUM(total), 0) AS total, ${hourSel.join(", ")}
+          FROM production_records ${where}
+          GROUP BY fecha, operario
+          ORDER BY MIN(id)`,
+        params,
+      ),
+      client.execute("SELECT operario FROM nomina_override"),
+      (function() {
+        const tmParams: (string | number)[] = [];
+        let tmIdx = 1;
+        const tmAddParam = (v: string | number): string => { tmParams.push(v); return `$${tmIdx++}`; };
+        const tmConditions: string[] = [];
+        if (dateFrom) { tmConditions.push(`fecha >= ${tmAddParam(Number(dateFrom))}`); }
+        if (dateTo) { tmConditions.push(`fecha <= ${tmAddParam(Number(dateTo))}`); }
+        const tmWhere = tmConditions.length > 0 ? "WHERE " + tmConditions.join(" AND ") : "";
+        return client.execute(
+          `SELECT fecha, operario, SUM(minutos) as total_minutos FROM tiempos_muertos ${tmWhere} GROUP BY fecha, operario`,
+          tmParams,
+        );
+      })(),
+    ]);
+
     const overrideSet = new Set<string>();
     for (let i = 0; i < overrideResult.rows.length; i++) {
       overrideSet.add(String(overrideResult.rows[i].operario));
     }
 
-    // ── 1. Fetch all production records in date range ──
-    const result = await client.execute(
-      `SELECT fecha, operario, nombre, total, hora_00, hora_01, hora_02, hora_03, hora_04, hora_05, hora_06, hora_07, hora_08, hora_09, hora_10, hora_11, hora_12, hora_13, hora_14, hora_15, hora_16, hora_17, hora_18, hora_19, hora_20, hora_21, hora_22, hora_23
-        FROM production_records ${where} ORDER BY fecha, nombre`,
-      params,
-    );
-
-    // ── 2. Fetch tiempos muertos per (date, operario) ──
-    const tmParams: (string | number)[] = [];
-    let tmIdx = 1;
-    const tmAddParam = (v: string | number): string => { tmParams.push(v); return `$${tmIdx++}`; };
-    const tmConditions: string[] = [];
-    if (dateFrom) { tmConditions.push(`fecha >= ${tmAddParam(Number(dateFrom))}`); }
-    if (dateTo) { tmConditions.push(`fecha <= ${tmAddParam(Number(dateTo))}`); }
-    const tmWhere = tmConditions.length > 0 ? "WHERE " + tmConditions.join(" AND ") : "";
-
-    // TM summary per (date, operario)
-    const tmResult = await client.execute(
-      `SELECT fecha, operario, SUM(minutos) as total_minutos FROM tiempos_muertos ${tmWhere} GROUP BY fecha, operario`,
-      tmParams,
-    );
     const tmMap: Record<string, number> = {};
     for (let i = 0; i < tmResult.rows.length; i++) {
       const row = tmResult.rows[i];
@@ -129,7 +143,6 @@ export async function GET(request: Request) {
     }
 
     // ── 3. Aggregate per (fecha, operario, nombre) ──
-    // Key: "fecha:operario" → { nombre, bultos, activeHours[] }
     const personDateMap: Record<string, {
       operario: string;
       nombre: string;
@@ -137,22 +150,14 @@ export async function GET(request: Request) {
       activeHours: number[];
     }> = {};
 
-    for (let i = 0; i < result.rows.length; i++) {
-      const row = result.rows[i];
+    for (let i = 0; i < aggResult.rows.length; i++) {
+      const row = aggResult.rows[i];
       const fecha = Number(row.fecha);
       const operario = String(row.operario || "");
       const nombre = String(row.nombre || "");
-      const total = Number(row.total) || 0;
 
       // Apply tipo filter in JS (safe, avoids SQL crash with edge-case operarios)
       if (tipo && getTipo(operario, overrideSet) !== tipo) continue;
-
-      // Apply Intermedio turno filter in JS: first activity at hour 09 (pikeo from 9:00hs)
-      if (isIntermedio) {
-        const hora09 = Number(row.hora_09) || 0;
-        const hasBefore09 = (Number(row.hora_00) || 0) + (Number(row.hora_01) || 0) + (Number(row.hora_02) || 0) + (Number(row.hora_03) || 0) + (Number(row.hora_04) || 0) + (Number(row.hora_05) || 0) + (Number(row.hora_06) || 0) + (Number(row.hora_07) || 0) + (Number(row.hora_08) || 0);
-        if (hora09 <= 0 || hasBefore09 > 0) continue;
-      }
 
       if (fecha <= 0 || !operario) continue;
 
@@ -161,12 +166,11 @@ export async function GET(request: Request) {
         personDateMap[key] = { operario: operario, nombre: nombre, bultos: 0, activeHours: [] };
       }
       const entry = personDateMap[key];
-      entry.bultos += total;
+      entry.bultos += Number(row.total) || 0;
 
-      // Collect hours with qty > 0
+      // Collect hours active in any raw row
       for (let h = 0; h <= 23; h++) {
-        const col = "hora_" + String(h).padStart(2, "0");
-        if (Number(row[col]) > 0) {
+        if (Number(row["a" + h]) > 0) {
           entry.activeHours.push(h);
         }
       }
@@ -208,17 +212,18 @@ export async function GET(request: Request) {
         hs_brutas: hsBrutas,
         tm_hs: tmHs,
         hs_netas: hsNetas,
-        produccion: bultos,
         bh_bruta: bhBruta,
         bh_neta: bhNeta,
       });
     }
 
-    // Sort by nombre, then fecha
+    // Sort by nombre, then fecha, then operario (deterministic — old code relied
+    // on unstable heap-scan tie order for rows sharing name+date)
     daily.sort(function(a, b) {
       if (a.nombre < b.nombre) return -1;
       if (a.nombre > b.nombre) return 1;
-      return a.fecha - b.fecha;
+      if (a.fecha !== b.fecha) return a.fecha - b.fecha;
+      return a.operario < b.operario ? -1 : (a.operario > b.operario ? 1 : 0);
     });
 
     // ── 5. Summary per person ──

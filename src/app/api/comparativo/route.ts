@@ -76,14 +76,13 @@ export async function GET(request: Request) {
     }
     const where = conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
 
-    // ── 1. Fetch production records ──
-    const result = await client.execute(
-      `SELECT fecha, operario, nombre, total, hora_00, hora_01, hora_02, hora_03, hora_04, hora_05, hora_06, hora_07, hora_08, hora_09, hora_10, hora_11, hora_12, hora_13, hora_14, hora_15, hora_16, hora_17, hora_18, hora_19, hora_20, hora_21, hora_22, hora_23
-        FROM production_records ${where} ORDER BY fecha, nombre`,
-      params,
-    );
+    // PERF: aggregation pushed into SQL (GROUP BY fecha, operario) + TM query in parallel.
+    const hourSel: string[] = [];
+    for (let h = 0; h <= 23; h++) {
+      const col = "hora_" + String(h).padStart(2, "0");
+      hourSel.push(`COALESCE(SUM(${col}), 0) AS h${h}, COALESCE(SUM(CASE WHEN ${col} > 0 THEN 1 ELSE 0 END), 0) AS a${h}`);
+    }
 
-    // ── 2. Fetch tiempos muertos ──
     const tmParams: (string | number)[] = [];
     let tmIdx = 1;
     const tmAddParam = (v: string | number): string => { tmParams.push(v); return `$${tmIdx++}`; };
@@ -91,10 +90,20 @@ export async function GET(request: Request) {
     if (dateFrom) { tmConditions.push(`fecha >= ${tmAddParam(Number(dateFrom))}`); }
     if (dateTo) { tmConditions.push(`fecha <= ${tmAddParam(Number(dateTo))}`); }
     const tmWhere = tmConditions.length > 0 ? "WHERE " + tmConditions.join(" AND ") : "";
-    const tmResult = await client.execute(
-      `SELECT fecha, operario, SUM(minutos) as total_minutos FROM tiempos_muertos ${tmWhere} GROUP BY fecha, operario`,
-      tmParams,
-    );
+
+    const [aggResult, tmResult] = await Promise.all([
+      client.execute(
+        `SELECT fecha, operario, MIN(nombre) AS nombre, COALESCE(SUM(total), 0) AS total, ${hourSel.join(", ")}
+          FROM production_records ${where}
+          GROUP BY fecha, operario
+          ORDER BY MIN(id)`,
+        params,
+      ),
+      client.execute(
+        `SELECT fecha, operario, SUM(minutos) as total_minutos FROM tiempos_muertos ${tmWhere} GROUP BY fecha, operario`,
+        tmParams,
+      ),
+    ]);
     const tmMap: Record<string, number> = {};
     for (let i = 0; i < tmResult.rows.length; i++) {
       const row = tmResult.rows[i];
@@ -103,22 +112,20 @@ export async function GET(request: Request) {
 
     // ── 3. Aggregate per (fecha, operario) ──
     const personDateMap: Record<string, { operario: string; nombre: string; bultos: number; activeHours: number[] }> = {};
-    for (let i = 0; i < result.rows.length; i++) {
-      const row = result.rows[i];
+    for (let i = 0; i < aggResult.rows.length; i++) {
+      const row = aggResult.rows[i];
       const fecha = Number(row.fecha);
       const operario = String(row.operario || "");
       const nombre = String(row.nombre || "");
-      const total = Number(row.total) || 0;
       if (fecha <= 0 || !operario) continue;
       const key = fecha + ":" + operario;
       if (!personDateMap[key]) {
         personDateMap[key] = { operario: operario, nombre: nombre, bultos: 0, activeHours: [] };
       }
       const entry = personDateMap[key];
-      entry.bultos += total;
+      entry.bultos += Number(row.total) || 0;
       for (let h = 0; h <= 23; h++) {
-        const col = "hora_" + String(h).padStart(2, "0");
-        if (Number(row[col]) > 0) entry.activeHours.push(h);
+        if (Number(row["a" + h]) > 0) entry.activeHours.push(h);
       }
     }
 

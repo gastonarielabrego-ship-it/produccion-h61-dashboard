@@ -1,5 +1,7 @@
 import {
-  getAllRecords,
+  getAggRecords,
+  getPool,
+  buildWhere,
   getSourceTable,
   parseFilters,
   getTMByDate,
@@ -12,8 +14,6 @@ export const dynamic = 'force-dynamic';
 const MONTH_NAMES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
 // ── Helper: compute shift span + start/end hours, handling midnight wrap-around ──
-// Example: hours [23, 0, 1, 2, 3, 4, 5, 6] → span=8, start=23, end=6
-// Example: hours [8, 9, 10, 11, 12, 13, 14, 15, 16] → span=9, start=8, end=16
 function calcShiftDetails(hoursArr: number[]): { span: number; startHour: number; endHour: number } {
   const n = hoursArr.length;
   if (n === 0) return { span: 0, startHour: 0, endHour: 0 };
@@ -64,36 +64,82 @@ function calcHorasBrutas(hoursArr: number[]): number {
   return calcShiftDetails(hoursArr).span;
 }
 
-// ── No more franjas — use real turno from records ──
-
+// PERF: SQL GROUP BY (fecha, operario) with majority turno — replaces fetching
+// all raw rows (~128K). All heavy aggregation happens inside Postgres.
 export async function GET(request: Request) {
   try {
     const filters = parseFilters(request);
     const tableName = getSourceTable(request);
 
-    const [records, tmByDateAll, tmByDateOpAll] = await Promise.all([
-      getAllRecords(filters, tableName),
+    const [rows, turnoRows, tmByDateAll, tmByDateOpAll] = await Promise.all([
+      getAggRecords(filters, tableName),
+      // Exact per-row turno attribution data (replicates the previous JS majority
+      // vote with first-seen tie-break = lowest row id)
+      (async () => {
+        const pool = getPool();
+        const { sql: whereSql2, params: params2 } = buildWhere(filters);
+        return pool.query(
+          `SELECT fecha, operario, COALESCE(turno, '') AS turno, MAX(turno_desc) AS td, COUNT(*)::int AS n, MIN(id)::int AS min_id
+           FROM ${tableName} ${whereSql2} GROUP BY fecha, operario, COALESCE(turno, '')`,
+          params2,
+        );
+      })(),
       getTMByDate({}),
       getTMByDateOperario({}),
     ]);
 
     // ── Per-day aggregation ──
-    // opHours stores all hours with qty > 0 per (date, operario)
+    // opHours stores all active hours per (date, operario)
     const dayMap: Record<number, { missions: Set<string>; bultos: number; opHours: Record<string, number[]> }> = {};
     const monthMap: Record<number, { missions: Set<string>; bultos: number; days: Set<number> }> = {};
 
-    for (let i = 0; i < records.length; i++) {
-      const r = records[i];
+    // Heatmaps: (date, hour) and (operario, hour) bultos sums
+    const dayHourMap: Record<string, number> = {};
+    const opTotalMap: Record<string, number> = {};
+    const opNameMap: Record<string, string> = {};
+    const opHourMap: Record<string, number> = {};
+
+    // Turno attribution per (date, operario) — majority turno by row count,
+    // ties broken by earliest row (min id), matching the previous JS behavior
+    const opDateTurno: Record<string, string> = {};
+    const turnoDescMap: Record<string, string> = {};
+    const opDateTurnoCount: Record<string, Record<string, { n: number; minId: number }>> = {};
+    for (const r of turnoRows.rows as Record<string, unknown>[]) {
+      const key = r.fecha + ":" + r.operario;
+      const turno = String(r.turno ?? "");
+      if (!opDateTurnoCount[key]) opDateTurnoCount[key] = {};
+      opDateTurnoCount[key][turno] = { n: Number(r.n) || 0, minId: Number(r.min_id) || 0 };
+      if (turno && !turnoDescMap[turno]) turnoDescMap[turno] = String(r.td ?? turno);
+    }
+    for (const key of Object.keys(opDateTurnoCount)) {
+      const counts = opDateTurnoCount[key];
+      let bestTurno = "";
+      let bestCount = 0;
+      let bestMinId = Infinity;
+      const cKeys = Object.keys(counts);
+      for (let j = 0; j < cKeys.length; j++) {
+        const c = counts[cKeys[j]];
+        if (c.n > bestCount || (c.n === bestCount && c.minId < bestMinId)) {
+          bestCount = c.n;
+          bestMinId = c.minId;
+          bestTurno = cKeys[j];
+        }
+      }
+      opDateTurno[key] = bestTurno;
+    }
+
+    // ── Main aggregation pass over aggregated rows ──
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
       const op = r.operario;
-      const dt = r.date;
+      const dt = r.fecha;
       const tot = r.total;
       const missionKey = dt + ":" + op;
-      const hourly = r.hourlyData;
 
-      // Collect hours with qty > 0
+      // Active hours for this person-day
       const recHours: number[] = [];
-      for (let j = 0; j < hourly.length; j++) {
-        if (hourly[j].quantity > 0) recHours.push(hourly[j].hour);
+      for (let h = 0; h <= 23; h++) {
+        if (r.act[h]) recHours.push(h);
       }
 
       // Day
@@ -117,13 +163,31 @@ export async function GET(request: Request) {
       mm.missions.add(missionKey);
       mm.bultos += tot;
       mm.days.add(dt);
+
+      // Day heatmap (bultos per hour)
+      for (let h = 0; h <= 23; h++) {
+        if (r.hora[h] > 0) {
+          const key = dt + ":" + h;
+          dayHourMap[key] = (dayHourMap[key] || 0) + r.hora[h];
+        }
+      }
+
+      // Collaborator aggregates
+      opTotalMap[op] = (opTotalMap[op] || 0) + tot;
+      opNameMap[op] = r.nombre;
+      for (let h = 0; h <= 23; h++) {
+        if (r.hora[h] > 0) {
+          const key = op + ":" + h;
+          opHourMap[key] = (opHourMap[key] || 0) + r.hora[h];
+        }
+      }
     }
 
     const sortedDates = Object.keys(dayMap).map(Number).sort(function(a, b) { return a - b; });
     const sortedMonths = Object.keys(monthMap).map(Number).sort(function(a, b) { return a - b; });
 
     // ── Daily metrics (with horas extras) ──
-    const dailyMetrics = [];
+    const dailyMetrics: any[] = [];
     for (let i = 0; i < sortedDates.length; i++) {
       const date = sortedDates[i];
       const d = dayMap[date];
@@ -163,7 +227,7 @@ export async function GET(request: Request) {
     const allTMDateKeys = Object.keys(tmByDateAll);
     const allTMDateOpKeys = Object.keys(tmByDateOpAll);
 
-    const monthlyData = [];
+    const monthlyData: any[] = [];
     for (let i = 0; i < sortedMonths.length; i++) {
       const month = sortedMonths[i];
       const m = monthMap[month];
@@ -173,8 +237,8 @@ export async function GET(request: Request) {
 
       // Sum daily horas brutas for this month
       let hb = 0;
-      let heAcum = 0; // horas extras acumuladas
-      let opConHE = 0; // operarios con horas extras (conteo de misiones-diarias con HE)
+      let heAcum = 0;
+      let opConHE = 0;
       for (let k = 0; k < sortedDates.length; k++) {
         const dayDate = sortedDates[k];
         const dayMonth = Math.floor(dayDate / 100);
@@ -253,18 +317,7 @@ export async function GET(request: Request) {
     }
 
     // ── Day heatmap ──
-    const dayHourMap: Record<string, number> = {};
-    for (let i = 0; i < records.length; i++) {
-      const r = records[i];
-      const hourly = r.hourlyData;
-      for (let j = 0; j < hourly.length; j++) {
-        if (hourly[j].quantity > 0) {
-          const key = r.date + ":" + hourly[j].hour;
-          dayHourMap[key] = (dayHourMap[key] || 0) + hourly[j].quantity;
-        }
-      }
-    }
-    const dayHeatmap = [];
+    const dayHeatmap: any[] = [];
     for (let i = 0; i < sortedDates.length; i++) {
       const date = sortedDates[i];
       const row: Record<string, number> = { date: date };
@@ -274,31 +327,13 @@ export async function GET(request: Request) {
       dayHeatmap.push(row);
     }
 
-    // ── Collaborator heatmap ──
-    const opTotalMap: Record<string, number> = {};
-    const opNameMap: Record<string, string> = {};
-    for (let i = 0; i < records.length; i++) {
-      const r = records[i];
-      opTotalMap[r.operario] = (opTotalMap[r.operario] || 0) + r.total;
-      opNameMap[r.operario] = r.nombre;
-    }
+    // ── Collaborator heatmap (top 100 by bultos) ──
     const opEntries = Object.entries(opTotalMap).sort(function(a, b) { return b[1] - a[1]; });
     const sortedOps: string[] = [];
     for (let i = 0; i < Math.min(opEntries.length, 100); i++) {
       sortedOps.push(opEntries[i][0]);
     }
-    const opHourMap: Record<string, number> = {};
-    for (let i = 0; i < records.length; i++) {
-      const r = records[i];
-      const hourly = r.hourlyData;
-      for (let j = 0; j < hourly.length; j++) {
-        if (hourly[j].quantity > 0) {
-          const key = r.operario + ":" + hourly[j].hour;
-          opHourMap[key] = (opHourMap[key] || 0) + hourly[j].quantity;
-        }
-      }
-    }
-    const collaboratorHeatmap = [];
+    const collaboratorHeatmap: any[] = [];
     for (let i = 0; i < sortedOps.length; i++) {
       const op = sortedOps[i];
       const row: Record<string, any> = { operario: op, nombre: opNameMap[op] };
@@ -308,37 +343,7 @@ export async function GET(request: Request) {
       collaboratorHeatmap.push(row);
     }
 
-    // ── HE by Turno (real turno from DB) ──
-    // For each (date, operario) that has HE, attribute it to the turno from records.
-    // Build: (date:operario) → main turno (the one with most records)
-    const opDateTurno: Record<string, string> = {};
-    const opDateTurnoCount: Record<string, Record<string, number>> = {};
-    const turnoDescMap: Record<string, string> = {};
-    for (let i = 0; i < records.length; i++) {
-      const r = records[i];
-      turnoDescMap[r.turno] = r.turnoDesc;
-      const key = r.date + ":" + r.operario;
-      if (!opDateTurnoCount[key]) opDateTurnoCount[key] = {};
-      opDateTurnoCount[key][r.turno] = (opDateTurnoCount[key][r.turno] || 0) + 1;
-    }
-    // Determine main turno per (date, operario)
-    const opDateKeys = Object.keys(opDateTurnoCount);
-    for (let i = 0; i < opDateKeys.length; i++) {
-      const key = opDateKeys[i];
-      const counts = opDateTurnoCount[key];
-      let bestTurno = "";
-      let bestCount = 0;
-      const cKeys = Object.keys(counts);
-      for (let j = 0; j < cKeys.length; j++) {
-        if (counts[cKeys[j]] > bestCount) {
-          bestCount = counts[cKeys[j]];
-          bestTurno = cKeys[j];
-        }
-      }
-      opDateTurno[key] = bestTurno;
-    }
-
-    // Now attribute HE from each (date, operario) to its turno
+    // ── HE by Turno (majority turno per date-operario from SQL) ──
     const heByTurnoMap: Record<string, { he: number; misionesConHE: number; dias: Set<number>; hb: number }> = {};
     for (let i = 0; i < sortedDates.length; i++) {
       const date = sortedDates[i];
@@ -357,7 +362,7 @@ export async function GET(request: Request) {
       }
     }
 
-    const heByTurno = [];
+    const heByTurno: any[] = [];
     const turnoEntries = Object.keys(heByTurnoMap);
     for (let i = 0; i < turnoEntries.length; i++) {
       const t = turnoEntries[i];
@@ -372,7 +377,15 @@ export async function GET(request: Request) {
       });
     }
 
-    const filteredOperatorName = filters.operario && records.length > 0 ? records[0].nombre : null;
+    let filteredOperatorName: string | null = null;
+    if (filters.operario) {
+      for (let i = 0; i < rows.length; i++) {
+        if (rows[i].operario === filters.operario) {
+          filteredOperatorName = rows[i].nombre;
+          break;
+        }
+      }
+    }
 
     return NextResponse.json({
       dailyMetrics,

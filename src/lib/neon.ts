@@ -44,7 +44,7 @@ export type FilterOptions = {
 // ─── Singleton Pool ─────────────────────────────────────
 let _pool: pg.Pool | null = null;
 
-function getPool(): pg.Pool {
+export function getPool(): pg.Pool {
   if (!_pool) {
     const url = process.env.DATABASE_URL;
     if (!url) {
@@ -89,7 +89,7 @@ function rowToRecord(row: Record<string, unknown>): ProductionRecord {
 }
 
 // ─── Query builder with optional filters (PostgreSQL) ───
-function buildWhere(filters: FilterOptions): { sql: string; params: (string | number)[] } {
+export function buildWhere(filters: FilterOptions): { sql: string; params: (string | number)[] } {
   const conditions: string[] = [];
   const params: (string | number)[] = [];
   let paramIdx = 1;
@@ -278,6 +278,70 @@ export async function getTMByDate(
     map[Number(row.fecha)] = Number(row.total_minutos) || 0;
   }
   return map;
+}
+
+// ─── Aggregated records (SQL GROUP BY fecha, operario) ───
+// PERF: pushes the heavy per-person-day aggregation into Postgres.
+// Returns one row per (fecha, operario) with summed bultos, summed hourly
+// quantities and per-hour "active in any raw row" flags — the shape most
+// dashboards need, at ~1/6 of the raw data transfer.
+
+export interface AggRow {
+  fecha: number;
+  operario: string;
+  nombre: string;
+  total: number;
+  hora: number[];   // summed quantity per hour 0-23
+  act: boolean[];   // true if ANY raw row had quantity > 0 at that hour
+  mturno: string;   // majority turno (only when opts.includeTurno)
+  tdesc: string;    // turno_desc of mturno (only when opts.includeTurno)
+}
+
+export async function getAggRecords(
+  filters?: FilterOptions,
+  tableName = "production_records",
+  opts?: { includeTurno?: boolean }
+): Promise<AggRow[]> {
+  const pool = getPool();
+  const { sql: whereSql, params } = buildWhere(filters ?? {});
+
+  const sel: string[] = [
+    "fecha",
+    "operario",
+    "(ARRAY_AGG(nombre ORDER BY id))[1] AS nombre",
+    "COALESCE(SUM(total), 0) AS total",
+  ];
+  for (let h = 0; h <= 23; h++) {
+    const col = `hora_${String(h).padStart(2, "0")}`;
+    sel.push(`COALESCE(SUM(${col}), 0) AS h${h}`);
+    sel.push(`COALESCE(SUM(CASE WHEN ${col} > 0 THEN 1 ELSE 0 END), 0) AS a${h}`);
+  }
+  if (opts?.includeTurno) {
+    sel.push("MODE() WITHIN GROUP (ORDER BY turno) AS mturno");
+    sel.push("MAX(turno_desc) AS tdesc");
+  }
+
+  const query = `SELECT ${sel.join(", ")} FROM ${tableName} ${whereSql} GROUP BY fecha, operario ORDER BY MIN(id)`;
+  const result = await pool.query(query, params);
+
+  return result.rows.map((row: Record<string, unknown>): AggRow => {
+    const hora: number[] = [];
+    const act: boolean[] = [];
+    for (let h = 0; h <= 23; h++) {
+      hora.push(Number(row["h" + h]) || 0);
+      act.push(Number(row["a" + h]) > 0);
+    }
+    return {
+      fecha: Number(row.fecha) || 0,
+      operario: String(row.operario ?? ""),
+      nombre: String(row.nombre ?? ""),
+      total: Number(row.total) || 0,
+      hora,
+      act,
+      mturno: String(row.mturno ?? ""),
+      tdesc: String(row.tdesc ?? ""),
+    };
+  });
 }
 
 // ─── Raw SQL access for routes that need it ─────────────

@@ -1,5 +1,6 @@
 import {
-  getAllRecords,
+  getPool,
+  buildWhere,
   getSourceTable,
   parseFilters,
   getTMByDate,
@@ -11,54 +12,66 @@ export const dynamic = 'force-dynamic';
 
 const MONTH_NAMES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
+// PERF: aggregation pushed into SQL (GROUP BY month) + comparisons computed
+// in a second pass. Fixes a TDZ crash (monthlyData referenced inside its own
+// .map callback) that made this endpoint always return 500.
 export async function GET(request: Request) {
   try {
     const filters = parseFilters(request);
     const tableName = getSourceTable(request);
-    const [records, tmByDate, tmByDateOp] = await Promise.all([
-      getAllRecords(filters, tableName),
+    const pool = getPool();
+    const { sql: whereSql, params } = buildWhere(filters);
+
+    // activeSlots per month = distinct (operario, hour) pairs with qty > 0
+    const distinctExprs = Array.from({ length: 24 }, (_, h) => {
+      const col = `hora_${String(h).padStart(2, "0")}`;
+      return `COUNT(DISTINCT CASE WHEN ${col} > 0 THEN operario END)::int AS m${h}`;
+    });
+
+    const [monthRes, tmByDate, tmByDateOp] = await Promise.all([
+      pool.query(
+        `SELECT (fecha / 100) AS ym,
+                COUNT(DISTINCT operario)::int AS misiones,
+                COALESCE(SUM(total), 0) AS bultos,
+                COUNT(DISTINCT fecha)::int AS dias,
+                ${distinctExprs.join(", ")}
+         FROM ${tableName} ${whereSql}
+         GROUP BY 1 ORDER BY 1`,
+        params,
+      ),
       getTMByDate(filters),
       getTMByDateOperario(filters),
     ]);
 
-    // Group by month (YYYYMM)
-    const monthMap: Record<number, {
-      misionesSet: Set<string>;
-      bultos: number;
-      activeSlots: Set<string>;
-      days: Set<number>;
-    }> = {};
+    const monthlyData: any[] = [];
 
-    for (const r of records) {
-      const monthKey = Math.floor(r.date / 100);
-      if (!monthMap[monthKey]) {
-        monthMap[monthKey] = { misionesSet: new Set(), bultos: 0, activeSlots: new Set(), days: new Set() };
-      }
-      const m = monthMap[monthKey];
-      m.misionesSet.add(r.operario);
-      m.bultos += r.total;
-      m.days.add(r.date);
-      for (const hd of r.hourlyData) {
-        if (hd.quantity > 0) m.activeSlots.add(`${r.operario}:${hd.hour}`);
-      }
-    }
+    for (let idx = 0; idx < monthRes.rows.length; idx++) {
+      const r = monthRes.rows[idx] as Record<string, unknown>;
+      const month = Number(r.ym);
+      const misiones = Number(r.misiones) || 0;
+      const bultos = Number(r.bultos) || 0;
+      const dias = Number(r.dias) || 0;
 
-    const sortedMonths = Object.keys(monthMap).map(Number).sort((a, b) => a - b);
-
-    const monthlyData = sortedMonths.map((month, idx) => {
-      const m = monthMap[month];
-      const misiones = m.misionesSet.size;
-      const bultos = m.bultos;
-      const horasBrutas = m.activeSlots.size;
-      const dias = m.days.size;
+      // horasBrutas = size of activeSlots = sum over hours of distinct operarios active at that hour
+      let horasBrutas = 0;
+      for (let h = 0; h <= 23; h++) horasBrutas += Number(r["m" + h]) || 0;
 
       // Sum TM for this month
       let tmMinutos = 0;
-      for (const d of m.days) {
-        if (filters.operario) {
-          tmMinutos += tmByDateOp[`${d}:${filters.operario}`] || 0;
-        } else {
-          tmMinutos += tmByDate[d] || 0;
+      if (filters.operario) {
+        for (const key of Object.keys(tmByDateOp)) {
+          const parts = key.split(":");
+          const d = Number(parts[0]);
+          const op = parts.slice(1).join(":");
+          if (Math.floor(d / 100) === month && op === filters.operario) {
+            tmMinutos += tmByDateOp[key] || 0;
+          }
+        }
+      } else {
+        for (const key of Object.keys(tmByDate)) {
+          if (Math.floor(Number(key) / 100) === month) {
+            tmMinutos += tmByDate[key] || 0;
+          }
         }
       }
       const tmHoras = Math.round((tmMinutos / 60) * 100) / 100;
@@ -68,13 +81,7 @@ export async function GET(request: Request) {
       const bhBruta = horasBrutas > 0 ? Math.round((bultos / horasBrutas) * 10) / 10 : 0;
       const bhNeta = horasNetas > 0 ? Math.round((bultos / horasNetas) * 10) / 10 : 0;
 
-      // Month-over-month comparison
-      const prev = idx > 0 ? monthlyData[idx - 1] : null;
-      const cmpBultos = prev ? Math.round(((bultos - prev.bultos) / prev.bultos) * 10000) / 100 : null;
-      const cmpBH = prev ? Math.round(((bhBruta - prev.bhBruta) / prev.bhBruta) * 10000) / 100 : null;
-      const cmpMisiones = prev ? Math.round(((misiones - prev.misiones) / prev.misiones) * 10000) / 100 : null;
-
-      return {
+      monthlyData.push({
         month,
         label: `${MONTH_NAMES[month % 100]} ${String(month).slice(0, 4)}`,
         dias,
@@ -86,11 +93,20 @@ export async function GET(request: Request) {
         produccion,
         bhBruta,
         bhNeta,
-        cmpBultos,
-        cmpBH,
-        cmpMisiones,
-      };
-    });
+        cmpBultos: null,
+        cmpBH: null,
+        cmpMisiones: null,
+      });
+    }
+
+    // Month-over-month comparison (second pass — no TDZ)
+    for (let idx = 1; idx < monthlyData.length; idx++) {
+      const prev = monthlyData[idx - 1];
+      const cur = monthlyData[idx];
+      cur.cmpBultos = prev.bultos > 0 ? Math.round(((cur.bultos - prev.bultos) / prev.bultos) * 10000) / 100 : null;
+      cur.cmpBH = prev.bhBruta > 0 ? Math.round(((cur.bhBruta - prev.bhBruta) / prev.bhBruta) * 10000) / 100 : null;
+      cur.cmpMisiones = prev.misiones > 0 ? Math.round(((cur.misiones - prev.misiones) / prev.misiones) * 10000) / 100 : null;
+    }
 
     return NextResponse.json({ monthlyData }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   } catch (error) {

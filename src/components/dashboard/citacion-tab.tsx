@@ -70,6 +70,19 @@ export function CitacionTab({ baseQuery, showTipoFilter }: CitacionTabProps) {
       .sort((a: any, b: any) => b.overallBH - a.overallBH);
   }, [data, threshold, tipoFilter]);
 
+  // PERF: index days by date once — the previous `.find()` inside the render
+  // loops did operators × dates × days lookups (~13M ops with full history)
+  const daysByOp = useMemo(() => {
+    const map = new Map<string, Map<number, any>>();
+    if (!data) return map;
+    for (const op of (data.operators || []) as any[]) {
+      const m = new Map<number, any>();
+      for (const d of op.days || []) m.set(d.date, d);
+      map.set(op.operario, m);
+    }
+    return map;
+  }, [data]);
+
   if (error) return (
     <Card><CardContent className="p-8 text-center">
       <p className="text-sm text-muted-foreground">Error al cargar los datos.</p>
@@ -84,7 +97,7 @@ export function CitacionTab({ baseQuery, showTipoFilter }: CitacionTabProps) {
     ))}</div>
   );
 
-  const dates = data.dates as number[];
+  const dates = data ? (data.dates as number[]) : [];
 
   return (
     <Card>
@@ -155,7 +168,7 @@ export function CitacionTab({ baseQuery, showTipoFilter }: CitacionTabProps) {
                 "B/H Neta": op.overallBH,
               };
               dates.forEach((d: number) => {
-                const day = (op.days as any[]).find((dd: any) => dd.date === d);
+                const day = daysByOp.get(op.operario)?.get(d);
                 row[formatArgDate(d)] = day?.bhNeta || "";
               });
               return row;
@@ -206,7 +219,7 @@ export function CitacionTab({ baseQuery, showTipoFilter }: CitacionTabProps) {
                       {op.overallBH}
                     </td>
                     {dates.map((d: number) => {
-                      const day = (op.days as any[]).find((dd: any) => dd.date === d);
+                      const day = daysByOp.get(op.operario)?.get(d);
                       const bh = day?.bhNeta || 0;
                       return (
                         <td

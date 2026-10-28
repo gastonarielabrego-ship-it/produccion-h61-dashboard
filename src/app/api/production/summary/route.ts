@@ -1,5 +1,6 @@
 import {
-  getAllRecords,
+  getPool,
+  buildWhere,
   getSourceTable,
   parseFilters,
   getTMByDate,
@@ -9,114 +10,104 @@ import { NextResponse } from "next/server";
 
 export const dynamic = 'force-dynamic';
 
+// PERF: aggregation pushed into SQL (GROUP BY) + all queries run in parallel.
+// Previously fetched every raw row (up to ~128K) and aggregated in JS.
 export async function GET(request: Request) {
   try {
     const filters = parseFilters(request);
     const tableName = getSourceTable(request);
-    const [records, tmByDate, tmByDateOp] = await Promise.all([
-      getAllRecords(filters, tableName),
+    const pool = getPool();
+    const { sql: whereSql, params } = buildWhere(filters);
+
+    const [overall, byCirc, byTurno, byFecha, byFuncion, tmByDate, tmByDateOp] = await Promise.all([
+      pool.query(
+        `SELECT COUNT(*)::int AS n, COALESCE(SUM(total), 0) AS g,
+                COUNT(DISTINCT (fecha::text || ':' || operario))::int AS missions
+         FROM ${tableName} ${whereSql}`,
+        params,
+      ),
+      pool.query(
+        `SELECT circuito, COALESCE(SUM(total), 0) AS total
+         FROM ${tableName} ${whereSql} GROUP BY circuito`,
+        params,
+      ),
+      pool.query(
+        `SELECT turno, MAX(turno_desc) AS td, COALESCE(SUM(total), 0) AS total,
+                COUNT(DISTINCT (fecha::text || ':' || operario))::int AS m
+         FROM ${tableName} ${whereSql} GROUP BY turno`,
+        params,
+      ),
+      pool.query(
+        `SELECT fecha, COALESCE(SUM(total), 0) AS total
+         FROM ${tableName} ${whereSql} GROUP BY fecha ORDER BY fecha`,
+        params,
+      ),
+      pool.query(
+        `SELECT funcion, MAX(funcion_desc) AS fd, COALESCE(SUM(total), 0) AS total
+         FROM ${tableName} ${whereSql} GROUP BY funcion`,
+        params,
+      ),
       getTMByDate(filters),
       getTMByDateOperario(filters),
     ]);
 
     let totalTMMinutos: number;
     if (filters.operario) {
-      totalTMMinutos = Object.values(tmByDateOp).reduce((s, v) => s + v, 0);
+      totalTMMinutos = Object.values(tmByDateOp as Record<string, number>).reduce((s: number, v: number) => s + v, 0);
     } else {
-      totalTMMinutos = Object.values(tmByDate).reduce((s, v) => s + v, 0);
+      totalTMMinutos = Object.values(tmByDate as Record<string, number>).reduce((s: number, v: number) => s + v, 0);
     }
     const totalTMHoras = Math.round((totalTMMinutos / 60) * 100) / 100;
 
-    // Total por circuito
-    const byCircuit: Record<string, number> = {};
-    for (const r of records) {
-      byCircuit[r.circuito] = (byCircuit[r.circuito] || 0) + r.total;
-    }
-    const circuitData = Object.entries(byCircuit)
-      .map(([circuito, total]) => ({ circuito, total }))
-      .sort((a, b) => b.total - a.total);
+    const grandTotal = Number(overall.rows[0]?.g) || 0;
+    const totalRecords = Number(overall.rows[0]?.n) || 0;
+    const totalMissions = Number(overall.rows[0]?.missions) || 0;
 
-    // Total por turno
-    const byShift: Record<string, { label: string; total: number }> = {};
-    for (const r of records) {
-      if (!byShift[r.turno]) {
-        byShift[r.turno] = { label: r.turnoDesc, total: 0 };
-      }
-      byShift[r.turno].total += r.total;
-    }
-    const shiftData = Object.entries(byShift).map(([turno, data]) => ({
-      turno,
-      label: data.label,
-      total: data.total,
-    }));
+    // Total por circuito
+    const circuitData = byCirc.rows
+      .map((r: Record<string, unknown>) => ({ circuito: String(r.circuito ?? ""), total: Number(r.total) || 0 }))
+      .sort((a: any, b: any) => b.total - a.total);
+
+    // Total por turno (deterministic order: bultos desc, then turno)
+    const shiftData = byTurno.rows
+      .map((r: Record<string, unknown>) => ({
+        turno: String(r.turno ?? ""),
+        label: String(r.td ?? r.turno ?? ""),
+        total: Number(r.total) || 0,
+      }))
+      .sort((a: any, b: any) => b.total - a.total || (a.turno < b.turno ? -1 : 1));
 
     // Total por fecha
-    const byDate: Record<number, number> = {};
-    for (const r of records) {
-      byDate[r.date] = (byDate[r.date] || 0) + r.total;
-    }
-    const dateData = Object.entries(byDate)
-      .map(([date, total]) => ({ date: Number(date), total }))
-      .sort((a, b) => a.date - b.date);
+    const dateData = byFecha.rows
+      .map((r: Record<string, unknown>) => ({ date: Number(r.fecha), total: Number(r.total) || 0 }))
+      .sort((a: any, b: any) => a.date - b.date);
 
-    // Total por funcion
-    const byFuncion: Record<string, { label: string; total: number }> = {};
-    for (const r of records) {
-      if (!byFuncion[r.funcion]) {
-        byFuncion[r.funcion] = { label: r.funcionDesc, total: 0 };
-      }
-      byFuncion[r.funcion].total += r.total;
-    }
-    const funcionData = Object.entries(byFuncion).map(([funcion, data]) => ({
-      funcion,
-      label: data.label,
-      total: data.total,
-    }));
-
-    const grandTotal = records.reduce((sum, r) => sum + r.total, 0);
-
-    // Misiones: unique (fecha, operario) combinations
-    const missionSet = new Set<string>();
-    for (const r of records) {
-      missionSet.add(`${r.date}:${r.operario}`);
-    }
-    const totalMissions = missionSet.size;
+    // Total por funcion (deterministic order: bultos desc, then funcion)
+    const funcionData = byFuncion.rows
+      .map((r: Record<string, unknown>) => ({
+        funcion: String(r.funcion ?? ""),
+        label: String(r.fd ?? r.funcion ?? ""),
+        total: Number(r.total) || 0,
+      }))
+      .sort((a: any, b: any) => b.total - a.total || (a.funcion < b.funcion ? -1 : 1));
 
     // Participación por turno (basada en misiones de cada turno)
-    const shiftMissions: Record<string, { label: string; count: number; total: number }> = {};
-    const missionKeys = new Set<string>();
-    for (const r of records) {
-      const key = `${r.date}:${r.operario}:${r.turno}`;
-      if (!missionKeys.has(key)) {
-        missionKeys.add(key);
-        if (!shiftMissions[r.turno]) {
-          shiftMissions[r.turno] = { label: r.turnoDesc, count: 0, total: 0 };
-        }
-        shiftMissions[r.turno].count += 1;
-      }
-      if (shiftMissions[r.turno]) {
-        shiftMissions[r.turno].total += r.total;
-      }
-    }
-    const totalShiftMissions = Object.values(shiftMissions).reduce(
-      (sum, s) => sum + s.count,
-      0
-    );
-    const shiftParticipation = Object.entries(shiftMissions)
-      .map(([turno, data]) => ({
-        turno,
-        label: data.label,
-        missions: data.count,
-        total: data.total,
-        percentage:
-          totalShiftMissions > 0
-            ? Math.round((data.count / totalShiftMissions) * 100)
-            : 0,
-      }))
-      .sort((a, b) => b.percentage - a.percentage);
+    const totalShiftMissions = byTurno.rows.reduce((s: number, r: Record<string, unknown>) => s + (Number(r.m) || 0), 0);
+    const shiftParticipation = byTurno.rows
+      .map((r: Record<string, unknown>) => {
+        const count = Number(r.m) || 0;
+        return {
+          turno: String(r.turno ?? ""),
+          label: String(r.td ?? r.turno ?? ""),
+          missions: count,
+          total: Number(r.total) || 0,
+          percentage: totalShiftMissions > 0 ? Math.round((count / totalShiftMissions) * 100) : 0,
+        };
+      })
+      .sort((a: any, b: any) => b.percentage - a.percentage);
 
     return NextResponse.json({
-      totalRecords: records.length,
+      totalRecords,
       grandTotal,
       totalMissions,
       totalTMMinutos,

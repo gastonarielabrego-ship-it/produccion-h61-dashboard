@@ -1,5 +1,6 @@
 import {
-  getAllRecords,
+  getPool,
+  buildWhere,
   getSourceTable,
   parseFilters,
 } from "@/lib/neon";
@@ -13,35 +14,44 @@ const SHIFT_LABELS: Record<string, string> = {
   N: "Noche",
 };
 
+// PERF: aggregation pushed into SQL — one grouped query (fecha, turno)
+// instead of fetching every raw row (up to ~128K) into Node.
 export async function GET(request: Request) {
   try {
     const filters = parseFilters(request);
     const tableName = getSourceTable(request);
-    const records = await getAllRecords(filters, tableName);
+    const pool = getPool();
+    const { sql: whereSql, params } = buildWhere(filters);
+
+    const result = await pool.query(
+      `SELECT fecha, turno, COUNT(*)::int AS n, COALESCE(SUM(total), 0) AS t,
+              COUNT(DISTINCT CASE WHEN total > 0 THEN operario END)::int AS m
+       FROM ${tableName} ${whereSql}
+       GROUP BY fecha, turno ORDER BY fecha`,
+      params,
+    );
 
     // 1) Aggregate daily production (bultos)
     const dailyTotals: Record<number, number> = {};
-
     let grandTotal = 0;
+    let totalRecords = 0;
 
-    for (const record of records) {
-      grandTotal += record.total;
-      dailyTotals[record.date] = (dailyTotals[record.date] || 0) + record.total;
-    }
+    // 2) Unique operarios per shift per day (only rows with production)
+    const shiftDayMissions: Record<string, Record<number, number>> = {};
 
-    // 2) Count unique operarios per shift per day
-    const shiftDayMissions: Record<string, Record<number, Set<string>>> = {};
+    for (const r of result.rows as Record<string, unknown>[]) {
+      const date = Number(r.fecha);
+      const turno = String(r.turno ?? "");
+      const n = Number(r.n) || 0;
+      const t = Number(r.t) || 0;
+      const m = Number(r.m) || 0;
 
-    for (const r of records) {
-      if (!shiftDayMissions[r.turno]) {
-        shiftDayMissions[r.turno] = {};
-      }
-      if (!shiftDayMissions[r.turno][r.date]) {
-        shiftDayMissions[r.turno][r.date] = new Set();
-      }
-      if (r.total > 0) {
-        shiftDayMissions[r.turno][r.date].add(r.operario);
-      }
+      grandTotal += t;
+      totalRecords += n;
+      dailyTotals[date] = (dailyTotals[date] || 0) + t;
+
+      if (!shiftDayMissions[turno]) shiftDayMissions[turno] = {};
+      shiftDayMissions[turno][date] = m;
     }
 
     const shifts = Object.keys(shiftDayMissions).sort();
@@ -62,7 +72,7 @@ export async function GET(request: Request) {
       };
       for (const shift of shifts) {
         const label = SHIFT_LABELS[shift] || shift;
-        point[label] = shiftDayMissions[shift]?.[date]?.size || 0;
+        point[label] = shiftDayMissions[shift]?.[date] || 0;
       }
       dailyData.push(point);
     }
@@ -70,14 +80,14 @@ export async function GET(request: Request) {
     const shiftTotals = shifts.map((s) => {
       const label = SHIFT_LABELS[s] || s;
       const total = sortedDates.reduce(
-        (sum, d) => sum + (shiftDayMissions[s]?.[d]?.size || 0),
+        (sum, d) => sum + (shiftDayMissions[s]?.[d] || 0),
         0
       );
       return { turno: s, label, total };
     });
 
     return NextResponse.json({
-      totalRecords: records.length,
+      totalRecords,
       grandTotal,
       dailyData,
       shifts: shiftTotals,
