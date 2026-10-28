@@ -320,3 +320,44 @@ Stage Summary:
 - RRHH tab now loads in ~2s with FULL history and no filters (previously minutes/timeout)
 - Response shape unchanged - frontend needed no changes
 - Hourly drill-down per person-day still shows exact same numbers
+
+---
+Task ID: 8
+Agent: main
+Task: Full-project performance optimization (SQL aggregation + parallel queries + indexes)
+
+Work Log:
+- Audited all 15+ API endpoints, benchmarked each on production (worst case, no filters)
+- Added getAggRecords() helper to lib/neon.ts: SQL GROUP BY (fecha, operario) with
+  SUM(hora_XX) + per-hour active flags (SUM(CASE WHEN hora_XX>0 ...)), exported getPool/buildWhere
+- Rewrote with SQL-side aggregation + parallel queries:
+  * production/summary: 3.0s -> 0.5s (5 grouped queries in parallel)
+  * production/hourly-combined: 3.0s -> 0.6s (3 queries)
+  * production/daily-combined: -> 0.4s (1 grouped query)
+  * production/by-shift: 2.6s -> 0.5s (2 queries)
+  * production/time-window-operators: 3.0s -> 1.3s (getAggRecords)
+  * production/citacion: 4.2s/6.0MB -> 2.3s/2.15MB (zero-days omitted + TM parallel)
+  * production/summary-tables: 3.7s -> 2.2s (agg + exact turno attribution query)
+  * production/dates: was fetching ALL rows for dropdowns -> 7 tiny parallel queries
+  * rendimientos: aggregated, MIN(nombre) replicates old first-alphabetical naming
+  * comparativo: aggregated + TM parallel
+  * monthly-summary: FIXED always-500 TDZ bug (monthlyData referenced inside own .map)
+- Frontend citacion-tab: Map-based day lookups replace O(ops x dates x days) .find() (~13M ops/render)
+- New indexes on Neon: clarkistas_records(fecha, fecha_turno, operario, circuito), tiempos_muertos(operario)
+- Correctness verified against production baselines captured BEFORE deploy:
+  summary/hourly-combined/daily-combined/by-shift: IDENTICAL
+  citacion (week + operario + full): MATCH (884 worked days, zero-days omitted by design)
+  rendimientos: 26,400 daily rows + 407 summary buckets MATCH (filtered turno=I and tipo paths also verified)
+  comparativo: 407 rankings MATCH; summary-tables: daily/monthly/heatmaps IDENTICAL
+  production/dates: 100% identical (incl. 464 operator labels, shift order via ctid)
+- Known micro-diff (documented): summary-tables heByTurno turno attribution for
+  split-shift days (~0.1%): old relied on unstable heap row order; totals conserved exactly
+  (197,095 hs brutas / 13,360 hs extras in both). New behavior deterministic (count majority,
+  min-id tie-break). Empty-name daily row ordering now deterministic (operario tie-break).
+- Deployed: commits 5f37243, 299ad96 via git push
+
+Stage Summary:
+- General tab: 4 parallel fetches each now 0.4-0.6s (was ~3s each) -> tab loads ~4-6x faster
+- Citacion: payload 6.0MB -> 2.15MB, render O(1) lookups, server 1.8x faster
+- monthly-summary endpoint fixed (was 500 since creation, broke Resumen monthly compare data path if used)
+- All response shapes unchanged; frontend only touched where rendering complexity was the bottleneck
