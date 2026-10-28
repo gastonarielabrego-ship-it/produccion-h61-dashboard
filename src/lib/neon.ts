@@ -283,19 +283,19 @@ export async function getTMByDate(
 // ─── Raw SQL access for routes that need it ─────────────
 
 export interface NeonClient {
-  execute: (query: string, params?: (string | number | null)[]) => Promise<{ rows: Record<string, unknown>[]; rowCount: number }>;
+  execute: (query: string, params?: (string | number | string[] | null)[]) => Promise<{ rows: Record<string, unknown>[]; rowCount: number }>;
   batch: (queries: string[]) => Promise<{ rows: Record<string, unknown>[]; rowCount: number }[]>;
 }
 
 export function getClient(): NeonClient {
   const pool = getPool();
   return {
-    execute: async (query: string, params: (string | number | null)[] = []) => {
+    execute: async (query: string, params: (string | number | string[] | null)[] = []) => {
       const result = await pool.query(query, params);
       return { rows: result.rows as Record<string, unknown>[], rowCount: result.rowCount ?? 0 };
     },
     batch: async (queries: string[]) => {
-      const results = [];
+      const results: { rows: Record<string, unknown>[]; rowCount: number }[] = [];
       const client = await pool.connect();
       try {
         for (const q of queries) {

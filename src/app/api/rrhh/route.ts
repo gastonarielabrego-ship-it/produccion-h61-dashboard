@@ -79,41 +79,47 @@ export async function GET(request: Request) {
       return NextResponse.json({ people: [], summary: {} }, { headers: { 'Cache-Control': 'no-store' } });
     }
 
-    // ── 3. Fetch production records for these operarios in date range ──
+    // ── 3. Fetch production (aggregated in SQL by fecha+operario) and tiempos muertos IN PARALLEL ──
+    // PERF: SQL-side GROUP BY reduces ~67K raw rows to ~10K aggregated rows before transfer,
+    // and lets Postgres do the heavy SUM work instead of Node.
     const prodConditions: string[] = [];
-    const prodParams: (string | number)[] = [];
+    const prodParams: (string | number | string[])[] = [];
     let pIdx = 1;
-    const prodAddParam = (v: string | number): string => { prodParams.push(v); return `$${pIdx++}`; };
-
-    // Build IN clause for operarios
-    const operarioPlaceholders = usuarios.map((u) => prodAddParam(u)).join(",");
-    prodConditions.push(`operario IN (${operarioPlaceholders})`);
-
+    const prodAddParam = (v: string | number | string[]): string => { prodParams.push(v); return `$${pIdx++}`; };
+    prodConditions.push(`operario = ANY(${prodAddParam(usuarios)})`);
     if (dateFrom) { prodConditions.push(`fecha >= ${prodAddParam(Number(dateFrom))}`); }
     if (dateTo) { prodConditions.push(`fecha <= ${prodAddParam(Number(dateTo))}`); }
     const prodWhere = "WHERE " + prodConditions.join(" AND ");
 
-    const prodResult = await client.execute(
-      `SELECT fecha, operario, nombre, total, hora_00, hora_01, hora_02, hora_03, hora_04, hora_05, hora_06, hora_07, hora_08, hora_09, hora_10, hora_11, hora_12, hora_13, hora_14, hora_15, hora_16, hora_17, hora_18, hora_19, hora_20, hora_21, hora_22, hora_23
-        FROM production_records ${prodWhere} ORDER BY fecha, nombre`,
-      prodParams,
-    );
+    // Per-hour aggregates: SUM(hora_XX) for totals + SUM(CASE WHEN hora_XX > 0 ...)
+    // to preserve the exact "hour active in ANY raw row" semantics.
+    const hourAgg: string[] = [];
+    for (let h = 0; h <= 23; h++) {
+      const col = "hora_" + String(h).padStart(2, "0");
+      hourAgg.push(`SUM(${col}) AS ${col}, SUM(CASE WHEN ${col} > 0 THEN 1 ELSE 0 END) AS act_${col}`);
+    }
 
-    // ── 4. Fetch tiempos muertos ──
     const tmConditions: string[] = [];
-    const tmParams: (string | number)[] = [];
+    const tmParams: (string | number | string[])[] = [];
     let tmIdx = 1;
-    const tmAddParam = (v: string | number): string => { tmParams.push(v); return `$${tmIdx++}`; };
-    const tmOperarioPlaceholders = usuarios.map((u) => tmAddParam(u)).join(",");
-    tmConditions.push(`operario IN (${tmOperarioPlaceholders})`);
+    const tmAddParam = (v: string | number | string[]): string => { tmParams.push(v); return `$${tmIdx++}`; };
+    tmConditions.push(`operario = ANY(${tmAddParam(usuarios)})`);
     if (dateFrom) { tmConditions.push(`fecha >= ${tmAddParam(Number(dateFrom))}`); }
     if (dateTo) { tmConditions.push(`fecha <= ${tmAddParam(Number(dateTo))}`); }
     const tmWhere = "WHERE " + tmConditions.join(" AND ");
 
-    const tmResult = await client.execute(
-      `SELECT fecha, operario, SUM(minutos) as total_minutos FROM tiempos_muertos ${tmWhere} GROUP BY fecha, operario`,
-      tmParams,
-    );
+    const [prodResult, tmResult] = await Promise.all([
+      client.execute(
+        `SELECT fecha, operario, MAX(nombre) AS nombre, SUM(total) AS total, ${hourAgg.join(", ")}
+          FROM production_records ${prodWhere}
+          GROUP BY fecha, operario`,
+        prodParams,
+      ),
+      client.execute(
+        `SELECT fecha, operario, SUM(minutos) as total_minutos FROM tiempos_muertos ${tmWhere} GROUP BY fecha, operario`,
+        tmParams,
+      ),
+    ]);
     const tmMap: Record<string, number> = {};
     for (let i = 0; i < tmResult.rows.length; i++) {
       const row = tmResult.rows[i];
@@ -132,8 +138,10 @@ export async function GET(request: Request) {
       dias: Set<number>;
     }> = {};
 
-    // Key: "fecha:operario" → { bultos, activeHours[] }
-    const dateOpMap: Record<string, { bultos: number; activeHours: number[] }> = {};
+    // Key: "fecha:operario" → { bultos, activeHours[], hourly[24] }
+    // PERF: hourly sums accumulated in THIS single pass (rows arrive pre-aggregated by SQL).
+    // Previously each of the ~10K person-days re-scanned all 67K rows 24 times = 17.2B iterations (~61s CPU).
+    const dateOpMap: Record<string, { bultos: number; activeHours: number[]; hourly: number[] }> = {};
 
     for (let i = 0; i < prodResult.rows.length; i++) {
       const row = prodResult.rows[i];
@@ -144,15 +152,18 @@ export async function GET(request: Request) {
       if (fecha <= 0 || !operario) continue;
 
       const key = fecha + ":" + operario;
-      if (!dateOpMap[key]) {
-        dateOpMap[key] = { bultos: 0, activeHours: [] };
+      let entry = dateOpMap[key];
+      if (!entry) {
+        entry = dateOpMap[key] = { bultos: 0, activeHours: [], hourly: new Array(24).fill(0) };
       }
-      dateOpMap[key].bultos += total;
+      entry.bultos += total;
 
       for (let h = 0; h <= 23; h++) {
         const col = "hora_" + String(h).padStart(2, "0");
-        if (Number(row[col]) > 0) {
-          dateOpMap[key].activeHours.push(h);
+        const qty = Number(row[col]) || 0;
+        entry.hourly[h] += qty;
+        if (Number(row["act_" + col]) > 0) {
+          entry.activeHours.push(h);
         }
       }
 
@@ -178,20 +189,8 @@ export async function GET(request: Request) {
       const bhBruta = hsBrutas > 0 ? bultos / hsBrutas : 0;
       const bhNeta = hsNetas > 0 ? bultos / hsNetas : 0;
 
-      // Hourly breakdown
-      const hourly: number[] = [];
-      for (let h = 0; h <= 23; h++) {
-        // Collect from all rows with this fecha+operario
-        let qty = 0;
-        for (let j = 0; j < prodResult.rows.length; j++) {
-          const row = prodResult.rows[j];
-          if (Number(row.fecha) === fecha && String(row.operario) === operario) {
-            const col = "hora_" + String(h).padStart(2, "0");
-            qty += Number(row[col]) || 0;
-          }
-        }
-        hourly.push(qty);
-      }
+      // Hourly breakdown — pre-accumulated during the single pass above (O(1) here)
+      const hourly = entry.hourly;
 
       const person = personMap[operario];
       if (person) {
