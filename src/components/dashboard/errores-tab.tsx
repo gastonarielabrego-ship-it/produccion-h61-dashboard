@@ -30,6 +30,30 @@ function formatMonthLabel(monthKey: number): string {
   return (MONTH_NAMES[m] || "") + " " + y;
 }
 
+/** POST JSON con timeout y extracción robusta de error (soporta 404/500 en HTML) */
+async function postJson(url: string, body: unknown, timeoutMs = 30000): Promise<any> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const text = await res.text();
+    let json: any;
+    try { json = JSON.parse(text); } catch { json = { error: text.slice(0, 150) || `HTTP ${res.status}` }; }
+    if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+    return json;
+  } catch (err: any) {
+    if (err.name === "AbortError") throw new Error(`Timeout ${timeoutMs / 1000}s — el servidor no respondió. Reintentá.`);
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export function ErroresTab() {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState(false);
@@ -147,24 +171,14 @@ export function ErroresTab() {
       }
 
       if (dates.length > 0) {
-        await fetch("/api/admin/upload-errores", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "delete", dates }),
-        });
+        await postJson("/api/admin/upload-errores", { action: "delete", dates });
       }
 
       const CHUNK = 500;
       let totalInserted = 0;
       for (let start = 1; start < rows.length; start += CHUNK) {
         const chunk = [rows[0], ...rows.slice(start, start + CHUNK)];
-        const res = await fetch("/api/admin/upload-errores", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "insert", rows: chunk }),
-        });
-        const json = await res.json();
-        if (json.error) throw new Error(json.error);
+        const json = await postJson("/api/admin/upload-errores", { action: "insert", rows: chunk });
         totalInserted += json.inserted || 0;
       }
 
@@ -181,12 +195,7 @@ export function ErroresTab() {
   const handleDeleteAll = async () => {
     if (!confirm("Eliminar TODOS los registros de errores?")) return;
     try {
-      const res = await fetch("/api/admin/upload-errores", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "delete-all" }),
-      });
-      const json = await res.json();
+      const json = await postJson("/api/admin/upload-errores", { action: "delete-all" });
       setUploadMsg("OK: " + (json.message || "Registros eliminados"));
       fetchData();
     } catch (err: any) {

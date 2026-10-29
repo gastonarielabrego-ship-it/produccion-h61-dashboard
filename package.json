@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000",
-    "build": "next build",
+    "verify:routes": "node scripts/verify-routes.js",
+    "build": "node scripts/verify-routes.js && next build",
     "start": "next start",
     "lint": "eslint .",
     "seed:turso": "bun run scripts/seed-turso.ts"

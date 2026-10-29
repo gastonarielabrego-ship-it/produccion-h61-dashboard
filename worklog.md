@@ -361,3 +361,40 @@ Stage Summary:
 - Citacion: payload 6.0MB -> 2.15MB, render O(1) lookups, server 1.8x faster
 - monthly-summary endpoint fixed (was 500 since creation, broke Resumen monthly compare data path if used)
 - All response shapes unchanged; frontend only touched where rendering complexity was the bottleneck
+
+═══════════════════════════════════════════════════════════════════
+Task ID 8 — Botones de carga muertos + guardián anti-pérdida de rutas
+Fecha: 2026-10-29
+═══════════════════════════════════════════════════════════════════
+Reporte del usuario: "verificar los botones de carga que no responden y
+que queden en un entorno donde no se vuelva a perder la ruta"
+
+ROOT CAUSE (botón Preparación muerto):
+- HeaderActions.handleFileChange y AdminPanel apuntaban a POST /api/admin/upload
+- Esa ruta fue BORRADA accidentalmente en commit 50ee55c (que solo quería
+  tocar el filtro RRHH solo-activos) — ya había pasado una vez antes y se
+  restauró en a8d90e1 ("fix: restore /api/admin/upload route")
+- Resultado: warmup GET → 404, delete/insert → 404 HTML → toast con
+  basura/HTML parseado. Botón parecía "no responder".
+
+FIXES:
+1. Restaurada src/app/api/admin/upload/route.ts desde a8d90e1 (159 líneas,
+   protocolo delete/insert por bloques, maxDuration 60, coincide con vercel.json)
+2. GUARDIÁN: scripts/verify-routes.js — escanea todos los literales /api/...
+   en src/ y resuelve cada uno contra el árbol src/app/api (soporta [x] y
+   [...x]). Exit 1 señalando archivo:línea si falta una ruta.
+   Integrado a npm run build → Vercel no puede deployar un botón roto.
+   Test negativo verificado: rename de route.ts → exit 1 con ubicaciones.
+3. Endurecido upload por bloques en errores-tab y horas-extras-tab:
+   postJson() con AbortController 30s (antes: "Procesando..." podía colgarse
+   para siempre), res.ok verificado (antes: DELETE fallado pasaba silencioso
+   y luego re-insertaba duplicados), 404/500 en HTML ahora produce mensaje
+   legible en vez de SyntaxError de JSON.
+
+Auditoría completa de referencias: 20 rutas /api/* usadas por la UI, todas
+existentes tras restaurar /api/admin/upload (verificador: 20/20 OK).
+ExcelButton/PrintButton son locales (sin red) — siempre responden.
+
+Build: exit 0; /api/admin/upload presente en .next/app-path-routes-manifest.json
+tsc: 19 errores preexistentes en rutas admin ajenas (cubierto por
+ignoreBuildErrors); CERO errores en archivos modificados.
