@@ -443,3 +443,13 @@ nómina "se vaya pisando" al cargar.
   a8d90e1; local realineado a origin/main (5703ae1) que SÍ la contiene y
   producción la sirve (200, 131,235 registros). Lección: el verify-routes en
   build es la red de seguridad que faltaba.
+
+VERIFICACIÓN FINAL EN PRODUCCIÓN (deploy 1e148f6):
+- monthHeatmap: 7 meses reales (Feb 2026: pico 154.586 bultos a las 10hs; Feb→Sep,
+  hora pico 10-15hs según mes) — ✓ en /api/production/summary-tables
+- upload-nomina anuncia "replace | delete | insert | insert-parsed" — ✓
+- Barrido de rutas: 12/12 GET=200 · 7/7 POST=400-sonda (existen y validan) — ✓
+- Browser real (headless): General, Resumen (3 mapas de calor visibles),
+  RRHH (KPIs 494 nómina / 272 con producción), Rendimientos — renderizan sin
+  errores de página; botones de carga Preparación/Clarkistas/T.Muertos/Nómina/
+  Informe presentes en el header — ✓
