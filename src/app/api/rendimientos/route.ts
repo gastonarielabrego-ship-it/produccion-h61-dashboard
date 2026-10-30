@@ -3,6 +3,21 @@ import { NextResponse } from "next/server";
 
 export const dynamic = 'force-dynamic';
 
+// ═══════════════════════════════════════════════════════════════════════════
+// REGLA DE TURNO POR HORARIO — ELIMINADA (2026-10-31, pedido del usuario)
+//
+// Antes: cuando se pedía un turno, SQL filtraba `production_records.turno = X`.
+// Ese turno venía del HORARIO del registro (M/T/N), por lo que todo bulto
+// trabajado fuera de la ventana horaria del turno se perdía del reporte:
+// la producción semanal quedaba ~36% por debajo de la real.
+//
+// Ahora: el turno del operario sale de la NÓMINA (nomina_eventuales.jornada):
+//   TM = Turno Mañana · TT = Turno Tarde · TN = Turno Noche · TI = Turno Intermedio
+// Se traen TODOS los bultos del periodo y TODAS las horas trabajadas del
+// operario (sin recorte por ventana horaria). El filtro de turno selecciona
+// PERSONAS según su jornada de nómina, no registros según la hora.
+// ═══════════════════════════════════════════════════════════════════════════
+
 // ── Shift span calculation (same logic as summary-tables) ──
 function calcHorasBrutas(hoursArr: number[]): number {
   const n = hoursArr.length;
@@ -70,6 +85,18 @@ function getTipo(operario: string, overrideSet: Set<string>): string {
   return num > 0 && num < EFECTIVO_LIMIT ? "EFECTIVO" : "EVENTUAL";
 }
 
+// ── Legacy horario values (M/T/N/I) → nomina jornada (TM/TT/TN/TI) ──
+// The frontend now sends the jornada directly (TM/TT/TN/TI); the old single
+// letters are kept for backward compatibility with saved links.
+function normalizeJornada(turno: string): string {
+  const t = turno.toUpperCase().trim();
+  if (t === "M") return "TM";
+  if (t === "T") return "TT";
+  if (t === "N") return "TN";
+  if (t === "I") return "TI";
+  return t;
+}
+
 export async function GET(request: Request) {
   try {
     await ensureNominaOverrideTable();
@@ -78,36 +105,31 @@ export async function GET(request: Request) {
     const dateFrom = url.searchParams.get("dateFrom");
     const dateTo = url.searchParams.get("dateTo");
     const tipo = url.searchParams.get("tipo");
-    const turno = url.searchParams.get("turno");
+    const turnoParam = url.searchParams.get("turno");
 
-    // Build WHERE clause (PostgreSQL: positional params) — WITHOUT tipo filter
-    // Tipo is applied in JS after fetching (per-operario attribute), to avoid
-    // complex SQL that crashes with edge-case operarios
+    // Turno filter = JORNADA DE NÓMINA (TM/TT/TN/TI), never a time window.
+    const jornadaFilter = turnoParam ? normalizeJornada(turnoParam) : "";
+
+    // WHERE: only date range. NO `turno = X` condition — that was the old
+    // horario-based rule that clipped bultos/hours at the shift boundary.
+    // The jornada filter is applied per-OPERATOR in JS after joining nomina.
     const conditions: string[] = [];
     const params: (string | number)[] = [];
     let pIdx = 1;
     const addParam = (v: string | number): string => { params.push(v); return `$${pIdx++}`; };
     if (dateFrom) { conditions.push(`fecha >= ${addParam(Number(dateFrom))}`); }
     if (dateTo) { conditions.push(`fecha <= ${addParam(Number(dateTo))}`); }
-    // For turno="I" (Intermedio), the per-row virtual filter is applied in SQL
-    // (rows where the first activity is at hour 09) — identical to the previous
-    // JS-side per-row check. For regular turnos, filter in SQL.
-    const isIntermedio = turno === "I";
-    if (turno && !isIntermedio) { conditions.push(`turno = ${addParam(turno)}`); }
-    if (isIntermedio) {
-      conditions.push(`(hora_09 > 0 AND hora_00 = 0 AND hora_01 = 0 AND hora_02 = 0 AND hora_03 = 0 AND hora_04 = 0 AND hora_05 = 0 AND hora_06 = 0 AND hora_07 = 0 AND hora_08 = 0)`);
-    }
     const where = conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
 
     // PERF: aggregation pushed into SQL (GROUP BY fecha, operario) — ~128K raw
-    // rows become ~30-40K aggregated rows before transfer; all 3 queries parallel.
+    // rows become ~30-40K aggregated rows before transfer; all 4 queries parallel.
     const hourSel: string[] = [];
     for (let h = 0; h <= 23; h++) {
       const col = "hora_" + String(h).padStart(2, "0");
       hourSel.push(`COALESCE(SUM(${col}), 0) AS h${h}, COALESCE(SUM(CASE WHEN ${col} > 0 THEN 1 ELSE 0 END), 0) AS a${h}`);
     }
 
-    const [aggResult, overrideResult, tmResult] = await Promise.all([
+    const [aggResult, nominaResult, overrideResult, tmResult] = await Promise.all([
       client.execute(
         `SELECT fecha, operario, MIN(nombre) AS nombre, COALESCE(SUM(total), 0) AS total, ${hourSel.join(", ")}
           FROM production_records ${where}
@@ -115,6 +137,8 @@ export async function GET(request: Request) {
           ORDER BY MIN(id)`,
         params,
       ),
+      // Turno verdadero de cada operario: viene de la nómina
+      client.execute("SELECT usuario, UPPER(TRIM(jornada)) AS jornada FROM nomina_eventuales"),
       client.execute("SELECT operario FROM nomina_override"),
       (function() {
         const tmParams: (string | number)[] = [];
@@ -131,6 +155,15 @@ export async function GET(request: Request) {
       })(),
     ]);
 
+    // ── Nómina: operario → jornada (turno real) ──
+    const jornadaMap: Record<string, string> = {};
+    for (let i = 0; i < nominaResult.rows.length; i++) {
+      const row = nominaResult.rows[i];
+      const usuario = String(row.usuario || "").toUpperCase().trim();
+      const jornada = String(row.jornada || "").toUpperCase().trim();
+      if (usuario && jornada) jornadaMap[usuario] = jornada;
+    }
+
     const overrideSet = new Set<string>();
     for (let i = 0; i < overrideResult.rows.length; i++) {
       overrideSet.add(String(overrideResult.rows[i].operario));
@@ -142,10 +175,11 @@ export async function GET(request: Request) {
       tmMap[row.fecha + ":" + row.operario] = Number(row.total_minutos) || 0;
     }
 
-    // ── 3. Aggregate per (fecha, operario, nombre) ──
+    // ── Aggregate per (fecha, operario) ──
     const personDateMap: Record<string, {
       operario: string;
       nombre: string;
+      turnoNomina: string;
       bultos: number;
       activeHours: number[];
     }> = {};
@@ -153,22 +187,28 @@ export async function GET(request: Request) {
     for (let i = 0; i < aggResult.rows.length; i++) {
       const row = aggResult.rows[i];
       const fecha = Number(row.fecha);
-      const operario = String(row.operario || "");
+      const operario = String(row.operario || "").toUpperCase().trim();
       const nombre = String(row.nombre || "");
+      const turnoNomina = jornadaMap[operario] || "";
 
       // Apply tipo filter in JS (safe, avoids SQL crash with edge-case operarios)
       if (tipo && getTipo(operario, overrideSet) !== tipo) continue;
+
+      // Turno de la NÓMINA: si se pidió un turno, solo entran operarios cuya
+      // jornada de nómina coincide. Sin nómina → sin turno asignado.
+      if (jornadaFilter && turnoNomina !== jornadaFilter) continue;
 
       if (fecha <= 0 || !operario) continue;
 
       const key = fecha + ":" + operario;
       if (!personDateMap[key]) {
-        personDateMap[key] = { operario: operario, nombre: nombre, bultos: 0, activeHours: [] };
+        personDateMap[key] = { operario: operario, nombre: nombre, turnoNomina: turnoNomina, bultos: 0, activeHours: [] };
       }
       const entry = personDateMap[key];
+      // TODOS los bultos del día del operario — sin recorte por horario de turno
       entry.bultos += Number(row.total) || 0;
 
-      // Collect hours active in any raw row
+      // TODAS las horas con actividad del día — sin recorte por horario de turno
       for (let h = 0; h <= 23; h++) {
         if (Number(row["a" + h]) > 0) {
           entry.activeHours.push(h);
@@ -176,7 +216,7 @@ export async function GET(request: Request) {
       }
     }
 
-    // ── 4. Build daily rows ──
+    // ── Build daily rows ──
     const daily: any[] = [];
     const keys = Object.keys(personDateMap);
     for (let i = 0; i < keys.length; i++) {
@@ -206,6 +246,7 @@ export async function GET(request: Request) {
       daily.push({
         operario: entry.operario,
         nombre: entry.nombre,
+        turno_nomina: entry.turnoNomina,
         dia: getDiaLabel(fecha),
         fecha: fecha,
         bultos: bultos,
@@ -226,14 +267,14 @@ export async function GET(request: Request) {
       return a.operario < b.operario ? -1 : (a.operario > b.operario ? 1 : 0);
     });
 
-    // ── 5. Summary per person ──
-    const summaryMap: Record<string, { operario: string; nombre: string; total_bultos: number; total_hs_brutas: number; total_tm: number; total_hs_netas: number; dias: number }> = {};
+    // ── Summary per person ──
+    const summaryMap: Record<string, { operario: string; nombre: string; turnoNomina: string; total_bultos: number; total_hs_brutas: number; total_tm: number; total_hs_netas: number; dias: number }> = {};
     for (let i = 0; i < daily.length; i++) {
       const d = daily[i];
       const n = d.nombre;
       const operarioKey = d.operario || "";
       if (!summaryMap[n]) {
-        summaryMap[n] = { operario: operarioKey, nombre: n, total_bultos: 0, total_hs_brutas: 0, total_tm: 0, total_hs_netas: 0, dias: 0 };
+        summaryMap[n] = { operario: operarioKey, nombre: n, turnoNomina: d.turno_nomina || "", total_bultos: 0, total_hs_brutas: 0, total_tm: 0, total_hs_netas: 0, dias: 0 };
       }
       const s = summaryMap[n];
       s.total_bultos += d.bultos;
@@ -253,6 +294,7 @@ export async function GET(request: Request) {
       summary.push({
         operario: s.operario,
         nombre: s.nombre,
+        turno_nomina: s.turnoNomina,
         total_bultos: s.total_bultos,
         total_hs_brutas: Math.round(s.total_hs_brutas * 100) / 100,
         total_tm: Math.round(s.total_tm * 100) / 100,
@@ -264,7 +306,7 @@ export async function GET(request: Request) {
       });
     }
 
-    // ── 6. Grand totals ──
+    // ── Grand totals ──
     let totalBultos = 0;
     let totalHsBrutas = 0;
     let totalTm = 0;
@@ -285,7 +327,7 @@ export async function GET(request: Request) {
     totalTm = Math.round(totalTm * 100) / 100;
     totalHsNetas = Math.round(totalHsNetas * 100) / 100;
 
-    // ── 7. Available dates ──
+    // ── Available dates ──
     const dates: any[] = [];
     const sortedDates = Array.from(dateSet).sort(function(a, b) { return a - b; });
     for (let i = 0; i < sortedDates.length; i++) {
@@ -294,6 +336,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({
+      turno_criterio: jornadaFilter ? "nomina:" + jornadaFilter : "nomina:todos",
       daily: daily,
       summary: summary,
       dates: dates,
@@ -311,6 +354,7 @@ export async function GET(request: Request) {
       },
     }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 , headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
+    console.error("[rendimientos] error:", error && error.stack ? error.stack : JSON.stringify(error));
+    return NextResponse.json({ error: error && error.message ? error.message : String(error) }, { status: 500 , headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   }
 }

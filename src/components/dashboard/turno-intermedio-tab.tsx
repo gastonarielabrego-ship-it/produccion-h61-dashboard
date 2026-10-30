@@ -8,8 +8,8 @@ import { KpiCard, SectionCard, ErrorState, TabSkeleton, TH, TH_LEFT, TD, TD_LEFT
 
 interface TurnoIntermedioTabProps { refreshKey?: number }
 
-/** Turno Intermedio: virtual turno detected by first activity at hour 09 (pikeos from 9:00hs) */
-const TURNO_INTERMEDIO = "I";
+/** Turno Intermedio según NÓMINA (nomina_eventuales.jornada = 'TI') */
+const TURNO_INTERMEDIO = "TI";
 
 export function TurnoIntermedioTab({ refreshKey }: TurnoIntermedioTabProps) {
   const [data, setData] = useState<any>(null);
@@ -103,7 +103,7 @@ export function TurnoIntermedioTab({ refreshKey }: TurnoIntermedioTabProps) {
 
   return (
     <div className="space-y-5">
-      <SectionCard icon={Filter} title="Filtros — Turno Intermedio (primer pikeo desde 9:00hs)" tone="amber" contentClassName="p-4 pt-0"
+      <SectionCard icon={Filter} title="Filtros — Turno Intermedio (según nómina: jornada TI)" tone="amber" contentClassName="p-4 pt-0"
         actions={hasFilters ? (
           <button onClick={clearFilters} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
             <X className="h-3 w-3" /> Limpiar
@@ -141,7 +141,7 @@ export function TurnoIntermedioTab({ refreshKey }: TurnoIntermedioTabProps) {
 
       <SectionCard
         icon={Clock}
-        title="Rendimientos Turno Intermedio — Pikeos desde 9:00hs"
+        title="Rendimientos Turno Intermedio — Nómina (TI)"
         tone="amber"
         contentClassName="p-0 overflow-x-auto"
         actions={<><ExcelButton rows={excelRows} filename="Turno_Intermedio" sheetName="Intermedio" colWidths={[22, 14, 30, 10, 10, 8, 10, 12, 10, 10]} /><PrintButton title="Turno Intermedio" /></>}
@@ -204,7 +204,7 @@ export function TurnoIntermedioTab({ refreshKey }: TurnoIntermedioTabProps) {
             key={nombre}
             icon={Users}
             title={nombre}
-            description={`Operario ${rows[0]?.operario ?? ""}`}
+            description={`Operario ${rows[0]?.operario ?? ""} · Turno nómina: TI — Intermedio`}
             tone="slate"
             contentClassName="p-0 overflow-x-auto"
           >
@@ -258,9 +258,9 @@ export function TurnoIntermedioTab({ refreshKey }: TurnoIntermedioTabProps) {
         <SectionCard icon={Clock} title="Sin datos para el criterio" tone="slate" contentClassName="p-8 pt-0 text-center">
           <div className="py-4">
             <Clock className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground">No se encontraron operarios con primer pikeo a las 9:00hs en el periodo seleccionado.</p>
+            <p className="text-sm text-muted-foreground">No hay operarios con jornada TI (Intermedio) en la nómina para el periodo seleccionado.</p>
             <p className="text-xs text-muted-foreground mt-1">
-              El filtro &quot;Intermedio&quot; detecta automáticamente los registros donde hora_09 es la primera hora con actividad (horas 0-8 sin producción). También puede seleccionar &quot;Intermedio&quot; en el dropdown de turno de cualquier pestaña.
+              El turno se delimita por la NÓMINA (nomina_eventuales.jornada = TI), no por el horario del registro: se cuentan todos los bultos y todas las horas trabajadas del periodo, sin recorte por ventana horaria.
             </p>
           </div>
         </SectionCard>

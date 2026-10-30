@@ -8,6 +8,20 @@ import { KpiCard, SectionCard, ErrorState, TabSkeleton, TH, TH_LEFT, TD, TD_LEFT
 
 interface RendimientosTabProps { refreshKey?: number }
 
+/** Turnos según NÓMINA (nomina_eventuales.jornada) — no por horario del registro */
+const NOMINA_TURNOS = [
+  { value: "TM", label: "Mañana (TM)" },
+  { value: "TT", label: "Tarde (TT)" },
+  { value: "TN", label: "Noche (TN)" },
+  { value: "TI", label: "Intermedio (TI)" },
+];
+const TURNO_LABELS: Record<string, string> = {
+  TM: "TM — Mañana",
+  TT: "TT — Tarde",
+  TN: "TN — Noche",
+  TI: "TI — Intermedio",
+};
+
 export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState(false);
@@ -17,17 +31,6 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
   const [fHasta, setFHasta] = useState("");
   const [fTurno, setFTurno] = useState("");
   const [fTipo, setFTipo] = useState("");
-  const [shifts, setShifts] = useState<{ value: string; label: string }[]>([]);
-
-  // Fetch available shifts once
-  useEffect(function() {
-    fetch("/api/production/dates", { cache: "no-store" })
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
-        if (d && d.shifts) setShifts(d.shifts);
-      })
-      .catch(function() {});
-  }, []);
 
   const dateToInt = useCallback(function(dateStr: string): string {
     if (!dateStr) return "";
@@ -65,6 +68,7 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
       return {
         operario: r.operario || "",
         nombre: r.nombre,
+        turnoNomina: String(r.turno_nomina ?? ""),
         bultos: bultos,
         hsBrutas: hsBrutas,
         tmHs: Number(r.total_tm ?? 0),
@@ -96,6 +100,7 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
     const emptyRow = {
       Dia: "",
       Operario: "",
+      Turno: "",
       Personal: "",
       Bultos: "",
       "Hs. Brutas": "",
@@ -119,6 +124,7 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
       rows.push({
         Dia: "Dia",
         Operario: "Operario",
+        Turno: "Turno",
         Personal: s.nombre,
         Bultos: "Bultos",
         "Hs. Brutas": "Hs. Brutas",
@@ -135,6 +141,7 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
         rows.push({
           Dia: String(d.dia ?? ""),
           Operario: String(d.operario ?? ""),
+          Turno: String(d.turno_nomina ?? ""),
           Personal: s.nombre,
           Bultos: Number(d.bultos ?? 0),
           "Hs. Brutas": Number(d.hs_brutas ?? 0),
@@ -150,6 +157,7 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
       rows.push({
         Dia: "TOTAL",
         Operario: s.operario,
+        Turno: s.turnoNomina,
         Personal: s.nombre,
         Bultos: s.bultos,
         "Hs. Brutas": Math.round(s.hsBrutas * 100) / 100,
@@ -190,9 +198,9 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
           </div>
 
           <select value={fTurno} onChange={function(e) { setFTurno(e.target.value); }}
-            className="text-xs border rounded-md px-2 py-1.5 bg-background">
-            <option value="">Todos los turnos</option>
-            {shifts.map(function(s) {
+            className="text-xs border rounded-md px-2 py-1.5 bg-background" title="Turno según nómina">
+            <option value="">Todos los turnos (nómina)</option>
+            {NOMINA_TURNOS.map(function(s) {
               return <option key={s.value} value={s.value}>{s.label}</option>;
             })}
           </select>
@@ -223,6 +231,7 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
       <SectionCard
         icon={TrendingUp}
         title="Resumen de Rendimientos por Personal"
+        description="Turno según nómina · bultos y horas completos del periodo"
         tone="emerald"
         contentClassName="p-0 overflow-x-auto"
         actions={
@@ -231,7 +240,7 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
               rows={excelRows}
               filename="Rendimientos"
               sheetName="Diarias"
-              colWidths={[22, 14, 30, 10, 10, 8, 10, 12, 10, 10]}
+              colWidths={[22, 14, 10, 30, 10, 10, 8, 10, 12, 10, 10]}
             />
             <PrintButton title="Rendimientos" />
           </>
@@ -242,6 +251,7 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
             <tr className="border-b bg-muted/40">
               <th className={`${TH_LEFT} sticky left-0 bg-muted/40 min-w-[200px]`}>Personal</th>
               <th className={TH}>Operario</th>
+              <th className={TH}>Turno</th>
               <th className={TH}>Bultos</th>
               <th className={TH}>Hs. Brutas</th>
               <th className={TH}>TM (hs)</th>
@@ -258,6 +268,7 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
                 <tr key={row.nombre} className="border-b hover:bg-muted/50">
                   <td className={`${TD_LEFT} font-medium sticky left-0 bg-card`}>{row.nombre}</td>
                   <td className={`${TD} font-mono`}>{row.operario}</td>
+                  <td className={`${TD} font-medium`}>{row.turnoNomina ? (TURNO_LABELS[row.turnoNomina] || row.turnoNomina) : "—"}</td>
                   <td className={`${TD_NUM} font-medium`}>{row.bultos.toLocaleString("es-AR")}</td>
                   <td className={TD_NUM}>{Math.round(row.hsBrutas * 100) / 100}</td>
                   <td className={TD_NUM}>{Math.round(row.tmHs * 100) / 100}</td>
@@ -271,6 +282,7 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
             })}
             <tr className={TR_FOOT}>
               <td className={`${TD_LEFT} sticky left-0 bg-muted/40`}>TOTAL</td>
+              <td className={TD}></td>
               <td className={TD}></td>
               <td className={`${TD_NUM} font-bold`}>{(totals.totalBultos ?? 0).toLocaleString("es-AR")}</td>
               <td className={`${TD_NUM} font-bold`}>{Math.round((totals.totalHsBrutas ?? 0) * 100) / 100}</td>
@@ -294,7 +306,7 @@ export function RendimientosTab({ refreshKey }: RendimientosTabProps) {
             key={nombre}
             icon={Users}
             title={`${nombre}`}
-            description={`Operario ${rows[0]?.operario ?? ""}`}
+            description={`Operario ${rows[0]?.operario ?? ""} · Turno nómina: ${rows[0]?.turno_nomina ? (TURNO_LABELS[rows[0].turno_nomina] || rows[0].turno_nomina) : "—"}`}
             tone="slate"
             contentClassName="p-0 overflow-x-auto"
           >
