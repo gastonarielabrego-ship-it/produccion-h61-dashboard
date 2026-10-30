@@ -1,4 +1,4 @@
-import { getClient } from "@/lib/neon";
+import { getClient, getPool } from "@/lib/neon";
 import { NextResponse } from "next/server";
 
 export const maxDuration = 60;
@@ -29,6 +29,40 @@ async function handleDelete(): Promise<{ message: string }> {
   const client = getClient();
   const result = await client.execute("DELETE FROM nomina_eventuales");
   return { message: `${result.rowCount ?? "?"} registros previos eliminados` };
+}
+
+/**
+ * ATOMIC REPLACE ("pisar"): borra TODA la nómina anterior e inserta la nueva
+ * dentro de una transacción PostgreSQL. Si cualquier bloque falla, se hace
+ * ROLLBACK y la nómina anterior queda intacta — nunca queda a medias.
+ */
+async function handleReplace(rows: (string | number | null)[][]): Promise<{ replaced: number; elapsed: string }> {
+  const t0 = Date.now();
+  if (!rows || rows.length === 0) throw new Error("No hay filas para reemplazar");
+
+  const pool = getPool();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("DELETE FROM nomina_eventuales");
+
+    let replaced = 0;
+    const BATCH = 100;
+    for (let start = 0; start < rows.length; start += BATCH) {
+      const batch = rows.slice(start, start + BATCH);
+      const { sql: ph, params: flat } = buildBatchInsert(NUM_COLS, batch);
+      await client.query(UPSERT_SQL.replace("@PH", ph), flat);
+      replaced += batch.length;
+    }
+
+    await client.query("COMMIT");
+    return { replaced, elapsed: `${((Date.now() - t0) / 1000).toFixed(1)}s` };
+  } catch (err) {
+    try { await client.query("ROLLBACK"); } catch { /* conexión ya rota */ }
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 /**
@@ -165,6 +199,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ ...result, elapsed: `${((Date.now() - t0) / 1000).toFixed(1)}s` });
     }
 
+    if (action === "replace") {
+      const result = await handleReplace(body.rows);
+      return NextResponse.json({
+        ...result,
+        message: `Nómina reemplazada: ${result.replaced} registros (los anteriores fueron eliminados)`,
+      });
+    }
+
     if (action === "insert-parsed") {
       const result = await handleInsertParsed(body.rows);
       return NextResponse.json(result);
@@ -175,7 +217,7 @@ export async function POST(request: Request) {
       return NextResponse.json(result);
     }
 
-    return NextResponse.json({ error: "Acción inválida. Usar: delete | insert | insert-parsed" }, { status: 400 });
+    return NextResponse.json({ error: "Acción inválida. Usar: replace | delete | insert | insert-parsed" }, { status: 400 });
   } catch (error: any) {
     console.error("Upload nomina error:", error);
     return NextResponse.json(

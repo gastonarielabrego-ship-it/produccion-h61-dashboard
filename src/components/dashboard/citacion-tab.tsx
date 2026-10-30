@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PrintButton } from "./print-button";
 import { ExcelButton } from "./excel-button";
+import { ErrorState, TabSkeleton } from "./ui-kit";
 import { Target } from "lucide-react";
 import React from "react";
 
@@ -83,19 +84,8 @@ export function CitacionTab({ baseQuery, showTipoFilter }: CitacionTabProps) {
     return map;
   }, [data]);
 
-  if (error) return (
-    <Card><CardContent className="p-8 text-center">
-      <p className="text-sm text-muted-foreground">Error al cargar los datos.</p>
-      <button onClick={fetchData} className="mt-2 text-xs text-primary underline">Reintentar</button>
-    </CardContent></Card>
-  );
-  if (!data) return (
-    <div className="space-y-6">{[1, 2].map((i) => (
-      <Card key={i}><CardContent className="p-4 h-[200px] flex items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </CardContent></Card>
-    ))}</div>
-  );
+  if (error) return <ErrorState message="Error al cargar los datos de citación." onRetry={fetchData} />;
+  if (!data) return <TabSkeleton rows={2} />;
 
   const dates = data ? (data.dates as number[]) : [];
 

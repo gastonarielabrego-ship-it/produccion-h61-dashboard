@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Filter, X, Clock, Users, TrendingUp } from "lucide-react";
 import { ExcelButton } from "./excel-button";
 import { PrintButton } from "./print-button";
+import { KpiCard, SectionCard, ErrorState, TabSkeleton, TH, TH_LEFT, TD, TD_LEFT, TD_NUM, TR_FOOT } from "./ui-kit";
 
 interface TurnoIntermedioTabProps { refreshKey?: number }
 
@@ -98,86 +98,173 @@ export function TurnoIntermedioTab({ refreshKey }: TurnoIntermedioTabProps) {
   const hasFilters = fDesde || fHasta || fTipo;
   const clearFilters = function() { setFDesde(""); setFHasta(""); setFTipo(""); };
 
-  if (error) return (
-    <Card><CardContent className="p-8 text-center">
-      <p className="text-sm text-muted-foreground">Error al cargar datos del Turno Intermedio.</p>
-      <button onClick={fetchData} className="mt-2 text-xs text-primary underline">Reintentar</button>
-    </CardContent></Card>
-  );
-  if (!data) return (
-    <div className="space-y-6">{[1, 2].map(function(i) {
-      return (<Card key={i}><CardContent className="p-4 h-[200px] flex items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" /></CardContent></Card>);
-    })}</div>
-  );
+  if (error) return <ErrorState message="Error al cargar datos del Turno Intermedio." onRetry={fetchData} />;
+  if (!data) return <TabSkeleton rows={3} />;
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center gap-2 text-muted-foreground mb-3">
-            <Filter className="h-4 w-4" />
-            <span className="text-xs font-medium">Filtros - Turno Intermedio (primer pikeo desde 9:00hs)</span>
-            {hasFilters && (<button onClick={clearFilters} className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><X className="h-3 w-3" /> Limpiar</button>)}
+    <div className="space-y-5">
+      <SectionCard icon={Filter} title="Filtros — Turno Intermedio (primer pikeo desde 9:00hs)" tone="amber" contentClassName="p-4 pt-0"
+        actions={hasFilters ? (
+          <button onClick={clearFilters} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+            <X className="h-3 w-3" /> Limpiar
+          </button>
+        ) : undefined}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1">
+            <input type="date" value={fDesde} onChange={function(e) { setFDesde(e.target.value); }} className="text-xs border rounded-md px-2 py-1.5 bg-background" />
+            <span className="text-xs text-muted-foreground">a</span>
+            <input type="date" value={fHasta} onChange={function(e) { setFHasta(e.target.value); }} className="text-xs border rounded-md px-2 py-1.5 bg-background" />
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1">
-              <input type="date" value={fDesde} onChange={function(e) { setFDesde(e.target.value); }} className="text-xs border rounded px-2 py-1 bg-background" />
-              <span className="text-xs text-muted-foreground">a</span>
-              <input type="date" value={fHasta} onChange={function(e) { setFHasta(e.target.value); }} className="text-xs border rounded px-2 py-1 bg-background" />
-            </div>
-            <select value={fTipo} onChange={function(e) { setFTipo(e.target.value); }} className="text-xs border rounded px-2 py-1 bg-background">
-              <option value="">Todos</option>
-              <option value="EFECTIVO">Efectivo</option>
-              <option value="EVENTUAL">Eventual</option>
-            </select>
-            <span className="inline-flex items-center gap-1 text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 rounded-full px-2 py-0.5">
-              <Clock className="h-3 w-3" /> Turno: Intermedio
-            </span>
-          </div>
-        </CardContent>
-      </Card>
+          <select value={fTipo} onChange={function(e) { setFTipo(e.target.value); }} className="text-xs border rounded-md px-2 py-1.5 bg-background">
+            <option value="">Todos</option>
+            <option value="EFECTIVO">Efectivo</option>
+            <option value="EVENTUAL">Eventual</option>
+          </select>
+          <span className="inline-flex items-center gap-1 text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 rounded-full px-2.5 py-1">
+            <Clock className="h-3 w-3" /> Turno: Intermedio
+          </span>
+        </div>
+      </SectionCard>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <Card><CardContent className="p-4"><div className="flex items-center gap-2 text-muted-foreground mb-1"><TrendingUp className="h-4 w-4" /><span className="text-xs font-medium">Bultos Total</span></div><p className="text-2xl font-bold">{(totals.totalBultos ?? 0).toLocaleString("es-AR")}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="flex items-center gap-2 text-muted-foreground mb-1"><TrendingUp className="h-4 w-4" /><span className="text-xs font-medium">B/H Bruta</span></div><p className="text-2xl font-bold text-blue-600">{Math.round((totals.bhBruta ?? 0) * 10) / 10}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="flex items-center gap-2 text-muted-foreground mb-1"><TrendingUp className="h-4 w-4" /><span className="text-xs font-medium">B/H Neta</span></div><p className="text-2xl font-bold text-emerald-600">{Math.round((totals.bhNeta ?? 0) * 10) / 10}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="flex items-center gap-2 text-muted-foreground mb-1"><Users className="h-4 w-4" /><span className="text-xs font-medium">Personal / Dias</span></div><p className="text-2xl font-bold">{totals.personal ?? 0} <span className="text-sm font-normal text-muted-foreground">/ {totals.dias ?? 0}</span></p></CardContent></Card>
+        <KpiCard icon={TrendingUp} label="Bultos Total" value={(totals.totalBultos ?? 0).toLocaleString("es-AR")} tone="emerald" />
+        <KpiCard icon={TrendingUp} label="B/H Bruta" value={Math.round((totals.bhBruta ?? 0) * 10) / 10} tone="sky" />
+        <KpiCard icon={TrendingUp} label="B/H Neta" value={Math.round((totals.bhNeta ?? 0) * 10) / 10} tone="emerald" />
+        <KpiCard
+          icon={Users}
+          label="Personal / Días"
+          value={<>{totals.personal ?? 0} <span className="text-sm font-normal text-muted-foreground">/ {totals.dias ?? 0}</span></>}
+          tone="violet"
+        />
       </div>
 
-      <Card>
-        <CardHeader className="flex flex-row items-start justify-between space-y-0">
-          <div><CardTitle className="flex items-center gap-2 text-base"><Clock className="h-4 w-4 text-amber-500" />Rendimientos Turno Intermedio - Pikeos desde 9:00hs</CardTitle></div>
-          <div className="flex items-center gap-1"><ExcelButton rows={excelRows} filename="Turno_Intermedio" sheetName="Intermedio" colWidths={[22, 14, 30, 10, 10, 8, 10, 12, 10, 10]} /><PrintButton title="Turno Intermedio" /></div>
-        </CardHeader>
-        <CardContent className="p-0 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead><tr className="border-b">
-              <th className="text-xs font-semibold text-left p-2 sticky left-0 bg-card min-w-[200px]">Personal</th>
-              <th className="text-xs font-semibold text-center p-2">Operario</th>
-              <th className="text-xs font-semibold text-center p-2">Bultos</th>
-              <th className="text-xs font-semibold text-center p-2">Hs. Brutas</th>
-              <th className="text-xs font-semibold text-center p-2">TM (hs)</th>
-              <th className="text-xs font-semibold text-center p-2">Hs. Netas</th>
-              <th className="text-xs font-semibold text-center p-2">Produccion</th>
-              <th className="text-xs font-semibold text-center p-2 text-blue-600">B/H Bruta</th>
-              <th className="text-xs font-semibold text-center p-2 text-emerald-600">B/H Neta</th>
-              <th className="text-xs font-semibold text-center p-2">Dias</th>
-            </tr></thead>
-            <tbody>
-              {summaryRows.map(function(row) { return (<tr key={row.nombre} className="border-b hover:bg-muted/50"><td className="text-xs font-medium p-2 sticky left-0 bg-card">{row.nombre}</td><td className="text-xs text-center p-2 font-mono">{row.operario}</td><td className="text-xs text-center p-2">{row.bultos.toLocaleString("es-AR")}</td><td className="text-xs text-center p-2">{Math.round(row.hsBrutas * 100) / 100}</td><td className="text-xs text-center p-2">{Math.round(row.tmHs * 100) / 100}</td><td className="text-xs text-center p-2">{Math.round(row.hsNetas * 100) / 100}</td><td className="text-xs text-center p-2">{Math.round(row.produccion * 10) / 10}</td><td className="text-xs text-center p-2 font-medium text-blue-600">{Math.round(row.bhBruta * 10) / 10}</td><td className="text-xs text-center p-2 font-medium text-emerald-600">{Math.round(row.bhNeta * 10) / 10}</td><td className="text-xs text-center p-2">{row.dias}</td></tr>); })}
-              {summaryRows.length > 0 && (<tr className="border-t-2 font-bold bg-muted/30"><td className="text-xs font-bold p-2 sticky left-0 bg-muted/30">TOTAL</td><td className="text-xs text-center font-bold p-2 bg-muted/30"></td><td className="text-xs text-center font-bold p-2 bg-muted/30">{(totals.totalBultos ?? 0).toLocaleString("es-AR")}</td><td className="text-xs text-center font-bold p-2 bg-muted/30">{Math.round((totals.totalHsBrutas ?? 0) * 100) / 100}</td><td className="text-xs text-center font-bold p-2 bg-muted/30">{Math.round((totals.totalTm ?? 0) * 100) / 100}</td><td className="text-xs text-center font-bold p-2 bg-muted/30">{Math.round((totals.totalHsNetas ?? 0) * 100) / 100}</td><td className="text-xs text-center font-bold p-2 bg-muted/30">{Math.round((totals.produccion ?? 0) * 10) / 10}</td><td className="text-xs text-center font-bold p-2 text-blue-600 bg-muted/30">{Math.round((totals.bhBruta ?? 0) * 10) / 10}</td><td className="text-xs text-center font-bold p-2 text-emerald-600 bg-muted/30">{Math.round((totals.bhNeta ?? 0) * 10) / 10}</td><td className="text-xs text-center font-bold p-2 bg-muted/30">{totals.dias ?? 0}</td></tr>)}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
+      <SectionCard
+        icon={Clock}
+        title="Rendimientos Turno Intermedio — Pikeos desde 9:00hs"
+        tone="amber"
+        contentClassName="p-0 overflow-x-auto"
+        actions={<><ExcelButton rows={excelRows} filename="Turno_Intermedio" sheetName="Intermedio" colWidths={[22, 14, 30, 10, 10, 8, 10, 12, 10, 10]} /><PrintButton title="Turno Intermedio" /></>}
+      >
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b bg-muted/40">
+              <th className={`${TH_LEFT} sticky left-0 bg-muted/40 min-w-[200px]`}>Personal</th>
+              <th className={TH}>Operario</th>
+              <th className={TH}>Bultos</th>
+              <th className={TH}>Hs. Brutas</th>
+              <th className={TH}>TM (hs)</th>
+              <th className={TH}>Hs. Netas</th>
+              <th className={TH}>Produccion</th>
+              <th className={`${TH} text-blue-600`}>B/H Bruta</th>
+              <th className={`${TH} text-emerald-600`}>B/H Neta</th>
+              <th className={TH}>Dias</th>
+            </tr>
+          </thead>
+          <tbody>
+            {summaryRows.map(function(row) {
+              return (
+                <tr key={row.nombre} className="border-b hover:bg-muted/50">
+                  <td className={`${TD_LEFT} font-medium sticky left-0 bg-card`}>{row.nombre}</td>
+                  <td className={`${TD} font-mono`}>{row.operario}</td>
+                  <td className={`${TD_NUM} font-medium`}>{row.bultos.toLocaleString("es-AR")}</td>
+                  <td className={TD_NUM}>{Math.round(row.hsBrutas * 100) / 100}</td>
+                  <td className={TD_NUM}>{Math.round(row.tmHs * 100) / 100}</td>
+                  <td className={TD_NUM}>{Math.round(row.hsNetas * 100) / 100}</td>
+                  <td className={TD_NUM}>{Math.round(row.produccion * 10) / 10}</td>
+                  <td className={`${TD_NUM} font-medium text-blue-600`}>{Math.round(row.bhBruta * 10) / 10}</td>
+                  <td className={`${TD_NUM} font-medium text-emerald-600`}>{Math.round(row.bhNeta * 10) / 10}</td>
+                  <td className={TD_NUM}>{row.dias}</td>
+                </tr>
+              );
+            })}
+            {summaryRows.length > 0 && (
+              <tr className={TR_FOOT}>
+                <td className={`${TD_LEFT} sticky left-0 bg-muted/40`}>TOTAL</td>
+                <td className={TD}></td>
+                <td className={`${TD_NUM} font-bold`}>{(totals.totalBultos ?? 0).toLocaleString("es-AR")}</td>
+                <td className={`${TD_NUM} font-bold`}>{Math.round((totals.totalHsBrutas ?? 0) * 100) / 100}</td>
+                <td className={`${TD_NUM} font-bold`}>{Math.round((totals.totalTm ?? 0) * 100) / 100}</td>
+                <td className={`${TD_NUM} font-bold`}>{Math.round((totals.totalHsNetas ?? 0) * 100) / 100}</td>
+                <td className={`${TD_NUM} font-bold`}>{Math.round((totals.produccion ?? 0) * 10) / 10}</td>
+                <td className={`${TD_NUM} font-bold text-blue-600`}>{Math.round((totals.bhBruta ?? 0) * 10) / 10}</td>
+                <td className={`${TD_NUM} font-bold text-emerald-600`}>{Math.round((totals.bhNeta ?? 0) * 10) / 10}</td>
+                <td className={`${TD_NUM} font-bold`}>{totals.dias ?? 0}</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </SectionCard>
 
       {Object.keys(dailyByPerson).map(function(nombre) {
         const rows = dailyByPerson[nombre];
         const sData = summaryRows.find(function(s) { return s.nombre === nombre; });
-        return (<Card key={nombre}><CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Clock className="h-3.5 w-3.5 text-amber-500" />{nombre} <span className="text-xs font-normal text-muted-foreground font-mono">({rows[0]?.operario ?? ""})</span></CardTitle></CardHeader><CardContent className="p-0 overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b"><th className="text-xs font-semibold text-center p-2">Dia</th><th className="text-xs font-semibold text-center p-2">Operario</th><th className="text-xs font-semibold text-center p-2">Bultos</th><th className="text-xs font-semibold text-center p-2">Hs. Brutas</th><th className="text-xs font-semibold text-center p-2">TM (hs)</th><th className="text-xs font-semibold text-center p-2">Hs. Netas</th><th className="text-xs font-semibold text-center p-2 text-blue-600">B/H Bruta</th><th className="text-xs font-semibold text-center p-2 text-emerald-600">B/H Neta</th></tr></thead><tbody>{rows.map(function(r: any, idx: number) { return (<tr key={idx} className="border-b hover:bg-muted/50"><td className="text-xs text-center p-2">{String(r.dia ?? "")}</td><td className="text-xs text-center p-2 font-mono">{String(r.operario ?? "")}</td><td className="text-xs text-center p-2">{Number(r.bultos ?? 0).toLocaleString("es-AR")}</td><td className="text-xs text-center p-2">{Number(r.hs_brutas ?? 0)}</td><td className="text-xs text-center p-2">{Math.round(Number(r.tm_hs ?? 0) * 100) / 100}</td><td className="text-xs text-center p-2">{Math.round(Number(r.hs_netas ?? 0) * 100) / 100}</td><td className="text-xs text-center p-2 text-blue-600">{Math.round(Number(r.bh_bruta ?? 0) * 10) / 10}</td><td className="text-xs text-center p-2 text-emerald-600">{Math.round(Number(r.bh_neta ?? 0) * 10) / 10}</td></tr>); })}{sData && (<tr className="border-t-2 font-bold bg-muted/30"><td className="text-xs text-center font-bold p-2 bg-muted/30">TOTAL</td><td className="text-xs text-center font-bold p-2 bg-muted/30"></td><td className="text-xs text-center font-bold p-2 bg-muted/30">{sData.bultos.toLocaleString("es-AR")}</td><td className="text-xs text-center font-bold p-2 bg-muted/30">{Math.round(sData.hsBrutas * 100) / 100}</td><td className="text-xs text-center font-bold p-2 bg-muted/30">{Math.round(sData.tmHs * 100) / 100}</td><td className="text-xs text-center font-bold p-2 bg-muted/30">{Math.round(sData.hsNetas * 100) / 100}</td><td className="text-xs text-center font-bold p-2 text-blue-600 bg-muted/30">{Math.round(sData.bhBruta * 10) / 10}</td><td className="text-xs text-center font-bold p-2 text-emerald-600 bg-muted/30">{Math.round(sData.bhNeta * 10) / 10}</td></tr>)}</tbody></table></CardContent></Card>);
+        return (
+          <SectionCard
+            key={nombre}
+            icon={Users}
+            title={nombre}
+            description={`Operario ${rows[0]?.operario ?? ""}`}
+            tone="slate"
+            contentClassName="p-0 overflow-x-auto"
+          >
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/40">
+                  <th className={TH}>Dia</th>
+                  <th className={TH}>Operario</th>
+                  <th className={TH}>Bultos</th>
+                  <th className={TH}>Hs. Brutas</th>
+                  <th className={TH}>TM (hs)</th>
+                  <th className={TH}>Hs. Netas</th>
+                  <th className={`${TH} text-blue-600`}>B/H Bruta</th>
+                  <th className={`${TH} text-emerald-600`}>B/H Neta</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(function(r: any, idx: number) {
+                  return (
+                    <tr key={idx} className="border-b hover:bg-muted/50">
+                      <td className={TD}>{String(r.dia ?? "")}</td>
+                      <td className={`${TD} font-mono`}>{String(r.operario ?? "")}</td>
+                      <td className={`${TD_NUM} font-medium`}>{Number(r.bultos ?? 0).toLocaleString("es-AR")}</td>
+                      <td className={TD_NUM}>{Number(r.hs_brutas ?? 0)}</td>
+                      <td className={TD_NUM}>{Math.round(Number(r.tm_hs ?? 0) * 100) / 100}</td>
+                      <td className={TD_NUM}>{Math.round(Number(r.hs_netas ?? 0) * 100) / 100}</td>
+                      <td className={`${TD_NUM} text-blue-600`}>{Math.round(Number(r.bh_bruta ?? 0) * 10) / 10}</td>
+                      <td className={`${TD_NUM} text-emerald-600`}>{Math.round(Number(r.bh_neta ?? 0) * 10) / 10}</td>
+                    </tr>
+                  );
+                })}
+                {sData && (
+                  <tr className={TR_FOOT}>
+                    <td className={`${TD} font-bold`}>TOTAL</td>
+                    <td className={TD}></td>
+                    <td className={`${TD_NUM} font-bold`}>{sData.bultos.toLocaleString("es-AR")}</td>
+                    <td className={`${TD_NUM} font-bold`}>{Math.round(sData.hsBrutas * 100) / 100}</td>
+                    <td className={`${TD_NUM} font-bold`}>{Math.round(sData.tmHs * 100) / 100}</td>
+                    <td className={`${TD_NUM} font-bold`}>{Math.round(sData.hsNetas * 100) / 100}</td>
+                    <td className={`${TD_NUM} font-bold text-blue-600`}>{Math.round(sData.bhBruta * 10) / 10}</td>
+                    <td className={`${TD_NUM} font-bold text-emerald-600`}>{Math.round(sData.bhNeta * 10) / 10}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </SectionCard>
+        );
       })}
 
-      {summaryRows.length === 0 && (<Card><CardContent className="p-8 text-center"><Clock className="h-10 w-10 text-muted-foreground mx-auto mb-3" /><p className="text-sm text-muted-foreground">No se encontraron operarios con primer pikeo a las 9:00hs en el periodo seleccionado.</p><p className="text-xs text-muted-foreground mt-1">El filtro &quot;Intermedio&quot; detecta automaticamente los registros donde hora_09 es la primera hora con actividad (horas 0-8 sin produccion). Tambien puede seleccionar &quot;Intermedio&quot; en el dropdown de turno de cualquier pestana.</p></CardContent></Card>)}
+      {summaryRows.length === 0 && (
+        <SectionCard icon={Clock} title="Sin datos para el criterio" tone="slate" contentClassName="p-8 pt-0 text-center">
+          <div className="py-4">
+            <Clock className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">No se encontraron operarios con primer pikeo a las 9:00hs en el periodo seleccionado.</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              El filtro &quot;Intermedio&quot; detecta automáticamente los registros donde hora_09 es la primera hora con actividad (horas 0-8 sin producción). También puede seleccionar &quot;Intermedio&quot; en el dropdown de turno de cualquier pestaña.
+            </p>
+          </div>
+        </SectionCard>
+      )}
     </div>
   );
 }

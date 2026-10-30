@@ -52,18 +52,21 @@ export default function Home() {
   const isClarkistas = activeTab === "clarkistas";
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src="/logo.jpg" alt="Grupo Gestión" className="h-9 w-9 rounded-lg object-cover" />
-            <div>
-              <h1 className="text-base font-bold leading-tight">Producción H61</h1>
-              <p className="text-xs text-muted-foreground leading-tight">Dashboard de Producción por Hora</p>
+    <div className="min-h-screen bg-muted/30 flex flex-col">
+      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 app-header sticky top-0 z-50">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <img src="/logo.jpg" alt="Grupo Gestión" className="h-10 w-10 rounded-xl object-cover ring-1 ring-border shadow-sm" />
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-bold leading-tight tracking-tight">Producción H61</h1>
+              <p className="text-[11px] sm:text-xs text-muted-foreground leading-tight">Dashboard de Producción por Hora</p>
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
-            <span className="text-xs text-muted-foreground hidden md:inline">{infoText}</span>
+            <span className="hidden md:inline-flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground bg-muted/60 border px-2.5 py-1 rounded-full">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              {infoText}
+            </span>
             <HeaderActions onRefresh={refresh} onRefreshClarkistas={refreshClarkistas} />
           </div>
         </div>
@@ -71,31 +74,31 @@ export default function Home() {
 
       <main className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 flex-1">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList>
-            <TabsTrigger value="general" className="gap-1.5">
+          <TabsList className="w-full justify-start overflow-x-auto h-10 bg-background border p-1 rounded-lg shadow-sm">
+            <TabsTrigger value="general" className="gap-1.5 text-xs px-3 data-[state=active]:shadow-sm data-[state=active]:bg-muted font-medium">
               <BarChart3 className="h-3.5 w-3.5" /> General
             </TabsTrigger>
-            <TabsTrigger value="franjas" className="gap-1.5">
+            <TabsTrigger value="franjas" className="gap-1.5 text-xs px-3 data-[state=active]:shadow-sm data-[state=active]:bg-muted font-medium">
               <Clock className="h-3.5 w-3.5" /> Franjas
             </TabsTrigger>
-            <TabsTrigger value="resumen" className="gap-1.5">
+            <TabsTrigger value="resumen" className="gap-1.5 text-xs px-3 data-[state=active]:shadow-sm data-[state=active]:bg-muted font-medium">
               <Table2 className="h-3.5 w-3.5" /> Resumen
             </TabsTrigger>
-            <TabsTrigger value="citacion" className="gap-1.5">
+            <TabsTrigger value="citacion" className="gap-1.5 text-xs px-3 data-[state=active]:shadow-sm data-[state=active]:bg-muted font-medium">
               <Target className="h-3.5 w-3.5" /> Citación
             </TabsTrigger>
 
-            <TabsTrigger value="clarkistas" className="gap-1.5">
+            <TabsTrigger value="clarkistas" className="gap-1.5 text-xs px-3 data-[state=active]:shadow-sm data-[state=active]:bg-muted font-medium">
               <Cog className="h-3.5 w-3.5" /> Clarkistas
             </TabsTrigger>
 
-            <TabsTrigger value="rendimientos" className="gap-1.5">
+            <TabsTrigger value="rendimientos" className="gap-1.5 text-xs px-3 data-[state=active]:shadow-sm data-[state=active]:bg-muted font-medium">
               <TrendingUp className="h-3.5 w-3.5" /> Rendimientos
             </TabsTrigger>
-            <TabsTrigger value="rrhh" className="gap-1.5">
+            <TabsTrigger value="rrhh" className="gap-1.5 text-xs px-3 data-[state=active]:shadow-sm data-[state=active]:bg-muted font-medium">
               <Briefcase className="h-3.5 w-3.5" /> RRHH
             </TabsTrigger>
-            <TabsTrigger value="comparativo" className="gap-1.5">
+            <TabsTrigger value="comparativo" className="gap-1.5 text-xs px-3 data-[state=active]:shadow-sm data-[state=active]:bg-muted font-medium">
               <GitCompare className="h-3.5 w-3.5" /> Comparativo
             </TabsTrigger>
           </TabsList>
@@ -139,10 +142,10 @@ export default function Home() {
         </Tabs>
       </main>
 
-      <footer className="border-t mt-auto">
+      <footer className="border-t mt-auto bg-background">
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between text-xs text-muted-foreground">
-          <span>Producción H61 · Dashboard de Control</span>
-          <span>Next.js + Turso + Recharts</span>
+          <span className="font-medium">Producción H61 · Dashboard de Control</span>
+          <span>Next.js + PostgreSQL (Neon) + Recharts</span>
         </div>
       </footer>
     </div>

@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { AlertTriangle, Upload, Filter, X, Trash2, Trophy, BarChart3 } from "lucide-react";
 import { ExcelButton } from "./excel-button";
 import { PrintButton } from "./print-button";
+import { KpiCard, ErrorState, TabSkeleton } from "./ui-kit";
 
 function formatDate(dateNum: number): string {
   const day = dateNum % 100;
@@ -113,19 +114,8 @@ export function ErroresTab() {
     return m;
   }, [daily]);
 
-  if (error) return (
-    <Card><CardContent className="p-8 text-center">
-      <p className="text-sm text-muted-foreground">Error al cargar datos de errores.</p>
-      <button onClick={fetchData} className="mt-2 text-xs text-primary underline">Reintentar</button>
-    </CardContent></Card>
-  );
-  if (!data) return (
-    <div className="space-y-6">{[1, 2].map((i) => (
-      <Card key={i}><CardContent className="p-4 h-[200px] flex items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </CardContent></Card>
-    ))}</div>
-  );
+  if (error) return <ErrorState message="Error al cargar datos de errores." onRetry={fetchData} />;
+  if (!data) return <TabSkeleton rows={3} />;
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -252,43 +242,11 @@ export function ErroresTab() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <AlertTriangle className="h-4 w-4" />
-              <span className="text-xs font-medium">Total registros</span>
-            </div>
-            <p className="text-2xl font-bold">{totals.total.toLocaleString("es-AR")}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <AlertTriangle className="h-4 w-4" />
-              <span className="text-xs font-medium">Total errores</span>
-            </div>
-            <p className="text-2xl font-bold text-red-500">{totals.suma.toLocaleString("es-AR")}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <AlertTriangle className="h-4 w-4" />
-              <span className="text-xs font-medium">Faltantes</span>
-            </div>
-            <p className="text-2xl font-bold text-orange-500">{totals.fal.toLocaleString("es-AR")}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <AlertTriangle className="h-4 w-4" />
-              <span className="text-xs font-medium">Sobrantes</span>
-            </div>
-            <p className="text-2xl font-bold text-blue-500">{totals.sob.toLocaleString("es-AR")}</p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard icon={AlertTriangle} label="Total registros" value={totals.total.toLocaleString("es-AR")} tone="slate" />
+        <KpiCard icon={AlertTriangle} label="Total errores" value={totals.suma.toLocaleString("es-AR")} tone="red" />
+        <KpiCard icon={AlertTriangle} label="Faltantes" value={totals.fal.toLocaleString("es-AR")} tone="amber" />
+        <KpiCard icon={AlertTriangle} label="Sobrantes" value={totals.sob.toLocaleString("es-AR")} tone="sky" />
       </div>
 
       {/* Daily chart */}

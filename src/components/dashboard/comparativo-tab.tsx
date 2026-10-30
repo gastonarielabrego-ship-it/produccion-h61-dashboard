@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Filter, X, BarChart3, User, Trophy, Target, ArrowDownCircle, Calendar, Search, Users, Plus, Trash2, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { ExcelButton } from "./excel-button";
 import { PrintButton } from "./print-button";
+import { ErrorState, TabSkeleton } from "./ui-kit";
 import {
   BarChart,
   Bar,
@@ -297,21 +298,8 @@ export function ComparativoTab({ refreshKey }: ComparativoTabProps) {
   const hasFilters = fDesde || fHasta || fTurno || fTipo || fActividad || fRankingSearch;
   const clearFilters = function() { setFDesde(""); setFHasta(""); setFTurno(""); setFTipo(""); setFActividad(""); setFRankingSearch(""); setCompareOperarios([]); setCompareSearch(""); };
 
-  if (error) return (
-    <Card><CardContent className="p-8 text-center">
-      <p className="text-sm text-muted-foreground">Error al cargar datos comparativos.</p>
-      <button onClick={fetchData} className="mt-2 text-xs text-primary underline">Reintentar</button>
-    </CardContent></Card>
-  );
-  if (!data) return (
-    <div className="space-y-6">{[1, 2].map(function(i) {
-      return (
-        <Card key={i}><CardContent className="p-4 h-[200px] flex items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-        </CardContent></Card>
-      );
-    })}</div>
-  );
+  if (error) return <ErrorState message="Error al cargar datos comparativos." onRetry={fetchData} />;
+  if (!data) return <TabSkeleton rows={3} />;
 
   const topCount = ranking.filter(function(r: any) { return r.category === "top"; }).length;
   const avgCount = ranking.filter(function(r: any) { return r.category === "average"; }).length;

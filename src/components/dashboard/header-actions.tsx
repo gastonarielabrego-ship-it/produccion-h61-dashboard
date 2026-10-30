@@ -341,48 +341,65 @@ export function HeaderActions({ onRefresh, onRefreshClarkistas }: HeaderActionsP
         console.log(`Nómina: ${dupCount} duplicados eliminados, ${uniqueRows.length} filas únicas`);
       }
 
-      // Delete ALL previous records (no date filter for nomina)
-      setUploadStatus("Paso 1/2: Eliminando nómina previa...");
-      const delResult = await apiPost(endpoint, { action: "delete" });
-      if (!delResult.ok) {
-        showToast("error", `Error al eliminar: ${delResult.data.error}`);
-        return;
-      }
+      // ── ATOMIC REPLACE ("pisar"): un solo request transaccional ──
+      // Borra la nómina anterior e inserta la nueva en una transacción PG.
+      // Si algo falla → ROLLBACK → la nómina anterior queda intacta.
+      if (uniqueRows.length <= 1500) {
+        setUploadStatus(`Pisando nómina anterior y cargando ${uniqueRows.length.toLocaleString("es-AR")} registros...`);
+        setProgress({ current: 1, total: 1 });
 
-      // ── INSERT pre-parsed rows in smaller chunks (50 rows) ──
-      // Smaller chunks = faster per request = less chance of Vercel timeout
-      const NOM_CHUNK = 50;
-      const totalChunks = Math.ceil(uniqueRows.length / NOM_CHUNK);
-      setProgress({ current: 0, total: totalChunks });
-
-      let totalInserted = 0;
-      for (let c = 0; c < totalChunks; c++) {
-        const start = c * NOM_CHUNK;
-        const end = Math.min(start + NOM_CHUNK, uniqueRows.length);
-        const chunk = uniqueRows.slice(start, end);
-
-        setUploadStatus(`Paso 2/2: Bloque ${c + 1}/${totalChunks} (filas ${start + 1}-${end} de ${uniqueRows.length})...`);
-        setProgress({ current: c + 1, total: totalChunks });
-
-        // Use "insert-parsed" action — server skips header mapping entirely
-        const insResult = await apiPost(endpoint, { action: "insert-parsed", rows: chunk });
-
-        if (!insResult.ok) {
-          // Retry once on failure
-          setUploadStatus(`Reintentando bloque ${c + 1}...`);
-          const retryResult = await apiPost(endpoint, { action: "insert-parsed", rows: chunk });
-          if (!retryResult.ok) {
-            showToast("error", `Bloque ${c + 1} falló: ${insResult.data.error}. Se insertaron ${totalInserted.toLocaleString("es-AR")} filas antes del error.`);
-            return;
-          }
-          totalInserted += retryResult.data.inserted || 0;
-        } else {
-          totalInserted += insResult.data.inserted || 0;
+        const repResult = await apiPost(endpoint, { action: "replace", rows: uniqueRows }, 55000);
+        if (!repResult.ok) {
+          showToast("error", `Error al reemplazar nómina: ${repResult.data.error}. La nómina anterior NO fue modificada.`);
+          return;
         }
-      }
 
-      showToast("success", `${totalInserted.toLocaleString("es-AR")} registros de nómina cargados en ${totalChunks} bloques`);
-      setTimeout(() => onRefresh?.(), 2000);
+        showToast("success", `Nómina reemplazada: ${uniqueRows.length.toLocaleString("es-AR")} registros cargados (los anteriores fueron eliminados)`);
+        setTimeout(() => onRefresh?.(), 1500);
+      } else {
+        // Archivo enorme: flujo por bloques (delete + insert-parsed en chunks)
+        setUploadStatus("Paso 1/2: Eliminando nómina previa...");
+        const delResult = await apiPost(endpoint, { action: "delete" });
+        if (!delResult.ok) {
+          showToast("error", `Error al eliminar: ${delResult.data.error}`);
+          return;
+        }
+
+        // ── INSERT pre-parsed rows in smaller chunks (50 rows) ──
+        // Smaller chunks = faster per request = less chance of Vercel timeout
+        const NOM_CHUNK = 50;
+        const totalChunks = Math.ceil(uniqueRows.length / NOM_CHUNK);
+        setProgress({ current: 0, total: totalChunks });
+
+        let totalInserted = 0;
+        for (let c = 0; c < totalChunks; c++) {
+          const start = c * NOM_CHUNK;
+          const end = Math.min(start + NOM_CHUNK, uniqueRows.length);
+          const chunk = uniqueRows.slice(start, end);
+
+          setUploadStatus(`Paso 2/2: Bloque ${c + 1}/${totalChunks} (filas ${start + 1}-${end} de ${uniqueRows.length})...`);
+          setProgress({ current: c + 1, total: totalChunks });
+
+          // Use "insert-parsed" action — server skips header mapping entirely
+          const insResult = await apiPost(endpoint, { action: "insert-parsed", rows: chunk });
+
+          if (!insResult.ok) {
+            // Retry once on failure
+            setUploadStatus(`Reintentando bloque ${c + 1}...`);
+            const retryResult = await apiPost(endpoint, { action: "insert-parsed", rows: chunk });
+            if (!retryResult.ok) {
+              showToast("error", `Bloque ${c + 1} falló: ${insResult.data.error}. Se insertaron ${totalInserted.toLocaleString("es-AR")} filas antes del error.`);
+              return;
+            }
+            totalInserted += retryResult.data.inserted || 0;
+          } else {
+            totalInserted += insResult.data.inserted || 0;
+          }
+        }
+
+        showToast("success", `${totalInserted.toLocaleString("es-AR")} registros de nómina cargados en ${totalChunks} bloques`);
+        setTimeout(() => onRefresh?.(), 2000);
+      }
     } catch (err: any) {
       showToast("error", `Error: ${err.message || "inesperado"}`);
     } finally {

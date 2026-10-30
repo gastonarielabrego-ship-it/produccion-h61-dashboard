@@ -93,8 +93,9 @@ export async function GET(request: Request) {
     const dayMap: Record<number, { missions: Set<string>; bultos: number; opHours: Record<string, number[]> }> = {};
     const monthMap: Record<number, { missions: Set<string>; bultos: number; days: Set<number> }> = {};
 
-    // Heatmaps: (date, hour) and (operario, hour) bultos sums
+    // Heatmaps: (date, hour), (operario, hour) and (month, hour) bultos sums
     const dayHourMap: Record<string, number> = {};
+    const monthHourMap: Record<string, number> = {};
     const opTotalMap: Record<string, number> = {};
     const opNameMap: Record<string, string> = {};
     const opHourMap: Record<string, number> = {};
@@ -164,11 +165,13 @@ export async function GET(request: Request) {
       mm.bultos += tot;
       mm.days.add(dt);
 
-      // Day heatmap (bultos per hour)
+      // Day + Month heatmap (bultos per hour)
       for (let h = 0; h <= 23; h++) {
         if (r.hora[h] > 0) {
           const key = dt + ":" + h;
           dayHourMap[key] = (dayHourMap[key] || 0) + r.hora[h];
+          const mKey = mk + ":" + h;
+          monthHourMap[mKey] = (monthHourMap[mKey] || 0) + r.hora[h];
         }
       }
 
@@ -327,6 +330,20 @@ export async function GET(request: Request) {
       dayHeatmap.push(row);
     }
 
+    // ── Month heatmap (bultos per hour, one row per month) ──
+    const monthHeatmap: any[] = [];
+    for (let i = 0; i < sortedMonths.length; i++) {
+      const month = sortedMonths[i];
+      const row: Record<string, any> = {
+        month: month,
+        label: MONTH_NAMES[month % 100] + " " + String(month).slice(0, 4),
+      };
+      for (let h = 0; h <= 23; h++) {
+        row[String(h)] = monthHourMap[(month + ":" + h)] || 0;
+      }
+      monthHeatmap.push(row);
+    }
+
     // ── Collaborator heatmap (top 100 by bultos) ──
     const opEntries = Object.entries(opTotalMap).sort(function(a, b) { return b[1] - a[1]; });
     const sortedOps: string[] = [];
@@ -392,6 +409,7 @@ export async function GET(request: Request) {
       monthlyData,
       heByTurno,
       dayHeatmap,
+      monthHeatmap,
       collaboratorHeatmap,
       filteredOperatorName,
     }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });

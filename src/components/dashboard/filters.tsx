@@ -369,8 +369,10 @@ export function FilterBar({
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Filter className="h-4 w-4" />
+        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+          <span className="p-1.5 rounded-lg bg-muted text-muted-foreground">
+            <Filter className="h-3.5 w-3.5" />
+          </span>
           Filtros{title ? ` — ${title}` : ""}
         </CardTitle>
       </CardHeader>

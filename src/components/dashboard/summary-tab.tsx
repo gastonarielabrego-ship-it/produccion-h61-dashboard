@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Flame, Users, BarChart3 } from "lucide-react";
+import { Flame, Users, BarChart3, CalendarDays } from "lucide-react";
 import { PrintButton } from "./print-button";
 import { ExcelButton } from "./excel-button";
 import { MonthlySummary } from "./monthly-summary";
+import { SectionCard, ErrorState, TabSkeleton, TH, TH_LEFT, TD, TD_LEFT, TD_NUM, TR_FOOT } from "./ui-kit";
 
 interface SummaryTabProps {
   baseQuery: string;
@@ -43,13 +43,14 @@ function DailyMetricsTable({ data, operatorName }: { data: any[]; operatorName?:
   }, [data]);
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-start justify-between space-y-0">
-        <div>
-          <CardTitle className="flex items-center gap-2 text-base"><BarChart3 className="h-4 w-4" />Métricas Diarias</CardTitle>
-          <CardDescription>Resumen por día con descuento de tiempos muertos</CardDescription>
-        </div>
-        <div className="flex items-center gap-1">
+    <SectionCard
+      icon={BarChart3}
+      title="Métricas Diarias"
+      description="Resumen por día con descuento de tiempos muertos"
+      tone="sky"
+      contentClassName="p-0 overflow-x-auto"
+      actions={
+        <>
           <ExcelButton
             rows={[
               ...data.map((row: any) => ({
@@ -80,60 +81,59 @@ function DailyMetricsTable({ data, operatorName }: { data: any[]; operatorName?:
             colWidths={[12, 14, 12, 12, 10, 12, 10, 12, 12]}
           />
           <PrintButton title="Métricas Diarias" />
-        </div>
-      </CardHeader>
-      <CardContent className="p-0 overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b">
-              <th className="text-xs font-semibold text-left p-2 sticky left-0 bg-card min-w-[70px]">Día</th>
-              <th className="text-xs font-semibold text-center p-2 min-w-[75px]">{operatorName || "Misiones"}</th>
-              <th className="text-xs font-semibold text-center p-2 min-w-[90px]">Bultos</th>
-              <th className="text-xs font-semibold text-center p-2 min-w-[80px]">Hs. Brutas</th>
-              <th className="text-xs font-semibold text-center p-2 min-w-[75px] text-red-600">TM (hs)</th>
-              <th className="text-xs font-semibold text-center p-2 min-w-[80px]">Hs. Netas</th>
-              <th className="text-xs font-semibold text-center p-2 min-w-[85px]">Prod.</th>
-              <th className="text-xs font-semibold text-center p-2 min-w-[85px]">B/H Bruta</th>
-              <th className="text-xs font-semibold text-center p-2 min-w-[85px]">B/H Neta</th>
+        </>
+      }
+    >
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b bg-muted/40">
+            <th className={`${TH_LEFT} sticky left-0 bg-muted/40 min-w-[70px]`}>Día</th>
+            <th className={`${TH} min-w-[75px]`}>{operatorName || "Misiones"}</th>
+            <th className={`${TH} min-w-[90px]`}>Bultos</th>
+            <th className={`${TH} min-w-[80px]`}>Hs. Brutas</th>
+            <th className={`${TH} min-w-[75px] text-red-600`}>TM (hs)</th>
+            <th className={`${TH} min-w-[80px]`}>Hs. Netas</th>
+            <th className={`${TH} min-w-[85px]`}>Prod.</th>
+            <th className={`${TH} min-w-[85px] text-sky-600`}>B/H Bruta</th>
+            <th className={`${TH} min-w-[85px] text-sky-600`}>B/H Neta</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((row) => (
+            <tr key={row.date} className="border-b hover:bg-muted/50">
+              <td className={`${TD_LEFT} font-medium sticky left-0 bg-card`}>{formatArgDate(row.date)}</td>
+              <td className={TD}>{operatorName || row.misiones}</td>
+              <td className={`${TD_NUM} font-medium`}>{row.bultos.toLocaleString("es-AR")}</td>
+              <td className={TD_NUM}>{row.horasProductivas}</td>
+              <td className={`${TD_NUM} text-red-600 font-medium`}>{row.tmHoras || 0}</td>
+              <td className={`${TD_NUM} font-medium`}>{row.horasNetas}</td>
+              <td className={`${TD_NUM} font-medium text-emerald-600`}>{row.produccion}</td>
+              <td className={`${TD_NUM} text-sky-600`}>{row.bultosPorHoraBruta}</td>
+              <td className={`${TD_NUM} font-bold text-sky-600`}>{row.bultosPorHoraNeta}</td>
             </tr>
-          </thead>
-          <tbody>
-            {data.map((row) => (
-              <tr key={row.date} className="border-b hover:bg-muted/50">
-                <td className="text-xs font-medium p-2 sticky left-0 bg-card">{formatArgDate(row.date)}</td>
-                <td className="text-xs text-center p-2">{operatorName || row.misiones}</td>
-                <td className="text-xs text-center font-medium p-2">{row.bultos.toLocaleString("es-AR")}</td>
-                <td className="text-xs text-center p-2">{row.horasProductivas}</td>
-                <td className="text-xs text-center p-2 text-red-600 font-medium">{row.tmHoras || 0}</td>
-                <td className="text-xs text-center p-2 font-medium">{row.horasNetas}</td>
-                <td className="text-xs text-center font-medium text-emerald-600 p-2">{row.produccion}</td>
-                <td className="text-xs text-center p-2 text-sky-600">{row.bultosPorHoraBruta}</td>
-                <td className="text-xs text-center font-bold text-sky-600 p-2">{row.bultosPorHoraNeta}</td>
-              </tr>
-            ))}
-            <tr className="border-t-2 font-bold bg-muted/30">
-              <td className="text-xs font-bold p-2 sticky left-0 bg-muted/30">TOTAL</td>
-              <td className="text-xs text-center font-bold p-2">{operatorName || totals.misiones}</td>
-              <td className="text-xs text-center font-bold p-2">{totals.bultos.toLocaleString("es-AR")}</td>
-              <td className="text-xs text-center font-bold p-2">{totals.horasProductivas}</td>
-              <td className="text-xs text-center font-bold p-2 text-red-600">{totals.tmHoras}</td>
-              <td className="text-xs text-center font-bold p-2">{totals.horasNetas}</td>
-              <td className="text-xs text-center font-bold text-emerald-600 p-2">{totals.produccion}</td>
-              <td className="text-xs text-center font-bold text-sky-600 p-2">{totals.bultosPorHoraBruta}</td>
-              <td className="text-xs text-center font-bold text-sky-600 p-2">{totals.bultosPorHoraNeta}</td>
-            </tr>
-          </tbody>
-        </table>
-      </CardContent>
-    </Card>
+          ))}
+          <tr className={TR_FOOT}>
+            <td className={`${TD_LEFT} sticky left-0 bg-muted/40`}>TOTAL</td>
+            <td className={`${TD} font-bold`}>{operatorName || totals.misiones}</td>
+            <td className={`${TD_NUM} font-bold`}>{totals.bultos.toLocaleString("es-AR")}</td>
+            <td className={`${TD_NUM} font-bold`}>{totals.horasProductivas}</td>
+            <td className={`${TD_NUM} font-bold text-red-600`}>{totals.tmHoras}</td>
+            <td className={`${TD_NUM} font-bold`}>{totals.horasNetas}</td>
+            <td className={`${TD_NUM} font-bold text-emerald-600`}>{totals.produccion}</td>
+            <td className={`${TD_NUM} font-bold text-sky-600`}>{totals.bultosPorHoraBruta}</td>
+            <td className={`${TD_NUM} font-bold text-sky-600`}>{totals.bultosPorHoraNeta}</td>
+          </tr>
+        </tbody>
+      </table>
+    </SectionCard>
   );
 }
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
-function HeatmapTable({ title, description, icon: Icon, data, isCollaborator, printTitle, operatorName }: {
+function HeatmapTable({ title, description, icon, data, isCollaborator, isMonthly, printTitle, operatorName }: {
   title: string; description: string; icon: typeof Flame;
-  data: Record<string, string | number>[]; isCollaborator?: boolean; printTitle: string;
+  data: Record<string, any>[]; isCollaborator?: boolean; isMonthly?: boolean; printTitle: string;
   operatorName?: string | null;
 }) {
   const maxVal = useMemo(() => {
@@ -142,76 +142,83 @@ function HeatmapTable({ title, description, icon: Icon, data, isCollaborator, pr
     return m;
   }, [data]);
 
+  const rowId = (row: any) => isCollaborator ? String(row.operario) : isMonthly ? String(row.month) : String(row.date);
+  const rowLabel = (row: any) =>
+    isCollaborator ? `${row.nombre} (${row.operario})` : isMonthly ? String(row.label) : formatArgDate(Number(row.date));
+  const labelHeader = isCollaborator ? "Colaborador / Hora" : isMonthly ? "Mes / Hora" : "Día / Hora";
+
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
-        <div>
-          <CardTitle className="flex items-center gap-2 text-base"><Icon className="h-4 w-4" />{title}</CardTitle>
-          <CardDescription>{description}</CardDescription>
-        </div>
-        <div className="flex items-center gap-1">
+    <SectionCard
+      icon={icon}
+      title={title}
+      description={description}
+      tone={isMonthly ? "violet" : isCollaborator ? "sky" : "amber"}
+      contentClassName="p-0"
+      actions={
+        <>
           <ExcelButton
             rows={data.map((row: any) => {
               const r: Record<string, any> = {
-                [isCollaborator ? "Colaborador" : "Dia"]: isCollaborator
-                  ? `${row.nombre} (${row.operario})`
-                  : formatArgDate(Number(row.date)),
+                [isCollaborator ? "Colaborador" : isMonthly ? "Mes" : "Dia"]: rowLabel(row),
               };
-              if (operatorName && !isCollaborator) r["Colaborador"] = operatorName;
+              if (operatorName && !isCollaborator && !isMonthly) r["Colaborador"] = operatorName;
               let t = 0;
               for (const h of HOURS) { const v = Number(row[String(h)]) || 0; r[String(h)] = v; t += v; }
               r["Total"] = t;
               return r;
             })}
-            filename={isCollaborator ? "mapa-calor-colaborador" : "mapa-calor-dia"}
-            sheetName={isCollaborator ? "Colaborador" : "Dia"}
+            filename={isMonthly ? "mapa-calor-mes" : isCollaborator ? "mapa-calor-colaborador" : "mapa-calor-dia"}
+            sheetName={isMonthly ? "Mensual" : isCollaborator ? "Colaborador" : "Dia"}
             colWidths={[30, ...HOURS.map(() => 8), 10]}
           />
           <PrintButton title={printTitle} />
-        </div>
-      </CardHeader>
-      <CardContent className="p-0">
-        <div className={`overflow-auto ${isCollaborator ? "max-h-[600px]" : ""}`}>
-          <table className="w-full text-sm" style={{ minWidth: 900 }}>
-            <thead className="sticky top-0 z-10">
-              <tr className="border-b bg-card">
-                <th className="text-[10px] font-semibold text-left p-1 sticky left-0 bg-card z-20 min-w-[140px] max-w-[260px]">
-                  {isCollaborator ? "Colaborador / Hora" : "Día / Hora"}
-                </th>
-                {operatorName && !isCollaborator && (
-                  <th className="text-[10px] font-semibold text-left p-1 min-w-[120px]">Colaborador</th>
-                )}
-                {HOURS.map((h) => (
-                  <th key={h} className={`text-[10px] font-semibold text-center p-1 min-w-[38px] ${(h === 10 || h === 14 || h === 18 || h === 22) ? "text-amber-600 bg-amber-50" : ""}`}>{h}</th>
-                ))}
-                <th className="text-[10px] font-semibold text-center p-1 min-w-[55px] sticky right-0 bg-card z-20">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((row) => {
-                let rowTotal = 0;
-                for (const h of HOURS) rowTotal += Number(row[String(h)]) || 0;
-                const id = isCollaborator ? String(row.operario) : String(row.date);
-                const label = isCollaborator ? `${row.nombre} (${row.operario})` : formatArgDate(Number(row.date));
-                return (
-                  <tr key={id} className="border-b hover:bg-muted/50">
-                    <td className="text-[11px] font-medium p-1 sticky left-0 bg-card z-10 max-w-[140px] truncate">{label}</td>
-                    {operatorName && !isCollaborator && (
-                      <td className="text-[11px] p-1 text-muted-foreground truncate">{operatorName}</td>
-                    )}
-                    {HOURS.map((h) => {
-                      const val = Number(row[String(h)]) || 0;
-                      return <td key={h} className={`text-[10px] text-center p-1 min-w-[38px] ${heatColor(val, maxVal)}`}>{val > 0 ? val : ""}</td>;
-                    })}
-                    <td className="text-[11px] text-center font-semibold p-1 min-w-[55px] sticky right-0 bg-card z-10">{rowTotal.toLocaleString("es-AR")}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
+        </>
+      }
+    >
+      <div className={`overflow-auto ${isCollaborator ? "max-h-[600px]" : ""}`}>
+        <table className="w-full text-sm" style={{ minWidth: 900 }}>
+          <thead className="sticky top-0 z-10">
+            <tr className="border-b bg-card">
+              <th className={`${TH_LEFT} sticky left-0 bg-card z-20 min-w-[140px] max-w-[260px]`}>{labelHeader}</th>
+              {operatorName && !isCollaborator && !isMonthly && (
+                <th className={`${TH_LEFT} min-w-[120px]`}>Colaborador</th>
+              )}
+              {HOURS.map((h) => (
+                <th key={h} className={`${TH} min-w-[38px] ${(h === 10 || h === 14 || h === 18 || h === 22) ? "text-amber-600" : ""}`}>{h}</th>
+              ))}
+              <th className={`${TH} min-w-[55px] sticky right-0 bg-card z-20`}>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((row) => {
+              let rowTotal = 0;
+              for (const h of HOURS) rowTotal += Number(row[String(h)]) || 0;
+              return (
+                <tr key={rowId(row)} className="border-b hover:bg-muted/50">
+                  <td className={`${TD_LEFT} font-medium sticky left-0 bg-card z-10 max-w-[140px] truncate`}>{rowLabel(row)}</td>
+                  {operatorName && !isCollaborator && !isMonthly && (
+                    <td className={`${TD_LEFT} text-muted-foreground truncate`}>{operatorName}</td>
+                  )}
+                  {HOURS.map((h) => {
+                    const val = Number(row[String(h)]) || 0;
+                    return (
+                      <td
+                        key={h}
+                        title={`${rowLabel(row)} — ${h}:00 hs — ${val.toLocaleString("es-AR")} bultos`}
+                        className={`text-[10px] text-center p-1 min-w-[38px] tabular-nums ${heatColor(val, maxVal)}`}
+                      >
+                        {val > 0 ? val : ""}
+                      </td>
+                    );
+                  })}
+                  <td className={`${TD_NUM} font-semibold sticky right-0 bg-card z-10`}>{rowTotal.toLocaleString("es-AR")}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </SectionCard>
   );
 }
 
@@ -221,7 +228,7 @@ export function SummaryTab({ baseQuery, apiBase = "/api/production" }: SummaryTa
   const fetchData = useCallback(() => {
     setError(false);
     const base = baseQuery ? `?${baseQuery}` : "";
-    // Single API call — monthlyData is now included in the response
+    // Single API call — monthlyData + monthHeatmap are included in the response
     fetch(`/api/production/summary-tables${base}`, { cache: "no-store" })
       .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
       .then(setData)
@@ -229,26 +236,16 @@ export function SummaryTab({ baseQuery, apiBase = "/api/production" }: SummaryTa
   }, [baseQuery]);
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  if (error) return (
-    <Card><CardContent className="p-8 text-center">
-      <p className="text-sm text-muted-foreground">Error al cargar los datos del resumen.</p>
-      <button onClick={fetchData} className="mt-2 text-xs text-primary underline">Reintentar</button>
-    </CardContent></Card>
-  );
-  if (!data) return (
-    <div className="space-y-6">{[1, 2, 3, 4].map((i) => (
-      <Card key={i}><CardContent className="p-4 h-[200px] flex items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </CardContent></Card>
-    ))}</div>
-  );
+  if (error) return <ErrorState message="Error al cargar los datos del resumen." onRetry={fetchData} />;
+  if (!data) return <TabSkeleton rows={4} />;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* MonthlySummary now receives data as prop — no separate API call */}
       <MonthlySummary monthlyData={data.monthlyData || []} />
       <DailyMetricsTable data={data.dailyMetrics} operatorName={data.filteredOperatorName} />
       <HeatmapTable title="Mapa de Calor por Día" description="Horas más y menos productivas por día — cantidad de bultos" icon={Flame} data={data.dayHeatmap} printTitle="Mapa de Calor por Día" operatorName={data.filteredOperatorName} />
+      <HeatmapTable title="Mapa de Calor por Mes" description="Productividad horaria acumulada de cada mes — cantidad de bultos" icon={CalendarDays} data={data.monthHeatmap || []} isMonthly printTitle="Mapa de Calor por Mes" />
       <HeatmapTable title="Mapa de Calor por Colaborador" description="Distribución horaria de cada colaborador — cantidad de bultos" icon={Users} data={data.collaboratorHeatmap} isCollaborator printTitle="Mapa de Calor por Colaborador" />
     </div>
   );

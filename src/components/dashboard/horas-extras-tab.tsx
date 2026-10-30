@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Upload, Filter, X, Trash2, Trophy, BarChart3, Clock, CalendarDays, Users, PieChart } from "lucide-react";
 import { ExcelButton } from "./excel-button";
 import { PrintButton } from "./print-button";
+import { KpiCard, ErrorState, TabSkeleton } from "./ui-kit";
 
 const MONTH_NAMES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
@@ -115,21 +116,8 @@ export function HorasExtrasTab() {
     return m;
   }, [daily]);
 
-  if (error) return (
-    <Card><CardContent className="p-8 text-center">
-      <p className="text-sm text-muted-foreground">Error al cargar datos de horas extras.</p>
-      <button onClick={fetchData} className="mt-2 text-xs text-primary underline">Reintentar</button>
-    </CardContent></Card>
-  );
-  if (!data) return (
-    <div className="space-y-6">{[1, 2, 3].map(function(i) {
-      return (
-        <Card key={i}><CardContent className="p-4 h-[200px] flex items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-        </CardContent></Card>
-      );
-    })}</div>
-  );
+  if (error) return <ErrorState message="Error al cargar datos de horas extras." onRetry={fetchData} />;
+  if (!data) return <TabSkeleton rows={3} />;
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -258,47 +246,11 @@ export function HorasExtrasTab() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <Clock className="h-4 w-4" />
-              <span className="text-xs font-medium">Total HE</span>
-            </div>
-            <p className="text-2xl font-bold text-amber-600">{totals.totalHE.toLocaleString("es-AR")}</p>
-            <p className="text-[11px] text-muted-foreground">horas (redondeadas)</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <Clock className="h-4 w-4" />
-              <span className="text-xs font-medium">HE 50%</span>
-            </div>
-            <p className="text-2xl font-bold">{totals.he50.toLocaleString("es-AR")}</p>
-            <p className="text-[11px] text-muted-foreground">horas extras al 50%</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <Clock className="h-4 w-4" />
-              <span className="text-xs font-medium">HE 100%</span>
-            </div>
-            <p className="text-2xl font-bold">{totals.he100.toLocaleString("es-AR")}</p>
-            <p className="text-[11px] text-muted-foreground">horas extras al 100%</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <Clock className="h-4 w-4" />
-              <span className="text-xs font-medium">Nocturnas 100%</span>
-            </div>
-            <p className="text-2xl font-bold">{totals.noct100.toLocaleString("es-AR")}</p>
-            <p className="text-[11px] text-muted-foreground">horas nocturnas al 100%</p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard icon={Clock} label="Total HE" value={totals.totalHE.toLocaleString("es-AR")} sub="horas (redondeadas)" tone="amber" />
+        <KpiCard icon={Clock} label="HE 50%" value={totals.he50.toLocaleString("es-AR")} sub="horas extras al 50%" tone="sky" />
+        <KpiCard icon={Clock} label="HE 100%" value={totals.he100.toLocaleString("es-AR")} sub="horas extras al 100%" tone="emerald" />
+        <KpiCard icon={Clock} label="Nocturnas 100%" value={totals.noct100.toLocaleString("es-AR")} sub="horas nocturnas al 100%" tone="violet" />
       </div>
 
       {/* Ranking Personal */}

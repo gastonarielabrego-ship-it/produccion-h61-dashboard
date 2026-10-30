@@ -1,9 +1,9 @@
 "use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, Minus, BarChart3 } from "lucide-react";
 import { PrintButton } from "./print-button";
 import { ExcelButton } from "./excel-button";
+import { SectionCard } from "./ui-kit";
 
 interface MonthlySummaryProps {
   monthlyData: any[];
@@ -32,16 +32,14 @@ export function MonthlySummary({ monthlyData }: MonthlySummaryProps) {
   totals.bhNeta = totals.horasNetas > 0 ? Math.round((totals.bultos / totals.horasNetas) * 10) / 10 : 0;
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-start justify-between space-y-0">
-        <div>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <BarChart3 className="h-4 w-4" />
-            Resumen Mensual — Comparativo
-          </CardTitle>
-          <CardDescription>Acumulado por mes con variación respecto al mes anterior</CardDescription>
-        </div>
-        <div className="flex items-center gap-1">
+    <SectionCard
+      icon={BarChart3}
+      title="Resumen Mensual — Comparativo"
+      description="Acumulado por mes con variación respecto al mes anterior"
+      tone="emerald"
+      contentClassName="p-0 overflow-x-auto"
+      actions={
+        <>
           <ExcelButton
             rows={[
               ...rows.map((r: any) => ({
@@ -78,10 +76,10 @@ export function MonthlySummary({ monthlyData }: MonthlySummaryProps) {
             colWidths={[14, 8, 10, 12, 14, 12, 12, 10, 12, 12, 12, 12]}
           />
           <PrintButton title="Resumen Mensual" />
-        </div>
-      </CardHeader>
-      <CardContent className="p-0 overflow-x-auto">
-        <table className="w-full text-sm">
+        </>
+      }
+    >
+      <table className="w-full text-sm">
           <thead>
             <tr className="border-b">
               <th className="text-xs font-semibold text-left p-2 sticky left-0 bg-card min-w-[120px]">Mes</th>
@@ -131,7 +129,6 @@ export function MonthlySummary({ monthlyData }: MonthlySummaryProps) {
             </tr>
           </tbody>
         </table>
-      </CardContent>
-    </Card>
+    </SectionCard>
   );
 }

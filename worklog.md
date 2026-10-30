@@ -398,3 +398,48 @@ ExcelButton/PrintButton son locales (sin red) — siempre responden.
 Build: exit 0; /api/admin/upload presente en .next/app-path-routes-manifest.json
 tsc: 19 errores preexistentes en rutas admin ajenas (cubierto por
 ignoreBuildErrors); CERO errores en archivos modificados.
+
+═══════════════════════════════════════════════════════════════════
+Task ID 9 — Mapa de Calor por Mes + rediseño profesional + nómina atómica
+Fecha: 2026-10-29
+═══════════════════════════════════════════════════════════════════
+Pedido del usuario: mapa de calor por mes (como el diario), rediseño
+profesional de todas las pestañas, verificar botones de carga, y que la
+nómina "se vaya pisando" al cargar.
+
+1) MAPA DE CALOR POR MES
+- api/production/summary-tables: acumulador monthHourMap (mes:hora → bultos)
+  en la MISMA pasada (cero queries extra) + monthHeatmap [{month,label,0..23}]
+- summary-tab: HeatmapTable con modo isMonthly (label "Ene 2026", Excel
+  mapa-calor-mes) insertado entre el mapa por Día y por Colaborador
+
+2) REDISEÑO PROFESIONAL (todas las pestañas)
+- NUEVO src/components/dashboard/ui-kit.tsx: KpiCard (chip de ícono + valor
+  grande tabular-nums), SectionCard (encabezado estándar con ícono acentuado
+  + acciones), ErrorState (con Reintentar), TabSkeleton (skeletons), clases
+  TH/TD/TD_NUM/TR_FOOT para tablas uniformes
+- page.tsx: canvas bg-muted/30, header sticky con sombra + badge de estado,
+  TabsList blanca con scroll horizontal mobile, footer actualizado
+- globals.css: scrollbar fino, selection esmeralda, font-smoothing
+- Tabs reestilizados con primitivos: Resumen (Métricas Diarias, 3 mapas de
+  calor, Resumen Mensual), RRHH/Nómina (KPIs + tabla), Rendimientos, Turno
+  Intermedio, Errores (KPIs), Horas Extras (KPIs), Citación, Comparativo
+  (estados), FilterBar (chip en encabezado)
+- monthly-summary: migrado a SectionCard
+
+3) NÓMINA ATÓMICA ("que se vaya pisando")
+- api/admin/upload-nomina: NUEVA action "replace" — transacción PostgreSQL
+  (BEGIN → DELETE all → upserts en batches de 100 → COMMIT; ROLLBACK total
+  si cualquier bloque falla → la nómina anterior queda intacta)
+- header-actions: si ≤1500 filas usa "replace" en UN request (55s timeout),
+  mensaje "Pisando nómina anterior..."; >1500 filas → flujo por bloques previo
+- Verificado estado producción: 494 filas, 0 duplicados (PK usuario), 402
+  activo='' / 92 activo='1'
+
+4) INCIDENTE: la ruta /api/admin/upload volvió a desaparecer del repo local
+  (workspace reescrito entre sesiones; el commit local 9b130fa perdió el
+  archivo). EL GUARDIÁN LO DETECTÓ: npm run build falló con exit 1 señalando
+  admin-panel.tsx:49 y header-actions.tsx:205. Restaurada nuevamente desde
+  a8d90e1; local realineado a origin/main (5703ae1) que SÍ la contiene y
+  producción la sirve (200, 131,235 registros). Lección: el verify-routes en
+  build es la red de seguridad que faltaba.

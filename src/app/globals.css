@@ -118,7 +118,38 @@
   }
   body {
     @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
+  ::selection {
+    @apply bg-emerald-200 text-emerald-950;
+  }
+}
+
+/* ─── Scrollbars finos y discretos (look profesional) ─── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.75 0 0 / 0.5) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: oklch(0.75 0 0 / 0.45);
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.6 0 0 / 0.6);
+}
+
+/* ─── Sombra de elevación sutil para la barra superior ─── */
+.app-header {
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 4px 16px -8px rgb(0 0 0 / 0.08);
 }
 
 /* Print styles are injected dynamically by PrintButton component to avoid
