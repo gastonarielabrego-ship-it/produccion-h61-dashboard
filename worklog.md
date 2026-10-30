@@ -453,3 +453,50 @@ VERIFICACIÓN FINAL EN PRODUCCIÓN (deploy 1e148f6):
   RRHH (KPIs 494 nómina / 272 con producción), Rendimientos — renderizan sin
   errores de página; botones de carga Preparación/Clarkistas/T.Muertos/Nómina/
   Informe presentes en el header — ✓
+
+═══════════════════════════════════════════════════════════════════════
+Task ID 10 — Rendimientos: turno por NÓMINA (eliminar regla por horario)
+Fecha: 2026-10-31 · Commit: dcf8b3f (deploy producción verificado)
+═══════════════════════════════════════════════════════════════════════
+
+PEDIDO DEL USUARIO: "eliminar una regla que tiene por turno porque está
+limitando la producción semanal y está dando mal... que traiga todos los
+bultos que realizo en la semana y las horas que trabajo y que el turno
+esté delimitado no por el horario sino por el que viene de la nómina"
+
+DIAGNÓSTICO (datos reales semana 23-29/10/2026):
+- La regla vieja filtraba SQL production_records.turno = M/T/N, un turno
+  derivado del HORARIO del registro → todo bulto trabajado fuera de la
+  ventana horaria del turno se perdía del reporte.
+- 83 operarios trabajaron en 2-3 turnos-horario esa semana; 206 combos
+  (fecha, operario) cruzan turnos el mismo día.
+- PÉRDIDA TOTAL medida: 36.3% de los bultos del personal con nómina
+  (232.561 de 365.170). TM: -34% · TI: 0% contado (no existía).
+
+SOLUCIÓN (src/app/api/rendimientos/route.ts):
+- ELIMINADO el filtro SQL por turno-horario y el hack hora_09 de Intermedio.
+- Nuevo criterio: nomina_eventuales.jornada (TM/TT/TN/TI) define el turno;
+  el filtro selecciona PERSONAS por nómina, no registros por hora.
+- Se suman TODOS los bultos y TODAS las horas activas del periodo (sin
+  recorte por ventana horaria) → B/H semanal real.
+- Compat: turno=M/T/N/I mapea a TM/TT/TN/TI (enlaces viejos siguen vivos).
+- catch serializa el error real (antes devolvía {"error":""}).
+
+FRONTEND:
+- rendimientos-tab: dropdown con turnos de nómina (TM/TT/TN/TI), columna
+  "Turno" en resumen + Excel, descripción por persona con su turno nómina.
+- turno-intermedio-tab: criterio nómina TI (ya no detecta por primera
+  actividad a las 9hs); textos actualizados.
+
+VALIDACIÓN (local + producción, valores exactos contra SQL esperado):
+- TM: 68.460 → 104.363 bultos (28 pers) | TT: 133.674 → 142.229 (47)
+- TI: 0 → 85.827 (20) | TN: 30.427 → 32.751 (11) | Todos: 730.427 (249)
+- B/H bruta: TM 93.3 · TT 94.6 · TI 82.4 · TN 94.9 bultos/hs
+- Botones de carga en producción: upload 131.235 · upload-tm 14.016 ·
+  upload-nomina 494 · upload-clarkistas 11.608 · upload-horas-extras
+  31.096 registros — ✓ (upload-rendimientos es POST-only: GET=405 correcto)
+- GET barrido: rendimientos 2.9s · rrhh 1.9s · comparativo 1.8s · resto <1s
+
+INCIDENTE MENOR: /api/admin/upload volvió a faltar en el workspace local
+(reciclado del sandbox) — el guardián de build lo detectó antes de
+deployar; restaurada desde HEAD. El guardián sigue cumpliendo su rol.
